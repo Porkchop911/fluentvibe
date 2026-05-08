@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.pytest-tmp*/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Catalog index — built per-machine from the local FluentControl install
+tecanlab/catalog/install_index.db
+
+# Compiled protocol output (regenerated from examples/*.py)
+*.xscr
+
+# Local config / overrides
+.env
+*.local
+
+# Local agent/editor state and scratch output
+.claude/
+_tmp_decompile_checks/
+plans/
+
+# Review/build artifacts
+htmlcov/
+.coverage

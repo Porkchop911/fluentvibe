@@ -1,0 +1,109 @@
+# Generation configuration for Tecan protocol generator
+
+# Worktable configuration
+worktable:
+  guid: "291ba293-6361-4f8f-aa8d-7c2643d3f096"
+  name: "SAT_Fluent_780_Rev3"
+  type_id: "WorktableWorkspace"
+
+# Default device settings (MCA384)
+device:
+  alias: "Instrument=1/Device=MCA384:1"
+  available_id: "USB:TECAN,FLUENT,2203009762/MCA384:1"
+  adapter_labware: "EVA[001]"
+  tip_columns: 24
+  tip_rows: 16
+
+# CGA (Channel Gripper Arm) device settings for RGA plate transfers
+cga_device:
+  alias: "Instrument=1/Device=CGA:1"
+  available_id: "USB:TECAN,FLUENT,2203009762/CGA:1"
+  # Default labware names for gripper fingers
+  get_fingers_labware: "Centric[001]"
+  drop_fingers_labware: "FES Centric Nest[001]"
+
+# LiHa device settings (FCA carries the LiHa channels)
+liha_device:
+  alias: "Instrument=1/Device=LIHA:1"
+  available_id: "USB:TECAN,FLUENT,2203009762/LIHA:1"
+  num_channels: 8
+  # DiTi type identifies which tips the LiHa should pick up
+  diti_type: "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 1000ul SBS"
+  # Default waste labware for tip disposal
+  waste_labware: "FCA Thru Deck Waste Chute_1"
+
+# Default liquid class
+liquid_class:
+  name: "Water Free Single"
+  guid: "e80ad9f8-534b-41b7-96fb-c2c81cfc5c03"
+
+# Script defaults
+script:
+  version: "2.0"
+  data_version: "1"
+  expected_duration: 12000000000  # nanoseconds
+
+# Validation settings
+validation:
+  warn_on_unknown_labware: true
+  warn_on_state_mismatch: true
+  strict_mode: false  # If true, errors instead of warnings
+
+# Labware placement rules
+# Specifies valid locations for different labware types
+labware_placement:
+  tip_boxes:
+    # MCA96 tip boxes (96-well format) go on standard nests, NOT active nests
+    MCA96:
+      valid_locations: ["Nest61mm_Pos"]
+      invalid_locations: ["MCA384_Diti_ActiveNest"]
+      typical_positions: [11, 12]
+      notes: "96-well tip boxes cannot be placed on MCA384 active nests"
+    # MCA384 tip boxes (384-well format) go on active nests
+    MCA384:
+      valid_locations: ["MCA384_Diti_ActiveNest"]
+      typical_positions: [1, 2]
+      notes: "384-well tip boxes use active nests for MCA384 access"
+  plates:
+    # Standard 96-well plates
+    96_well:
+      valid_locations: ["Nest61mm_Pos", "NestCooled_Pos_1", "HotelDWP_Pos"]
+      typical_positions: [1, 2, 3, 4, 5, 6, 7, 8]
+    # Magnet plates
+    magnet:
+      valid_locations: ["RGA", "Nest61mm_Pos"]
+      notes: "Magnet plates often have dedicated positions"
+
+# Paths (relative to repo root)
+paths:
+  reference: "reference/commands.yaml"
+  templates: "templates"
+  output: "protocols"
+
+# Generic deterministic grounding defaults used by the DSL orchestrator.
+# These are platform defaults, not assay-specific workflow rules.
+grounding_defaults:
+  labware:
+    plate_96: "96_ABgene_SuperPlate_Thermo_AB2800"
+    plate_384: "384 Well LowVol LoBase"
+    magnet_plate_96: "LV_Alpaqua_A000350"
+    waste_reservoir: "300ml SBS"
+    reservoir_standard: "25ml_short"
+    reservoir_ethanol: "25ml_short_EtOH"
+    fca_tipbox_small: "FCA, 200ul SBS"
+    fca_tipbox_large: "FCA, 1000ul SBS"
+    mca96_tipbox_small: "MCA96, 100ul, Box"
+    mca96_tipbox_medium: "MCA96, 200ul, Box"
+    mca96_tipbox_large: "MCA96, 500ul, Box"
+  # Platform-level reservoir type overrides by operation name.
+  # Volatile solvents need compatible reservoir types.
+  reservoir_labware_by_operation:
+    ADD_WASH: "25ml_short_EtOH"
+  layout:
+    sample_plate: { location: "Nest61mm_Pos", site: 1 }
+    final_plate: { location: "Nest61mm_Pos", site: 2 }
+    magnet_plate: { location: "Nest61mm_Pos", site: 3 }
+    mca_tips: { location: "Nest61mm_Pos", site: 4 }
+    waste: { location: "Nest61mm_Pos", site: 5 }
+    fca_tips: { location: "Nest61mm_Pos", site: 6 }
+    reservoir_start: { location: "WS_100ml_1", site: 1 }
