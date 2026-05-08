@@ -29,6 +29,7 @@ tecanlab/catalog/install_index.db
 
 # Compiled protocol output (regenerated from examples/*.py)
 *.xscr
+!tests/fixtures/**/*.xscr
 
 # Local config / overrides
 .env
