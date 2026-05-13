@@ -3,25 +3,11 @@
 This repository is being polished for community feedback, not released as a
 production-ready package.
 
-## Provenance posture
 
-- Original fluentvibe source and the earlier fluentdsl-derived implementation are
-  treated as project-owned code.
-- Tecan/FluentControl-facing assets are treated more conservatively. Command
-  templates, catalog data, workspace names, GUIDs, and `.xscr` samples may be
-  derived from a local FluentControl installation or generated protocols.
-- The review branch should keep only the minimum reference material needed to
-  make examples and tests meaningful. Real production samples, local scratch
-  output, and private handoff notes should stay out of the public surface.
 
 ## Current reviewer expectations
 
-- Some tests skip without a local FluentControl installation.
-- Generated `.xscr` files are artifacts and are ignored by Git.
-- Prompt-authoring and live UI validation flows are development features; they
-  are not required for first-pass community review.
-- Feedback is most useful on the API model, simulator behavior, and missing
-  FluentControl workflow coverage.
+- just have fun
 
 ## Remaining audit items
 
