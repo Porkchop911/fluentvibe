@@ -3,18 +3,18 @@
 ## Repo layout
 
 ```
-tecanlab\
+fluentvibe\
 ├── pyproject.toml          ← Build config + console_scripts entry
 ├── README.md
 ├── docs\                   ← This documentation set (markdown)
 ├── examples\
 │   └── simple_transfer.py  ← End-to-end example, exercised by parity test
-├── tecanlab\               ← The package
+├── fluentvibe\               ← The package
 │   ├── __init__.py         ← Public API + first-import index build
 │   ├── reagent.py          ← Reagent dataclass (33 LOC)
 │   ├── worktable.py        ← Worktable + from_workspace + place/group/compile (261 LOC)
 │   ├── gripper.py          ← Gripper (52 LOC)
-│   ├── cli.py              ← `tecanlab` CLI (161 LOC)
+│   ├── cli.py              ← `fluentvibe` CLI (161 LOC)
 │   ├── labware\            ← 10 behavioral families (~511 LOC total)
 │   │   ├── base.py         ← Labware + Layer + Well + offline-synthesis (290 LOC)
 │   │   ├── plates.py       ← Plate, Plate96, Plate96Deep, Plate384 (37 LOC)
@@ -87,7 +87,7 @@ tecanlab\
 ### Testing
 
 - `pytest`. Tests use `PYTHONPATH=.`-style imports for in-place runs:
-  `cd tecanlab && PYTHONPATH=. python -m pytest tests/ -v`
+  `cd fluentvibe && PYTHONPATH=. python -m pytest tests/ -v`
 - Tests that touch the real FluentControl install are guarded with
   `@pytest.mark.skipif(not _install_present(), ...)` so CI runs work
   unmodified.
@@ -123,7 +123,7 @@ when the install isn't reachable.
 
 | File | Tests | What it proves |
 |---|---|---|
-| `test_simple_transfer_parity.py` | 2 | tecanlab's OO-authored simple_transfer renders to identical XML as fluentdsl's flat-function version (modulo random GUID); IR shape matches expectations. |
+| `test_simple_transfer_parity.py` | 2 | fluentvibe's OO-authored simple_transfer renders to identical XML as fluentdsl's flat-function version (modulo random GUID); IR shape matches expectations. |
 | `test_snapshot_introspection.py` | 2 | Layered well contents flow source → tip → dest; magnetized state toggles correctly with gripper stacking. |
 | `test_physical_invariants.py` | 7 | Each invariant raises (occupied slot, missing adapter, missing tips, insufficient volume, overdraw, pinned aspirate on magnet). |
 | `test_catalog_index_build.py` | 3 | Index builds against real install with expected category counts and known catalog entries. |
@@ -133,16 +133,16 @@ when the install isn't reachable.
 
 ## Adding a new labware family
 
-1. Subclass `Labware` in `tecanlab/labware/<your_module>.py`.
+1. Subclass `Labware` in `fluentvibe/labware/<your_module>.py`.
 2. Set `category = "..."`, `taxonomic_grid = (rows, cols)` if applicable,
    `offline_max_well_volume_ul = ...`.
 3. Override `_post_populate(...)` if your family has special state to set
    up after the wells/dimensions are populated (see `Trough._post_populate`
    for an example that collapses parsed wells into a single pool).
-4. Add the class to `tecanlab/labware/__init__.py`'s exports + `CATEGORY_TO_CLASS`.
-5. Re-export from `tecanlab/__init__.py` if it should be in the top-level
+4. Add the class to `fluentvibe/labware/__init__.py`'s exports + `CATEGORY_TO_CLASS`.
+5. Re-export from `fluentvibe/__init__.py` if it should be in the top-level
    public API.
-6. Update inference rules in `tecanlab/catalog/inference.py` if your
+6. Update inference rules in `fluentvibe/catalog/inference.py` if your
    category requires new logic.
 
 ## Adding a new IR step type
@@ -150,18 +150,18 @@ when the install isn't reachable.
 The IR descends from the earlier project-owned fluentdsl implementation. If
 you need a new step type, add it locally and update every consumer:
 
-1. Add the step class to `tecanlab/ir/schema.py` (Pydantic model with
+1. Add the step class to `fluentvibe/ir/schema.py` (Pydantic model with
    `step_type: Literal[StepType.X]`).
 2. Add the StepType enum value.
 3. Add it to the `Step` discriminated union.
 4. Add to `STEP_TO_COMMAND_ID` if the renderer needs a command-ID mapping.
-5. Wire a handler in `tecanlab/simulator/walk.py:_dispatch`.
+5. Wire a handler in `fluentvibe/simulator/walk.py:_dispatch`.
 6. Add an authoring method on the appropriate object (Worktable, head,
    gripper).
 
 The renderer is the part most likely to need updates — extending it means
-editing `tecanlab/compiler/renderer.py` and possibly
-`tecanlab/_assets/reference/commands.yaml`.
+editing `fluentvibe/compiler/renderer.py` and possibly
+`fluentvibe/_assets/reference/commands.yaml`.
 
 ## Known limits / v1.2 candidates
 
@@ -178,7 +178,7 @@ know what's already been thought through.
 - **`labware_by_label`** is needed when you don't keep a Python reference
   to placed labware. The `examples/simple_transfer.py` example uses it for
   the destination plate; cleaner authoring captures all `place()` returns.
-- **No FluentControl variable references** in tecanlab authoring. The
+- **No FluentControl variable references** in fluentvibe authoring. The
   parity test's reference protocol omits `var("PlateType", ...)` for that
   reason. v1.2: add `wt.declare_fc_variable(...)` returning a token that's
   acceptable as `labware_type` in IR steps.
@@ -203,7 +203,7 @@ know what's already been thought through.
 - **Auto-rebuild on install drift** — *shipped (Phase C.1).*
   `ensure_index()` consults `fingerprint_matches()` on every import and
   rebuilds when the on-disk install differs from the indexed snapshot.
-  Opt out via `TECANLAB_NO_AUTO_REBUILD=1`.
+  Opt out via `FLUENTVIBE_NO_AUTO_REBUILD=1`.
 - **Liquid-class catalog** — *shipped (Phase C.2).* Walks
   `SystemSpecific/LiquidClasses/*.xlqc` and populates a `liquid_classes`
   table. Renderer resolves the liquid-class GUID via SQL by name. The
@@ -230,9 +230,9 @@ know what's already been thought through.
 
 ### Hardware coverage
 
-- **MCA96 head only.** `tecanlab/heads/` has `mca96.py` and an empty
+- **MCA96 head only.** `fluentvibe/heads/` has `mca96.py` and an empty
   `__init__.py`. The IR schema covers MCA384, FCA, and LiHa step types,
-  and the renderer handles them — but tecanlab doesn't expose authoring
+  and the renderer handles them — but fluentvibe doesn't expose authoring
   methods for them yet. v1.2: add `MCA384Head`, `FCAHead`, `LiHaHead`
   classes with the same emit-IR pattern.
 - **Partial-column tip pickup** isn't modelled. `TipBox.is_full` is a
@@ -252,13 +252,13 @@ know what's already been thought through.
 ### "How do I find the catalog name for a 96-deep-well plate?"
 
 ```
-tecanlab catalog find "deep" --category plate
+fluentvibe catalog find "deep" --category plate
 ```
 
-### "How do I check what tecanlab loaded from a specific .xcmp?"
+### "How do I check what fluentvibe loaded from a specific .xcmp?"
 
 ```python
-from tecanlab.catalog import resolve_by_name, load_xcmp
+from fluentvibe.catalog import resolve_by_name, load_xcmp
 entry = resolve_by_name("96 Well Flat")
 comp = load_xcmp(entry.file_path)
 print(comp.dim_mm, comp.functional_group, comp.pipettable.cavity.volume_ul)
@@ -267,12 +267,12 @@ print(comp.dim_mm, comp.functional_group, comp.pipettable.cavity.volume_ul)
 ### "How do I rebuild the catalog after a FluentControl update?"
 
 ```
-tecanlab catalog refresh
+fluentvibe catalog refresh
 ```
 
 ### "How do I test offline (no FluentControl install)?"
 
-Set `TECANLAB_FC_INSTALL` to a directory that doesn't exist (or just rename
+Set `FLUENTVIBE_FC_INSTALL` to a directory that doesn't exist (or just rename
 your install). On next import, `ensure_index` will be a no-op, and labware
 classes will use the offline-synthesis path. A `CatalogIndexMissing`
 warning fires once per process the first time a labware is constructed.

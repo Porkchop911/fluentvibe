@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tecanlab.authoring.models import (
+from fluentvibe.authoring.models import (
     ApprovalRequest,
     AuthoringResult,
     AuthoringStatus,
@@ -10,7 +10,7 @@ from tecanlab.authoring.models import (
     FailureCategory,
     ValidationReport,
 )
-from tecanlab.cli import main
+from fluentvibe.cli import main
 
 
 def test_author_cli_success_json(capsys, monkeypatch) -> None:
@@ -29,7 +29,7 @@ def test_author_cli_success_json(capsys, monkeypatch) -> None:
                 attempts=1,
             )
 
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringService", FakeService)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringService", FakeService)
     rc = main(
         [
             "author",
@@ -78,7 +78,7 @@ def test_author_cli_success_text_handles_lm_result_without_spec(capsys, monkeypa
                 attempts=3,
             )
 
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringService", FakeService)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringService", FakeService)
     rc = main(
         [
             "author",
@@ -111,7 +111,7 @@ def test_author_cli_failure_exit_code(capsys, monkeypatch) -> None:
                 failure_message="LM Studio request failed",
             )
 
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringService", FakeService)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringService", FakeService)
     rc = main(
         [
             "author",
@@ -178,7 +178,7 @@ def test_chat_cli_clarification_then_success(capsys, monkeypatch) -> None:
 
     inputs = iter(["transfer from source to dest", "20 uL", "/exit"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringSession", FakeSession)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringSession", FakeSession)
     rc = main(["chat", "--output-dir", str(Path("build") / "test_author_cli" / "chat")])
     captured = capsys.readouterr()
     assert rc == 0
@@ -242,7 +242,7 @@ def test_chat_cli_approval_then_success(capsys, monkeypatch) -> None:
 
     inputs = iter(["transfer 20 uL", "approved", "/exit"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringSession", FakeSession)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringSession", FakeSession)
     rc = main(["chat", "--output-dir", str(Path("build") / "test_author_cli" / "chat_approval")])
     captured = capsys.readouterr()
     assert rc == 0
@@ -268,7 +268,7 @@ def test_chat_cli_reset_and_validate_fc(capsys, monkeypatch) -> None:
 
     inputs = iter(["/help", "/validate-fc build/out.xscr", "/reset", "/exit"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    monkeypatch.setattr("tecanlab.authoring.PromptAuthoringSession", FakeSession)
+    monkeypatch.setattr("fluentvibe.authoring.PromptAuthoringSession", FakeSession)
     rc = main(["chat"])
     captured = capsys.readouterr()
     assert rc == 0

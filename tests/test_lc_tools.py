@@ -9,12 +9,12 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from tecanlab.authoring.lc_tools import (
+from fluentvibe.authoring.lc_tools import (
     _args_model_for_tool,
     _python_type_for,
     make_lc_tools,
 )
-from tecanlab.authoring.tools import AuthoringToolRegistry, tool_definitions
+from fluentvibe.authoring.tools import AuthoringToolRegistry, tool_definitions
 
 
 # ── JSON-schema → Python type mapping ────────────────────────────────

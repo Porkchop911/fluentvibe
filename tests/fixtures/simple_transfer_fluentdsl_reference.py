@@ -4,7 +4,7 @@ Mirrors `examples/simple_transfer.py` exactly — same labware types, labels,
 locations, positions, and pipetting volumes. Used by the parity test to
 generate the byte-level reference `.xscr`.
 
-Note: this version does not use `var("PlateType", ...)` because tecanlab v1
+Note: this version does not use `var("PlateType", ...)` because fluentvibe v1
 does not model FC variables on the authoring side. Both pipelines must
 produce identical Protocol IR for byte-equal parity.
 """

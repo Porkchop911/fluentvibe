@@ -1,6 +1,6 @@
 # Simulator
 
-`tecanlab/simulator/`
+`fluentvibe/simulator/`
 
 The simulator is the introspection engine. Author method calls produce IR;
 the simulator reads the IR and rebuilds world state, freezing a `Snapshot`
@@ -34,7 +34,7 @@ Files:
 
 ## `Simulator.run()`
 
-`tecanlab/simulator/walk.py:53`
+`fluentvibe/simulator/walk.py:53`
 
 1. Clear `wt.snapshots`.
 2. Build a fresh `Protocol` IR via `wt.to_protocol()`.
@@ -61,7 +61,7 @@ author-time state. Don't rely on author-side `wt.slot_map` after
 
 ## Step dispatch
 
-`tecanlab/simulator/walk.py:62`
+`fluentvibe/simulator/walk.py:62`
 
 | IR step type | Twin effect |
 |---|---|
@@ -82,7 +82,7 @@ author-time state. Don't rely on author-side `wt.slot_map` after
 
 ## Layered aspirate semantics
 
-`tecanlab/simulator/walk.py:232` — `_aspirate_one(labware, well, volume_ul, tip)`
+`fluentvibe/simulator/walk.py:232` — `_aspirate_one(labware, well, volume_ul, tip)`
 
 Walking layers **top-down** (bottom→top is the storage order; iteration
 runs from index `len-1` to `0`):
@@ -113,7 +113,7 @@ dispensing (see below).
 
 ## Layered dispense semantics
 
-`tecanlab/simulator/walk.py:268` — `_dispense_one(well, volume_ul, tip)`
+`fluentvibe/simulator/walk.py:268` — `_dispense_one(well, volume_ul, tip)`
 
 ```
 if tip.volume_ul < volume_ul:               raise OverdrawError(...)
@@ -150,7 +150,7 @@ two layers.
 
 ```python
 @property
-def is_magnetized(self) -> bool:        # tecanlab/labware/base.py:240
+def is_magnetized(self) -> bool:        # fluentvibe/labware/base.py:240
     return any(isinstance(x, MagnetRack) for x in self.stack_below)
 ```
 
@@ -163,7 +163,7 @@ when `is_magnetized` is True.
 
 ## Snapshots
 
-`tecanlab/simulator/snapshots.py`
+`fluentvibe/simulator/snapshots.py`
 
 ```python
 @dataclass
@@ -228,7 +228,7 @@ This ensures the simulator never silently assumes a value.
 
 ## Physical invariants
 
-`tecanlab/simulator/invariants.py`
+`fluentvibe/simulator/invariants.py`
 
 All raise during `simulate()`. All inherit from `SimulationError`.
 

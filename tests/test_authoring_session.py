@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tecanlab.authoring.models import AuthoringResult, AuthoringStatus
-from tecanlab.authoring.tools import AuthoringToolRegistry
-from tecanlab.authoring.session import PromptAuthoringSession
+from fluentvibe.authoring.models import AuthoringResult, AuthoringStatus
+from fluentvibe.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring.session import PromptAuthoringSession
 from tests.test_prompt_authoring import _valid_draft
 
 

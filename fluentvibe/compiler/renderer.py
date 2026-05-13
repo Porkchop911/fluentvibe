@@ -132,7 +132,7 @@ class Renderer:
             reference_path: Path to commands.yaml reference
             templates_path: Path to templates directory
         """
-        # Asset bundle lives inside the package at tecanlab/_assets/.
+        # Asset bundle lives inside the package at fluentvibe/_assets/.
         assets_dir = Path(__file__).resolve().parent.parent / "_assets"
 
         self.config_path = config_path or assets_dir / "config" / "generation.yaml"

@@ -6,10 +6,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import FCA1000Box, Plate96, Reagent, Worktable
-from tecanlab.catalog.catalog import index_exists, list_by_category
-from tecanlab.decompiler import emit_python, parse_xscr
-from tecanlab.ir.schema import (
+from fluentvibe import FCA1000Box, Plate96, Reagent, Worktable
+from fluentvibe.catalog.catalog import index_exists, list_by_category
+from fluentvibe.decompiler import emit_python, parse_xscr
+from fluentvibe.ir.schema import (
     ConditionalStep,
     ExecuteApplicationStep,
     ExportVariableStep,

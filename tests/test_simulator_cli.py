@@ -9,14 +9,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.cli import main  # noqa: E402
+from fluentvibe.cli import main  # noqa: E402
 
 
 def test_simulate_json_includes_coverage(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli")
@@ -39,7 +39,7 @@ def test_simulate_fail_on_opaque_exits_nonzero(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli opaque")
@@ -60,7 +60,7 @@ def test_simulate_min_coverage_exits_nonzero(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli low cov")
@@ -82,7 +82,7 @@ def test_simulate_strict_json_failure_includes_status_and_failure(tmp_path: Path
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli strict")
@@ -103,7 +103,7 @@ def test_simulate_strict_text_failure_reports_category(tmp_path: Path, capsys) -
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli strict text")
@@ -124,7 +124,7 @@ def test_simulate_text_mode_no_coverage_block(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli text")
@@ -148,7 +148,7 @@ def test_simulate_text_mode_coverage_block(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli cov")
@@ -170,7 +170,7 @@ def test_simulate_json_validates_report_and_snapshot_fields(tmp_path: Path, caps
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable, Plate96, Reagent
+from fluentvibe import Worktable, Plate96, Reagent
 
 def build_worktable():
     wt = Worktable(name="cli json full")
@@ -221,7 +221,7 @@ def test_simulate_warnings_print_in_text_mode(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli warnings")
@@ -245,7 +245,7 @@ def test_simulate_unsupported_command_summary(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable
+from fluentvibe import Worktable
 
 def build_worktable():
     wt = Worktable(name="cli unsupported")
@@ -268,7 +268,7 @@ def test_simulate_json_with_liha_summaries(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable, Plate96, Reagent
+from fluentvibe import Worktable, Plate96, Reagent
 
 def build_worktable():
     wt = Worktable(name="cli liha")
@@ -302,7 +302,7 @@ def test_simulate_json_with_mca_summaries(tmp_path: Path, capsys) -> None:
     protocol = tmp_path / "protocol.py"
     protocol.write_text(
         """
-from tecanlab import Worktable, Plate96, Reagent
+from fluentvibe import Worktable, Plate96, Reagent
 
 def build_worktable():
     wt = Worktable(name="cli mca")

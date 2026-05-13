@@ -8,7 +8,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import FCA1000Box, MagnetRack, Plate96, Reagent, SimulationError, Worktable  # noqa: E402
+from fluentvibe import FCA1000Box, MagnetRack, Plate96, Reagent, SimulationError, Worktable  # noqa: E402
 
 
 def test_authored_protocol_gets_coverage_report() -> None:

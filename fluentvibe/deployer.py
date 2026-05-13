@@ -10,7 +10,7 @@ Implements `Path A — drop-in` from ``docs/deployment.md``:
    (``fluentcontrol_core.checksum``),
 5. verify the final file's checksum.
 
-Used both by the standalone ``tecanlab deploy`` CLI subcommand and by the
+Used both by the standalone ``fluentvibe deploy`` CLI subcommand and by the
 chat ``--fc-gate`` flow (after FluentControl-shell validation passes).
 """
 

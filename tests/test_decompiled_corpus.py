@@ -9,13 +9,13 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
-from tecanlab.catalog.indexer import build_index, install_path_default  # noqa: E402
-from tecanlab.decompiler import run_decompiled_corpus, summarize_corpus_results  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe.catalog.indexer import build_index, install_path_default  # noqa: E402
+from fluentvibe.decompiler import run_decompiled_corpus, summarize_corpus_results  # noqa: E402
 
 
 CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "decompiled_corpus"
-_PRODUCTION_XSCR_ENV = os.environ.get("TECANLAB_PRODUCTION_XSCR")
+_PRODUCTION_XSCR_ENV = os.environ.get("FLUENTVIBE_PRODUCTION_XSCR")
 PRODUCTION_XSCR = Path(_PRODUCTION_XSCR_ENV) if _PRODUCTION_XSCR_ENV else None
 
 
@@ -94,4 +94,4 @@ def test_production_corpus_reclassifies_to_next_catalog_issue(tmp_path: Path) ->
     assert result["failure"]["category"] == "catalog"
     assert "TroughMP_1" not in result["failure"]["message"]
     assert "25ml_short_1" in result["failure"]["message"]
-    assert "not installed in the local tecanlab catalog index" in result["failure"]["message"]
+    assert "not installed in the local fluentvibe catalog index" in result["failure"]["message"]

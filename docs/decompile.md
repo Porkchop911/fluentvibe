@@ -1,10 +1,10 @@
 # Decompiler — `.xscr` → `.py`
 
-`tecanlab/decompiler/`
+`fluentvibe/decompiler/`
 
 The decompiler is the inverse of the renderer. It parses a FluentControl
 `.xscr` into the Pydantic `Protocol` IR, then emits a self-contained
-tecanlab Python protocol that — when executed — re-renders the same
+fluentvibe Python protocol that — when executed — re-renders the same
 `.xscr`.
 
 ```
@@ -32,7 +32,7 @@ byte-equal modulo:
 ## CLI
 
 ```
-tecanlab decompile <input.xscr> [-o <output.py>] [--strict]
+fluentvibe decompile <input.xscr> [-o <output.py>] [--strict]
 ```
 
 - `-o, --output` — output `.py` path (defaults to `<input>.py`).
@@ -42,7 +42,7 @@ tecanlab decompile <input.xscr> [-o <output.py>] [--strict]
 After decompiling, validate the generated protocol with:
 
 ```
-tecanlab simulate <output.py> --strict --fail-on-opaque --json
+fluentvibe simulate <output.py> --strict --fail-on-opaque --json
 ```
 
 That path preserves the machine-readable simulator result, including
@@ -50,7 +50,7 @@ That path preserves the machine-readable simulator result, including
 `failure` object when strict validation fails.
 
 ```
-tecanlab decompile examples/simple_transfer.xscr
+fluentvibe decompile examples/simple_transfer.xscr
 # → examples/simple_transfer.py written
 ```
 
@@ -67,7 +67,7 @@ Two modules:
 programmatic use.
 
 ```python
-from tecanlab.decompiler import parse_xscr, emit_python
+from fluentvibe.decompiler import parse_xscr, emit_python
 
 protocol = parse_xscr("lab/run_42.xscr")
 src = emit_python(protocol, source_xscr="run_42.xscr")
@@ -195,7 +195,7 @@ asserts byte-equal round-trip:
 
 ```python
 from pathlib import Path
-from tecanlab.decompiler import parse_xscr, emit_python
+from fluentvibe.decompiler import parse_xscr, emit_python
 
 orig = parse_xscr("lab/screen_001.xscr")
 print(f"{len(orig.groups)} groups, "
@@ -207,7 +207,7 @@ Path("lab/screen_001.py").write_text(src, encoding="utf-8")
 
 ## Corpus Harness
 
-`tecanlab.decompiler.run_decompiled_corpus(...)` provides a deterministic
+`fluentvibe.decompiler.run_decompiled_corpus(...)` provides a deterministic
 decompile/build/simulate harness for a fixed `.xscr` corpus. It emits one
 compact result per protocol with:
 

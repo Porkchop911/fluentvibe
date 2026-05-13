@@ -16,7 +16,7 @@ that FluentControl can load. It's intentionally narrow:
 [ .xscr file ready for FluentControl ]
 ```
 
-## IR — `tecanlab/ir/schema.py`
+## IR — `fluentvibe/ir/schema.py`
 
 The IR is a tree of Pydantic models that descends from the earlier
 project-owned fluentdsl implementation. The outer shape:
@@ -62,7 +62,7 @@ both the Pydantic discriminator and the renderer's command dispatch.
 
 ## `Worktable.to_protocol()`
 
-`tecanlab/worktable.py:130`
+`fluentvibe/worktable.py:130`
 
 ```python
 def to_protocol(self) -> Protocol:
@@ -87,7 +87,7 @@ Notes:
   `line_number` 1, 2, 3… The renderer uses these for `<LineNumber>`
   elements.
 
-## Renderer — `tecanlab/compiler/renderer.py`
+## Renderer — `fluentvibe/compiler/renderer.py`
 
 The package-local renderer descends from the earlier project-owned fluentdsl
 implementation. Asset paths point inside the package
@@ -96,14 +96,14 @@ implementation. Asset paths point inside the package
 ### Entry point
 
 ```python
-from tecanlab.compiler import render_protocol
+from fluentvibe.compiler import render_protocol
 xml = render_protocol(protocol)               # str
 ```
 
 Or the lower-level class API:
 
 ```python
-from tecanlab.compiler import Renderer
+from fluentvibe.compiler import Renderer
 r = Renderer()                                # picks up _assets/{config,reference,templates}
 xml = r.render(protocol)
 ```
@@ -152,7 +152,7 @@ element which the install-bundle bridge fills in (next step).
 
 ## Checksum rewrite
 
-`tecanlab/catalog/fc_install.py:46`
+`fluentvibe/catalog/fc_install.py:46`
 
 ```python
 def rewrite_checksum_in_place(path) -> bool:
@@ -172,7 +172,7 @@ will recompute on first load).
 
 ## `Worktable.compile()`
 
-`tecanlab/worktable.py:139`
+`fluentvibe/worktable.py:139`
 
 ```python
 def compile(self, out_path: str | Path) -> Path:
@@ -206,7 +206,7 @@ that one GUID.
 The parity test (`tests/test_simple_transfer_parity.py:57`) normalizes
 that GUID before byte-comparing two outputs. The test confirms that
 identical IR renders to identical XML modulo the random GUID, between
-tecanlab and the earlier fluentdsl implementation running on the same
+fluentvibe and the earlier fluentdsl implementation running on the same
 protocol.
 
 ## Generated XML — annotated outline

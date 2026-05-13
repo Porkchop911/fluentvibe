@@ -1,4 +1,4 @@
-"""Codegen — emit a tecanlab Python protocol from a Pydantic Protocol IR.
+"""Codegen — emit a fluentvibe Python protocol from a Pydantic Protocol IR.
 
 The output is a self-contained ``.py`` with a ``build_worktable()``
 factory that, when executed, produces an IR equivalent to the input
@@ -676,10 +676,10 @@ def _times_repr(step: LoopStep) -> str:
 def _resolve_class_for_catalog(catalog_name: str) -> tuple[str, str, str | None]:
     """Map a catalog name to (Python class name, category, error)."""
     if not index_exists():
-        return "", "external", "the local tecanlab catalog index is not built."
+        return "", "external", "the local fluentvibe catalog index is not built."
     entry = resolve_by_name(catalog_name)
     if entry is None:
-        return "", "external", "that catalog name is not installed in the local tecanlab catalog index."
+        return "", "external", "that catalog name is not installed in the local fluentvibe catalog index."
     category = entry.category
     base = _CATEGORY_TO_BASE_CLASS.get(category, "FixedDeck")
     if category == "plate":
@@ -713,11 +713,11 @@ def _to_var_name(label: str) -> str:
 
 
 def _format_imports(classes_used: set[str]) -> str:
-    """Emit a `from tecanlab import (...)` block listing only what's used."""
+    """Emit a `from fluentvibe import (...)` block listing only what's used."""
     ordered = sorted(classes_used)
     if len(ordered) <= 5:
-        return f"from tecanlab import {', '.join(ordered)}"
-    lines = ["from tecanlab import ("]
+        return f"from fluentvibe import {', '.join(ordered)}"
+    lines = ["from fluentvibe import ("]
     for cls in ordered:
         lines.append(f"    {cls},")
     lines.append(")")

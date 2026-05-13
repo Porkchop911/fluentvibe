@@ -1,4 +1,4 @@
-"""Tests for `tecanlab.deployer.deploy_xscr` against a tmp datastore."""
+"""Tests for `fluentvibe.deployer.deploy_xscr` against a tmp datastore."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ FIXTURE_XSCR = REPO_ROOT / "simple_transfer.xscr"
 
 def _fluentcontrol_core_available() -> bool:
     try:
-        from tecanlab.catalog.fc_install import shared_core
+        from fluentvibe.catalog.fc_install import shared_core
     except Exception:
         return False
     return shared_core() is not None
@@ -51,7 +51,7 @@ def fixture_xscr() -> Path:
 
 @pytest.mark.skipif(not _fluentcontrol_core_available(), reason="fluentcontrol_core not importable")
 def test_deploy_xscr_drops_in_with_fresh_guid(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import deploy_xscr
+    from fluentvibe.deployer import deploy_xscr
 
     _stub_psutil(monkeypatch, running=False)
 
@@ -69,7 +69,7 @@ def test_deploy_xscr_drops_in_with_fresh_guid(monkeypatch, tmp_datastore: Path, 
 
 @pytest.mark.skipif(not _fluentcontrol_core_available(), reason="fluentcontrol_core not importable")
 def test_deploy_xscr_rewrites_object_name_and_re_checksums(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import deploy_xscr
+    from fluentvibe.deployer import deploy_xscr
 
     _stub_psutil(monkeypatch, running=False)
 
@@ -87,7 +87,7 @@ def test_deploy_xscr_rewrites_object_name_and_re_checksums(monkeypatch, tmp_data
 
 @pytest.mark.skipif(not _fluentcontrol_core_available(), reason="fluentcontrol_core not importable")
 def test_deploy_xscr_regenerates_workspace_delta_id(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import deploy_xscr
+    from fluentvibe.deployer import deploy_xscr
 
     _stub_psutil(monkeypatch, running=False)
 
@@ -101,7 +101,7 @@ def test_deploy_xscr_regenerates_workspace_delta_id(monkeypatch, tmp_datastore: 
 
 @pytest.mark.skipif(not _fluentcontrol_core_available(), reason="fluentcontrol_core not importable")
 def test_deploy_xscr_keeps_workspace_delta_id_when_disabled(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import deploy_xscr
+    from fluentvibe.deployer import deploy_xscr
 
     _stub_psutil(monkeypatch, running=False)
 
@@ -118,7 +118,7 @@ def test_deploy_xscr_keeps_workspace_delta_id_when_disabled(monkeypatch, tmp_dat
 
 
 def test_deploy_xscr_blocks_when_systemsw_running(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import DeploymentError, deploy_xscr
+    from fluentvibe.deployer import DeploymentError, deploy_xscr
 
     _stub_psutil(monkeypatch, running=True)
 
@@ -129,7 +129,7 @@ def test_deploy_xscr_blocks_when_systemsw_running(monkeypatch, tmp_datastore: Pa
 
 @pytest.mark.skipif(not _fluentcontrol_core_available(), reason="fluentcontrol_core not importable")
 def test_deploy_xscr_allows_running_when_overridden(monkeypatch, tmp_datastore: Path, fixture_xscr: Path) -> None:
-    from tecanlab.deployer import deploy_xscr
+    from fluentvibe.deployer import deploy_xscr
 
     _stub_psutil(monkeypatch, running=True)
 
@@ -142,7 +142,7 @@ def test_deploy_xscr_allows_running_when_overridden(monkeypatch, tmp_datastore: 
 
 
 def test_deploy_xscr_missing_source_raises(tmp_datastore: Path, monkeypatch) -> None:
-    from tecanlab.deployer import DeploymentError, deploy_xscr
+    from fluentvibe.deployer import DeploymentError, deploy_xscr
 
     _stub_psutil(monkeypatch, running=False)
 

@@ -1,6 +1,6 @@
 # Reviewer Guide
 
-This guide is for reviewers evaluating whether tecanlab's model fits real
+This guide is for reviewers evaluating whether fluentvibe's model fits real
 FluentControl workflows.
 
 ## Setup
@@ -33,5 +33,5 @@ Without one, those tests should skip or use offline fallbacks.
 ## Safety expectations
 
 Do not run generated `.xscr` output on an instrument without normal lab review,
-FluentControl validation, and site-specific safety checks. tecanlab is not a
+FluentControl validation, and site-specific safety checks. fluentvibe is not a
 replacement for instrument qualification or method validation.

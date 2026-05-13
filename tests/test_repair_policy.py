@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tecanlab.authoring.repair_policy import (
+from fluentvibe.authoring.repair_policy import (
     _REPAIR_POLICIES,
     assert_no_domain_vocabulary,
     get_repair_options,
@@ -231,10 +231,10 @@ class TestToolsIntegration:
 
     def test_simulate_draft_uses_policy_guidance(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         draft = '''"""Tip capacity failure fixture."""
-from tecanlab import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 def build_worktable() -> Worktable:
     wt = Worktable.from_workspace(
@@ -273,10 +273,10 @@ def build_worktable() -> Worktable:
 
     def test_simulate_draft_source_short_uses_policy(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         draft = '''"""Source volume short fixture."""
-from tecanlab import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 def build_worktable() -> Worktable:
     wt = Worktable.from_workspace(

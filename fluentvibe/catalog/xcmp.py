@@ -1,6 +1,6 @@
 """Typed loaders for FluentControl worktable XML files.
 
-Surfaces the fields tecanlab cares about — geometry, well grid, arrangement
+Surfaces the fields fluentvibe cares about — geometry, well grid, arrangement
 sites, functional group — without exposing the full Tecan XML namespace zoo
 to callers.
 

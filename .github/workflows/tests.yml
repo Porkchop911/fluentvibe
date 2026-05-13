@@ -16,5 +16,5 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Test
         env:
-          TECANLAB_NO_AUTO_REBUILD: "1"
+          FLUENTVIBE_NO_AUTO_REBUILD: "1"
         run: python -m pytest tests/ -q

@@ -13,7 +13,7 @@ truth for labware identity and geometry. It has three pieces:
 ## Files at a glance
 
 ```
-tecanlab/catalog/
+fluentvibe/catalog/
 ├── xcmp.py            Typed parser for .xcmp / .xwsp; lru-cached on path.
 ├── inference.py       infer_category(comp) — FunctionalGroup + substring rules.
 ├── catalog.py         SQL queries: resolve_by_name, find_components, …
@@ -25,7 +25,7 @@ tecanlab/catalog/
 
 ## The .xcmp parser
 
-`tecanlab/catalog/xcmp.py`
+`fluentvibe/catalog/xcmp.py`
 
 A FluentControl component is a verbose namespaced XML document. The parser
 matches on local-name only (ignoring namespace prefixes) so it stays robust
@@ -155,7 +155,7 @@ class WorkspaceOccupant:
     base_location_connector_identifier: str | None
 ```
 
-`guid` is the workspace document identity used for catalog lookup. tecanlab
+`guid` is the workspace document identity used for catalog lookup. fluentvibe
 takes it from the installed `.xwsp` filename, because that is what production
 `.xscr` workspace references resolve against. Internal component references in
 the XML stay auxiliary metadata (`base_worktable_guid` /
@@ -173,7 +173,7 @@ per process.
 
 ## Category inference
 
-`tecanlab/catalog/inference.py:25`
+`fluentvibe/catalog/inference.py:25`
 
 `infer_category(comp: XcmpComponent) -> str` returns one of:
 
@@ -228,7 +228,7 @@ CATEGORIES = (
 ### Why this order
 
 The substring "Tube Runner" exists in the install — physically a runner
-holding tubes. Logically tecanlab wants to address its tube positions. So
+holding tubes. Logically fluentvibe wants to address its tube positions. So
 `tube_rack` substring runs **before** the `\brunner\b` exclusion; once
 "Tube" is detected, it routes correctly. A "Trough Runner" is structural
 (holds trough labware on top), so the runner exclusion catches it after
@@ -257,9 +257,9 @@ magnet_rack       6     (24-magnet plates, MagniFlex, magnet teleshake)
 
 ## SQL index
 
-`tecanlab/catalog/catalog.py`
+`fluentvibe/catalog/catalog.py`
 
-The index lives at `tecanlab/catalog/install_index.db` (inside the package
+The index lives at `fluentvibe/catalog/install_index.db` (inside the package
 — so `pip install` ships an empty schema and the first import populates it).
 
 ### Schema
@@ -309,7 +309,7 @@ in `_assets/config/generation.yaml`.
 ### Public query API
 
 ```python
-from tecanlab.catalog import (
+from fluentvibe.catalog import (
     resolve_by_name,            # (name) -> CatalogEntry | None
     find_components,            # (pattern) -> list[CatalogEntry]    (LIKE %pattern%)
     list_by_category,           # (category) -> list[CatalogEntry]
@@ -341,12 +341,12 @@ class CatalogEntry:
 
 ## Indexer
 
-`tecanlab/catalog/indexer.py`
+`fluentvibe/catalog/indexer.py`
 
 ```python
 def build_index(
-    install_path: Path | None = None,   # default: $TECANLAB_FC_INSTALL or built-in
-    db_path: Path | None = None,        # default: tecanlab/catalog/install_index.db
+    install_path: Path | None = None,   # default: $FLUENTVIBE_FC_INSTALL or built-in
+    db_path: Path | None = None,        # default: fluentvibe/catalog/install_index.db
 ) -> dict[str, int]
 ```
 
@@ -367,18 +367,18 @@ On a 629-component install the build takes 5–15 seconds.
 
 ### Default install path
 
-`tecanlab/catalog/indexer.py:21`
+`fluentvibe/catalog/indexer.py:21`
 
 ```python
 DEFAULT_INSTALL_PATH = Path(r"C:\ProgramData\Tecan\VisionX\Database")
 ```
 
-Override with the `TECANLAB_FC_INSTALL` environment variable, or pass
+Override with the `FLUENTVIBE_FC_INSTALL` environment variable, or pass
 `install_path=` explicitly.
 
 ### Auto-build on first import
 
-`tecanlab/catalog/__init__.py:46-66`
+`fluentvibe/catalog/__init__.py:46-66`
 
 ```python
 def ensure_index() -> None:
@@ -393,14 +393,14 @@ def ensure_index() -> None:
         pass            # never break imports; offline fallback handles it
 ```
 
-`ensure_index()` runs from `tecanlab/__init__.py` on first import. It's
+`ensure_index()` runs from `fluentvibe/__init__.py` on first import. It's
 silent when the index already exists, slow-but-once when not, and a no-op
 if the install isn't reachable. Indexing failures are swallowed — an
-exception during indexing must never break `import tecanlab`.
+exception during indexing must never break `import fluentvibe`.
 
 ## `Worktable.from_workspace`
 
-`tecanlab/worktable.py:67`
+`fluentvibe/worktable.py:67`
 
 ```python
 @classmethod
@@ -432,7 +432,7 @@ Resolution flow:
 5. **Auto-place occupants** (if `auto_place=True`). For each occupant:
    - Resolve the occupant's catalog name (`resolve_by_name`).
    - Dispatch `category → Python class` via
-     `tecanlab.labware.CATEGORY_TO_CLASS` (defaults to `FixedDeck`).
+     `fluentvibe.labware.CATEGORY_TO_CLASS` (defaults to `FixedDeck`).
    - Synthesize a unique label `f"{catalog_name}@{position}"`.
    - Call `wt.place(...)` — which validates against `valid_slots`.
 
@@ -441,7 +441,7 @@ After this, `wt.place(...)` raises `InvalidSlotError` for any slot not in
 
 ### CATEGORY_TO_CLASS
 
-`tecanlab/labware/__init__.py:36`
+`fluentvibe/labware/__init__.py:36`
 
 ```python
 CATEGORY_TO_CLASS: dict[str, type[Labware]] = {
@@ -486,14 +486,14 @@ synthesised construction so the user knows they're offline.
 
 | When the index is | Behavior |
 |---|---|
-| Missing | Auto-built on first import (silent on success). Manually via `tecanlab catalog refresh`. |
-| Stale (install changed) | Currently NOT auto-rebuilt. Use `tecanlab catalog refresh` to force. The fingerprint is stored, so a future v1.2 can compare and rebuild conditionally — see `fingerprint_matches()` in `catalog/indexer.py:177`. |
+| Missing | Auto-built on first import (silent on success). Manually via `fluentvibe catalog refresh`. |
+| Stale (install changed) | Currently NOT auto-rebuilt. Use `fluentvibe catalog refresh` to force. The fingerprint is stored, so a future v1.2 can compare and rebuild conditionally — see `fingerprint_matches()` in `catalog/indexer.py:177`. |
 | Corrupt | `index_exists()` returns False, `ensure_index` rebuilds on next import. |
 
 Force rebuild from Python:
 
 ```python
-from tecanlab.catalog.indexer import build_index
+from fluentvibe.catalog.indexer import build_index
 build_index()                                  # default install path
 build_index(install_path="C:/Custom/Install")  # explicit
 ```
@@ -501,6 +501,6 @@ build_index(install_path="C:/Custom/Install")  # explicit
 Or via CLI:
 
 ```
-tecanlab catalog refresh
-tecanlab catalog refresh --install C:\Custom\Install
+fluentvibe catalog refresh
+fluentvibe catalog refresh --install C:\Custom\Install
 ```

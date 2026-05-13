@@ -10,9 +10,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog.indexer import install_path_default  # noqa: E402
-from tecanlab.catalog.inference import infer_category  # noqa: E402
-from tecanlab.catalog.xcmp import load_xcmp  # noqa: E402
+from fluentvibe.catalog.indexer import install_path_default  # noqa: E402
+from fluentvibe.catalog.inference import infer_category  # noqa: E402
+from fluentvibe.catalog.xcmp import load_xcmp  # noqa: E402
 
 
 _INSTALL = install_path_default() / "SystemSpecific" / "Worktable" / "Components"

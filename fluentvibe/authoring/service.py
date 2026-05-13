@@ -19,7 +19,7 @@ from .tools import AuthoringToolRegistry, tool_definitions
 from .validator import AuthoringValidator
 
 
-SYSTEM_PROMPT = """You are authoring executable Python protocols for tecanlab.
+SYSTEM_PROMPT = """You are authoring executable Python protocols for fluentvibe.
 
 Work cooperatively before drafting executable Python. First resolve
 clarifications. Then ground the workspace, labware, liquid classes, API shapes,
@@ -49,7 +49,7 @@ check verifies that destination wells actually received the declared volume.
 
 You must ground facts through tools before writing final code:
 - resolve the workspace and valid positions
-- call lookup_api when using an unfamiliar tecanlab object or after any
+- call lookup_api when using an unfamiliar fluentvibe object or after any
   missing-attribute Python build failure
 - search/get exact installed labware names
 - resolve exact liquid-class names
@@ -72,8 +72,8 @@ The final protocol must be Python source only. It must define:
 and must use Worktable.from_workspace(..., workspace_guid=...). Use exact catalog=
 names returned by tools. Do not use raw_xml_step or generic_step.
 
-Use the tecanlab public API. Typical imports are:
-    from tecanlab import Worktable, Reagent, Plate96, MCA100Box, MCA200Box, MCA500Box
+Use the fluentvibe public API. Typical imports are:
+    from fluentvibe import Worktable, Reagent, Plate96, MCA100Box, MCA200Box, MCA500Box
 
 For a simple 96-well MCA transfer, seed the source plate with enough reagent,
 mount the adapter, pick up MCA96 tips, aspirate from source, dispense to
@@ -81,7 +81,7 @@ destination, return tips, and drop the adapter.
 
 Use this API shape, replacing exact names only with tool-grounded values:
 
-from tecanlab import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 def build_worktable() -> Worktable:
     wt = Worktable.from_workspace(

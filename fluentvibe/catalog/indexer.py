@@ -29,9 +29,9 @@ DEFAULT_INSTALL_PATH = Path(r"C:\ProgramData\Tecan\VisionX\Database")
 def install_path_default() -> Path:
     """Resolve the default FluentControl install path.
 
-    Priority: `TECANLAB_FC_INSTALL` env var > hard-coded default.
+    Priority: `FLUENTVIBE_FC_INSTALL` env var > hard-coded default.
     """
-    env = os.environ.get("TECANLAB_FC_INSTALL")
+    env = os.environ.get("FLUENTVIBE_FC_INSTALL")
     return Path(env) if env else DEFAULT_INSTALL_PATH
 
 
@@ -54,7 +54,7 @@ def build_index(
     if not components_dir.exists():
         raise FileNotFoundError(
             f"Components directory not found at {components_dir!s}. "
-            f"Set TECANLAB_FC_INSTALL or pass install_path explicitly."
+            f"Set FLUENTVIBE_FC_INSTALL or pass install_path explicitly."
         )
 
     counts: dict[str, int] = {

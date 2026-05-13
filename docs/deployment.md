@@ -1,15 +1,15 @@
 # Deployment — getting a compiled `.xscr` into FluentControl
 
-This doc covers the step *after* `tecanlab compile`: you have a
+This doc covers the step *after* `fluentvibe compile`: you have a
 `.xscr` file on disk, now you need FluentControl to open it. The
 compile path itself is in [compile-path.md](compile-path.md). This document
-keeps the public review surface to the tecanlab-facing workflow; local
+keeps the public review surface to the fluentvibe-facing workflow; local
 reverse-engineering notes are intentionally not included.
 
 ## The short version
 
 ```
-tecanlab compile examples/simple_transfer.py -o /tmp/build.xscr
+fluentvibe compile examples/simple_transfer.py -o /tmp/build.xscr
 ```
 
 …then either
@@ -19,7 +19,7 @@ tecanlab compile examples/simple_transfer.py -o /tmp/build.xscr
   FluentControl. The script appears under its `<ObjectSubfolderPath>`.
 - **(B) Shell-patch** — overwrite the payload of an existing
   UserSpecific "shell" `.xscr` (its filename GUID stays the same) and
-  open FC against it. This is what `tecanlab.authoring.fluentcontrol_shell`
+  open FC against it. This is what `fluentvibe.authoring.fluentcontrol_shell`
   does for automated UI validation.
 
 (A) is for "publish a new script". (B) is for "iterate fast against
@@ -40,7 +40,7 @@ file's `<Payload>` for `ObjectName` / `ObjectSubfolderPath` /
 
 loads exactly like a script created in the GUI.
 
-`tecanlab compile` already produces files satisfying (2) and (3) —
+`fluentvibe compile` already produces files satisfying (2) and (3) —
 the renderer wires up the workspace reference and the post-render
 hook embeds a valid checksum via `fluentcontrol_core`. (1) is on
 the deployer (you).
@@ -52,13 +52,13 @@ the deployer (you).
 - FluentControl **closed**. The datastore is enumerated at startup;
   copying while FC is running is unsupported. Verify no `SystemSW.exe`
   process is running.
-- A compiled `.xscr` from `tecanlab compile`.
+- A compiled `.xscr` from `fluentvibe compile`.
 
 ### Steps
 
 ```powershell
 # 1. Compile.
-tecanlab compile examples/simple_transfer.py -o D:/staging/build.xscr
+fluentvibe compile examples/simple_transfer.py -o D:/staging/build.xscr
 
 # 2. Generate a fresh GUID.
 $newGuid = [guid]::NewGuid().ToString()
@@ -75,12 +75,12 @@ Copy-Item "D:/staging/build.xscr" `
 
 Launch FluentControl. The script appears under whatever
 `<ObjectSubfolderPath>` it was authored with (this is set in the
-renderer config at `tecanlab/_assets/config/generation.yaml`, and is
+renderer config at `fluentvibe/_assets/config/generation.yaml`, and is
 authored-side, not deployer-side).
 
 ### What to edit before the drop, if anything
 
-Usually nothing — `tecanlab compile` produces a self-consistent file.
+Usually nothing — `fluentvibe compile` produces a self-consistent file.
 Two cases where you may want to edit:
 
 - **Naming collisions.** If the same `<ObjectName>` already exists in
@@ -125,7 +125,7 @@ Then launch FC and check the script tree.
 
 ## Path B — shell-patch (fast iteration)
 
-`tecanlab.authoring.fluentcontrol_shell` keeps a long-lived UserSpecific
+`fluentvibe.authoring.fluentcontrol_shell` keeps a long-lived UserSpecific
 "shell" script (configured by path/GUID in local settings) and rewrites
 *just the payload region* of that file in place. The shell GUID and
 `<ObjectName>` never change, so FC continues to see the same single
@@ -133,8 +133,8 @@ entry — but its contents are now your latest compile output.
 
 This is what the LM authoring loop uses for headless UI validation:
 patch shell → open it in FC via UI automation → scrape the InfoPad for
-errors → close, repeat. See `tecanlab/authoring/fluentcontrol_shell.py`
-and the entry points in `tecanlab/authoring/tools.py`.
+errors → close, repeat. See `fluentvibe/authoring/fluentcontrol_shell.py`
+and the entry points in `fluentvibe/authoring/tools.py`.
 
 When to use shell-patching instead of drop-in:
 
@@ -159,7 +159,7 @@ When *not* to use it:
   FC build, liquid classes exist, etc. — is the editor's
   context-check subsystem, which runs at script-open time and is not
   exposed externally. The InfoPad-scraping path
-  (`fluentcontrol_shell`) is the closest thing tecanlab has to an
+  (`fluentcontrol_shell`) is the closest thing fluentvibe has to an
   automated context check.
 - **No supported public API for inserting scripts.** The V2 runtime
   API (`Tecan.VisionX.API.V2.dll`) is for `RunMethod` / variable
@@ -167,7 +167,7 @@ When *not* to use it:
   and version-sensitive. File drop is the only practical path today.
 - **Workspace must pre-exist.** `<Reference><Guid>` must resolve to an
   existing `WorktableWorkspace` in
-  `SystemSpecific\Worktable\<workspace-guid>.xwsp`. tecanlab does not
+  `SystemSpecific\Worktable\<workspace-guid>.xwsp`. fluentvibe does not
   ship workspaces; they live in the FC install.
 - **Hot-reload is not guaranteed.** FC enumerates `UserSpecific\` at
   startup. Don't drop files while FC is running.
@@ -201,8 +201,8 @@ and `<ObjectName>`:
 | Final `<Checksum>` | Recomputed checksum |
 | Result | Loads in FC under the configured script group/name |
 
-Same procedure works for any compiled tecanlab output — the only
-difference when cloning a hand-authored source is that `tecanlab
+Same procedure works for any compiled fluentvibe output — the only
+difference when cloning a hand-authored source is that `fluentvibe
 compile` emits a checksum-valid file from the start, so you usually
 skip the recompute step unless you edit afterwards.
 
@@ -211,8 +211,8 @@ skip the recompute step unless you edit afterwards.
 - [compile-path.md](compile-path.md) — IR → renderer → `.xscr` (the
   step before deployment)
 - [decompile.md](decompile.md) — `.xscr` → `.py` (the inverse)
-- [cli.md](cli.md) — `tecanlab compile` command surface
-- `tecanlab/authoring/fluentcontrol_shell.py` — shell-patch + UI
+- [cli.md](cli.md) — `fluentvibe compile` command surface
+- `fluentvibe/authoring/fluentcontrol_shell.py` — shell-patch + UI
   validation entry points
 - Local FluentControl notes and checksum helpers are intentionally not part of
   the public review surface.

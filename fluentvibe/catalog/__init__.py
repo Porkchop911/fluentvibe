@@ -60,12 +60,12 @@ __all__ = [
 def ensure_index() -> None:
     """Build (or rebuild) the catalog index as needed.
 
-    Called at the top of `tecanlab/__init__.py` on first import. Behaviour:
+    Called at the top of `fluentvibe/__init__.py` on first import. Behaviour:
 
     1. If the index file is missing, build it from the default install.
     2. If the index exists but its fingerprint no longer matches the
        on-disk install (FC update / new components added), rebuild — unless
-       the env var `TECANLAB_NO_AUTO_REBUILD` is set, in which case warn
+       the env var `FLUENTVIBE_NO_AUTO_REBUILD` is set, in which case warn
        once and leave the stale index in place.
     3. If no FC install is reachable, return silently and leave whatever
        state is on disk; the offline fallback in labware classes handles
@@ -95,11 +95,11 @@ def ensure_index() -> None:
     except Exception:
         return
 
-    if os.environ.get("TECANLAB_NO_AUTO_REBUILD"):
+    if os.environ.get("FLUENTVIBE_NO_AUTO_REBUILD"):
         warnings.warn(
             "Catalog index fingerprint does not match the on-disk install. "
-            "Run `tecanlab catalog refresh` to rebuild "
-            "(or unset TECANLAB_NO_AUTO_REBUILD).",
+            "Run `fluentvibe catalog refresh` to rebuild "
+            "(or unset FLUENTVIBE_NO_AUTO_REBUILD).",
             stacklevel=2,
         )
         return

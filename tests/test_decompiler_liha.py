@@ -6,9 +6,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog.catalog import index_exists
-from tecanlab.decompiler import emit_python, parse_xscr
-from tecanlab.ir.schema import LihaAspirateStep, LihaDispenseStep, ScriptGroupStep
+from fluentvibe.catalog.catalog import index_exists
+from fluentvibe.decompiler import emit_python, parse_xscr
+from fluentvibe.ir.schema import LihaAspirateStep, LihaDispenseStep, ScriptGroupStep
 from tests._module_loader import load_module
 
 

@@ -6,7 +6,7 @@ matching only for uncategorised legacy failures.
 
 Design invariant: **no protocol-domain vocabulary** (AMPure, SPRIselect, ethanol,
 bead ratio, elution, etc.) appears in any repair text.  The policy is purely about
-the *mechanics* of the tecanlab API and simulator constraints.
+the *mechanics* of the fluentvibe API and simulator constraints.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ _REPAIR_POLICIES: dict[str, RepairPolicy] = {
         options=("call_lookup_api", "rewrite_using_supported_method"),
         guidance=(
             "Call lookup_api with the object name to see supported methods and examples. "
-            "Rewrite using a method that exists on the tecanlab API."
+            "Rewrite using a method that exists on the fluentvibe API."
         ),
     ),
     "tip_capacity": RepairPolicy(
@@ -168,7 +168,7 @@ _REPAIR_POLICIES: dict[str, RepairPolicy] = {
         options=("avoid_raw_xml_step_and_generic_step", "use_supported_public_api"),
         guidance=(
             "The simulator encountered raw XML or a GenericStep that has no "
-            "modeled effect. Use the public tecanlab API (call lookup_api) "
+            "modeled effect. Use the public fluentvibe API (call lookup_api) "
             "instead of raw_xml_step or generic_step."
         ),
     ),

@@ -1,4 +1,4 @@
-"""tecanlab — stateful object-model framework for FluentControl protocols."""
+"""fluentvibe — stateful object-model framework for FluentControl protocols."""
 
 # Build the catalog index on first import (one-time slow startup, ~5–15 s
 # on a 629-component install). Quiet no-op if the index is already there.

@@ -308,7 +308,7 @@ def _python_build_failure_details(exc: Exception) -> dict[str, Any]:
             "message": message,
             "details": {"valid_exported_classes": valid_classes},
             "valid_exported_classes": valid_classes,
-            "repair_options": ["use_exported_tecanlab_class", "call_lookup_api_for_unknown_symbol"],
+            "repair_options": ["use_exported_fluentvibe_class", "call_lookup_api_for_unknown_symbol"],
         }
     if isinstance(exc, AttributeError):
         match = re.search(r"'([^']+)' object has no attribute '([^']+)'", message)

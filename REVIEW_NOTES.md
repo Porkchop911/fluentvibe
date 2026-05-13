@@ -5,7 +5,7 @@ production-ready package.
 
 ## Provenance posture
 
-- Original tecanlab source and the earlier fluentdsl-derived implementation are
+- Original fluentvibe source and the earlier fluentdsl-derived implementation are
   treated as project-owned code.
 - Tecan/FluentControl-facing assets are treated more conservatively. Command
   templates, catalog data, workspace names, GUIDs, and `.xscr` samples may be
@@ -25,7 +25,7 @@ production-ready package.
 
 ## Remaining audit items
 
-- `tecanlab/_assets/config/generation.yaml` still carries the current default
+- `fluentvibe/_assets/config/generation.yaml` still carries the current default
   workspace binding used by the renderer. Decide whether to keep it as a
   functional local default, replace it with a neutral placeholder, or make it a
   required user configuration before a broader public release.

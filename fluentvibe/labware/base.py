@@ -43,8 +43,8 @@ def _warn_offline_once() -> None:
     global _warned_offline_once
     if not _warned_offline_once:
         warnings.warn(
-            "tecanlab catalog index is empty; using synthesised offline defaults. "
-            "Run `tecanlab catalog refresh` for accurate per-catalog geometry.",
+            "fluentvibe catalog index is empty; using synthesised offline defaults. "
+            "Run `fluentvibe catalog refresh` for accurate per-catalog geometry.",
             CatalogIndexMissing,
             stacklevel=3,
         )
@@ -101,7 +101,7 @@ class Labware:
 
     Subclasses declare the *taxonomic* shape via class attributes:
 
-    - `category`: matches one of `tecanlab.catalog.inference.CATEGORIES`.
+    - `category`: matches one of `fluentvibe.catalog.inference.CATEGORIES`.
     - `taxonomic_grid`: (rows, cols) for plate-shaped families. (0, 0)
       means "no fixed grid" (catalog determines).
     - `offline_max_well_volume_ul`: used only when the catalog index is
@@ -145,13 +145,13 @@ class Labware:
                 raise ValueError(
                     f"{type(self).__name__}({label!r}): the catalog index is built; "
                     f"you must pass `catalog=<exact FluentControl name>`. "
-                    f"Run `tecanlab catalog find <pattern>` to search."
+                    f"Run `fluentvibe catalog find <pattern>` to search."
                 )
             entry = resolve_by_name(catalog)
             if entry is None:
                 raise ValueError(
-                    f"Catalog name {catalog!r} not found in tecanlab catalog index. "
-                    f"Run `tecanlab catalog find {catalog!r}` to search."
+                    f"Catalog name {catalog!r} not found in fluentvibe catalog index. "
+                    f"Run `fluentvibe catalog find {catalog!r}` to search."
                 )
             self._populate_from_catalog(entry, max_well_volume_ul=max_well_volume_ul)
         else:

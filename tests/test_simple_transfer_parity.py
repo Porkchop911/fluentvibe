@@ -21,7 +21,7 @@ FLUENTDSL_ROOT = REPO_ROOT.parent / "fluentdsl"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "simple_transfer_fluentdsl_reference.py"
 
 sys.path.insert(0, str(REPO_ROOT))
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 
 _WORKSPACE_GUID_RE = re.compile(
     r"&lt;Identifier&gt;[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}&lt;/Identifier&gt;"
@@ -52,7 +52,7 @@ def _render_via_fluentdsl(source_path: Path) -> str:
     """Render a fluentdsl protocol script to its `.xscr` XML string.
 
     Run in a subprocess so fluentdsl's package state can't leak into the
-    tecanlab import graph (both packages register top-level names like
+    fluentvibe import graph (both packages register top-level names like
     `examples.simple_transfer`).
     """
     code = textwrap.dedent(
@@ -71,10 +71,10 @@ def _render_via_fluentdsl(source_path: Path) -> str:
     return result.stdout
 
 
-def _render_via_tecanlab() -> str:
+def _render_via_fluentvibe() -> str:
     sys.path.insert(0, str(REPO_ROOT))
     from examples.simple_transfer import build_worktable
-    from tecanlab.compiler import render_protocol
+    from fluentvibe.compiler import render_protocol
 
     wt = build_worktable()
     proto = wt.to_protocol()
@@ -82,20 +82,20 @@ def _render_via_tecanlab() -> str:
 
 
 def test_simple_transfer_parity_xml() -> None:
-    """tecanlab and fluentdsl render identical XML for the same protocol."""
+    """fluentvibe and fluentdsl render identical XML for the same protocol."""
     if not FLUENTDSL_ROOT.exists():
-        pytest.skip("fluentdsl reference repo not available next to tecanlab")
+        pytest.skip("fluentdsl reference repo not available next to fluentvibe")
     if not FIXTURE.exists():
         pytest.fail(f"missing fixture: {FIXTURE}")
     if not index_exists():
         pytest.skip("catalog index empty")
 
     fluent_xml = _render_via_fluentdsl(FIXTURE)
-    tecan_xml = _render_via_tecanlab()
+    tecan_xml = _render_via_fluentvibe()
 
     assert _normalize(tecan_xml) == _normalize(fluent_xml), (
-        "tecanlab and fluentdsl rendered different XML "
-        f"(tecanlab len={len(tecan_xml)}, fluentdsl len={len(fluent_xml)})"
+        "fluentvibe and fluentdsl rendered different XML "
+        f"(fluentvibe len={len(tecan_xml)}, fluentdsl len={len(fluent_xml)})"
     )
 
 

@@ -11,7 +11,7 @@ Verifies:
 - The compiled .xscr round-trips through the renderer.
 """
 
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent,
     Plate96, MCA100Box,
 )

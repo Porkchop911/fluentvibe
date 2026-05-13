@@ -1,6 +1,6 @@
 # Notice
 
-tecanlab is currently source-visible for technical review only.
+fluentvibe is currently source-visible for technical review only.
 
 No open-source license has been granted yet. Unless and until a license file is
 added, you may read the repository for feedback, but you should not copy,

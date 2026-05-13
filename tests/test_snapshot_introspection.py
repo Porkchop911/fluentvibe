@@ -14,10 +14,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import (  # noqa: E402
+from fluentvibe import (  # noqa: E402
     MagnetRack, Plate96, Reagent, Worktable,
 )
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")

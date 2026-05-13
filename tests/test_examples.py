@@ -15,7 +15,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 from tests._module_loader import load_module  # noqa: E402
 
 
@@ -92,7 +92,7 @@ def test_loop_conditional_dispatches_correctly() -> None:
     assert waste_a1.volume_ul == pytest.approx(45.0)
 
     # The IR contains a single LoopStep with a nested ConditionalStep.
-    from tecanlab.ir.schema import LoopStep, ConditionalStep
+    from fluentvibe.ir.schema import LoopStep, ConditionalStep
     proto = wt.to_protocol()
     pipetting = next(g for g in proto.groups if g.name == "Wash")
     loop_step = next(s for s in pipetting.steps if isinstance(s, LoopStep))

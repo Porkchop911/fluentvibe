@@ -3,10 +3,10 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from tecanlab.catalog.catalog import find_components_by_metadata, open_index, resolve_by_name
-from tecanlab.catalog.indexer import build_index
-from tecanlab.catalog.inference import component_taxonomy, infer_category
-from tecanlab.catalog.xcmp import XcmpArrangement, XcmpComponent, XcmpPipettable
+from fluentvibe.catalog.catalog import find_components_by_metadata, open_index, resolve_by_name
+from fluentvibe.catalog.indexer import build_index
+from fluentvibe.catalog.inference import component_taxonomy, infer_category
+from fluentvibe.catalog.xcmp import XcmpArrangement, XcmpComponent, XcmpPipettable
 
 
 def test_existing_component_schema_migrates_taxonomy_columns(tmp_path: Path) -> None:
@@ -84,7 +84,7 @@ def test_build_index_persists_functional_group_taxonomy(tmp_path: Path, monkeypa
             pipettable=pipettable,
         )
 
-    monkeypatch.setattr("tecanlab.catalog.indexer.load_xcmp", fake_load_xcmp)
+    monkeypatch.setattr("fluentvibe.catalog.indexer.load_xcmp", fake_load_xcmp)
     counts = build_index(install_path=install, db_path=db_path)
     assert counts["components"] == 4
 

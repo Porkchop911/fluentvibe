@@ -7,7 +7,7 @@ when you call `wt.simulate()`, not at authoring time.
 
 ## `Reagent`
 
-`tecanlab/reagent.py:14`
+`fluentvibe/reagent.py:14`
 
 ```python
 @dataclass(frozen=True, eq=False)
@@ -27,7 +27,7 @@ class Reagent:
 
 ## `Worktable`
 
-`tecanlab/worktable.py:21`
+`fluentvibe/worktable.py:21`
 
 The conductor: collects IR steps into groups, exposes the heads + gripper,
 manages the slot map, and provides `compile()` / `simulate()`.
@@ -137,7 +137,7 @@ from the class's taxonomic shape.
 
 ### `Well`
 
-`tecanlab/labware/base.py:42`
+`fluentvibe/labware/base.py:42`
 
 ```python
 @dataclass
@@ -154,7 +154,7 @@ reagent (object identity), volume is merged; else a new layer is pushed.
 
 ### `Layer`
 
-`tecanlab/labware/base.py:34`
+`fluentvibe/labware/base.py:34`
 
 ```python
 @dataclass
@@ -167,7 +167,7 @@ The simulator's job is to keep these layered through aspirate/dispense.
 
 ## `MCA96Head`
 
-`tecanlab/heads/mca96.py:42`
+`fluentvibe/heads/mca96.py:42`
 
 The MCA-96 head, accessed via `wt.mca96`. Methods emit IR; the simulator
 reconstructs head + tip state.
@@ -183,7 +183,7 @@ reconstructs head + tip state.
 
 ### `Tip`
 
-`tecanlab/heads/mca96.py:20`
+`fluentvibe/heads/mca96.py:20`
 
 ```python
 @dataclass
@@ -198,7 +198,7 @@ contamination across multi-source tip-loads.
 
 ## `Gripper`
 
-`tecanlab/gripper.py:14`
+`fluentvibe/gripper.py:14`
 
 Accessed via `wt.gripper`. Moves labware between worktable slots, supports
 stacking onto another labware.
@@ -290,7 +290,7 @@ query it.
 
 `PromptAuthoringSession` and `PromptAuthoringService.author()` run the LM
 authoring loop on a LangGraph state machine defined in
-`tecanlab/authoring/graph.py`. Nodes: `intent_nudge → model_call →
+`fluentvibe/authoring/graph.py`. Nodes: `intent_nudge → model_call →
 {dispatch_tools | extract_python} → validate_locally → {success | clarify |
 fail}`. Repair-lock and grounding-gate live as conditional edges so the
 existing test contract in `tests/test_authoring_session.py` is preserved.
@@ -303,7 +303,7 @@ calling `service.author()` to stream every node call to LangSmith:
 ```powershell
 $env:LANGCHAIN_TRACING_V2 = 'true'
 $env:LANGCHAIN_API_KEY = '<your LangSmith key>'
-$env:LANGCHAIN_PROJECT = 'tecanlab-authoring'   # optional project name
+$env:LANGCHAIN_PROJECT = 'fluentvibe-authoring'   # optional project name
 ```
 
 Each session/run produces a hierarchical trace: the top-level invocation

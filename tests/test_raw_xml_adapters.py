@@ -14,7 +14,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import Plate96, Reagent, SimulationError, Worktable  # noqa: E402
+from fluentvibe import Plate96, Reagent, SimulationError, Worktable  # noqa: E402
 
 
 # ── Helper to build a raw XML aspirate/dispense fixture ─────────────

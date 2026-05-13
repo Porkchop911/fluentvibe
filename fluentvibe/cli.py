@@ -1,13 +1,13 @@
-"""tecanlab CLI.
+"""fluentvibe CLI.
 
 Subcommands:
 
-- `tecanlab compile <protocol.py>`   — execute the script and write `.xscr`.
-- `tecanlab simulate <protocol.py>`  — run the simulator, print snapshot summary.
-- `tecanlab decompile <file.xscr>`   — emit a tecanlab Python protocol from a .xscr.
-- `tecanlab catalog refresh [...]`   — rebuild the SQL catalog index.
-- `tecanlab catalog info`            — show install path, fingerprint, counts.
-- `tecanlab catalog find <pattern>`  — substring-search components by name.
+- `fluentvibe compile <protocol.py>`   — execute the script and write `.xscr`.
+- `fluentvibe simulate <protocol.py>`  — run the simulator, print snapshot summary.
+- `fluentvibe decompile <file.xscr>`   — emit a fluentvibe Python protocol from a .xscr.
+- `fluentvibe catalog refresh [...]`   — rebuild the SQL catalog index.
+- `fluentvibe catalog info`            — show install path, fingerprint, counts.
+- `fluentvibe catalog find <pattern>`  — substring-search components by name.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from typing import Any, Optional
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="tecanlab", description=__doc__.split("\n", 1)[0])
+    parser = argparse.ArgumentParser(prog="fluentvibe", description=__doc__.split("\n", 1)[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_compile = sub.add_parser("compile", help="render a protocol .py to .xscr")
@@ -48,7 +48,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     p_decompile = sub.add_parser(
         "decompile",
-        help="parse a .xscr and emit a tecanlab Python protocol",
+        help="parse a .xscr and emit a fluentvibe Python protocol",
     )
     p_decompile.add_argument("input", type=Path)
     p_decompile.add_argument("--output", "-o", type=Path, default=None,
@@ -299,13 +299,13 @@ def _cmd_chat(args) -> int:
 
     session = new_session()
     printed_tool_calls = 0
-    print("tecanlab authoring chat")
+    print("fluentvibe authoring chat")
     print("Type a protocol request, /help for commands, or /exit to quit.")
     if args.fc_gate:
         print("FC gate: enabled — successful authoring will be FC-shell-validated and deployed.")
     while True:
         try:
-            line = input("tecanlab> ")
+            line = input("fluentvibe> ")
         except EOFError:
             print()
             return 0
@@ -534,7 +534,7 @@ def _cmd_catalog_refresh(args) -> int:
 def _cmd_catalog_info(args) -> int:
     from .catalog.catalog import install_info, category_counts, index_exists
     if not index_exists():
-        print("Catalog index is empty. Run `tecanlab catalog refresh`.")
+        print("Catalog index is empty. Run `fluentvibe catalog refresh`.")
         return 1
     info = install_info() or {}
     print("Install path :", info.get("install_path"))

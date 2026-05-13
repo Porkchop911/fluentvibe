@@ -18,7 +18,7 @@ plates as the buffer reservoir and waste container so every channel has
 a target. Tracked in the gap log.
 """
 
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent, Layer,
     Plate96, MCA100Box, MagnetRack,
 )

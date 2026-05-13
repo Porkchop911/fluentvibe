@@ -1,4 +1,4 @@
-"""Unit tests for `tecanlab.authoring.graph`.
+"""Unit tests for `fluentvibe.authoring.graph`.
 
 The graph encodes the loop semantics the legacy session.py while-loop encoded;
 these tests pin those semantics at the node + edge level so any regression in
@@ -16,21 +16,21 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from tecanlab.authoring.graph import (
+from fluentvibe.authoring.graph import (
     GraphState,
     build_authoring_graph,
     run_graph,
     _looks_like_question,
     _to_lc_message,
 )
-from tecanlab.authoring.models import (
+from fluentvibe.authoring.models import (
     AuthoringResult,
     AuthoringStatus,
     FailureCategory,
     ValidationReport,
 )
-from tecanlab.authoring.repair_lock import RepairLockState
-from tecanlab.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring.repair_lock import RepairLockState
+from fluentvibe.authoring.tools import AuthoringToolRegistry
 from tests.test_prompt_authoring import _valid_draft
 
 

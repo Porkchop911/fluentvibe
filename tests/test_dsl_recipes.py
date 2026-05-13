@@ -7,12 +7,12 @@ from pathlib import Path
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from tecanlab.authoring.graph import GraphState, build_authoring_graph
-from tecanlab.authoring.models import AuthoringStatus
-from tecanlab.authoring.repair_lock import RepairLockState
-from tecanlab.authoring.tools import AuthoringToolRegistry
-from tecanlab.catalog.database import TecanDatabase
-from tecanlab.catalog.dsl_recipes import FakeRecipeEmbedder, retrieve_dsl_recipes
+from fluentvibe.authoring.graph import GraphState, build_authoring_graph
+from fluentvibe.authoring.models import AuthoringStatus
+from fluentvibe.authoring.repair_lock import RepairLockState
+from fluentvibe.authoring.tools import AuthoringToolRegistry
+from fluentvibe.catalog.database import TecanDatabase
+from fluentvibe.catalog.dsl_recipes import FakeRecipeEmbedder, retrieve_dsl_recipes
 
 
 def test_dsl_recipe_migration_seeds_idempotently_and_preserves_existing_tables(tmp_path: Path) -> None:

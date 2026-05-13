@@ -1,25 +1,25 @@
-# Manual test — tecanlab v1.1
+# Manual test — fluentvibe v1.1
 
 This walks the four Phase A example protocols plus a REPL session that
 exercises catalog lookup, physical invariants, and workspace loading.
 Use it to convince yourself the system holds together end-to-end before
 trusting it on a lab machine.
 
-All commands assume the repo root as cwd. If `tecanlab` isn't installed
-(`pip install -e .`), prefix with `PYTHONPATH=. python -m tecanlab.cli`
-in place of `tecanlab`.
+All commands assume the repo root as cwd. If `fluentvibe` isn't installed
+(`pip install -e .`), prefix with `PYTHONPATH=. python -m fluentvibe.cli`
+in place of `fluentvibe`.
 
 ## 0. Catalog sanity
 
 ```
-tecanlab catalog info
-tecanlab catalog find magnet
-tecanlab catalog find "96 Well" --category plate
+fluentvibe catalog info
+fluentvibe catalog find magnet
+fluentvibe catalog find "96 Well" --category plate
 ```
 
 Expect ~629 components and 14 workspaces against
 `C:\ProgramData\Tecan\VisionX\Database`. If the index is empty, run
-`tecanlab catalog refresh`.
+`fluentvibe catalog refresh`.
 
 ## 1. Run the four example protocols
 
@@ -66,7 +66,7 @@ finding to add to the gap log.
 ### 3a. Catalog-driven plate construction
 
 ```python
-from tecanlab import Plate96
+from fluentvibe import Plate96
 src = Plate96("Src", catalog="96 Well Flat")
 src.dim_mm                      # parsed mm dimensions from the .xcmp
 src.well("A1").position_mm      # well-relative geometry
@@ -76,7 +76,7 @@ src.well("A1").max_volume_ul    # ≈ 392 µL from cavity geometry, not hardcode
 ### 3b. Trip physical invariants on purpose
 
 ```python
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent, Plate96, MCA100Box,
     InsufficientVolumeError, MissingTipsError, OccupiedSlotError,
 )
@@ -105,7 +105,7 @@ Should raise `InsufficientVolumeError`. Try variations:
 ### 3c. Magnet round-trip
 
 ```python
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent, Layer, Plate96, MCA100Box, MagnetRack,
 )
 
@@ -133,7 +133,7 @@ operation is a gripper move. Magnetization is a `@property` derived from
 ### 3d. Workspace exploration
 
 ```python
-from tecanlab import Worktable
+from fluentvibe import Worktable
 wt = Worktable.from_workspace("780_Empty", auto_place=False)
 print("workspace:", wt.workspace_name)
 print("slots:", len(wt.valid_slots))      # ~56 after the xwsp parser fix

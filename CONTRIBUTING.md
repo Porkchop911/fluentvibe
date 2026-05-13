@@ -1,6 +1,6 @@
 # Contributing
 
-tecanlab is currently open for technical feedback, not general code
+fluentvibe is currently open for technical feedback, not general code
 contributions.
 
 Please use issues or discussion threads to report:

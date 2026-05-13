@@ -1,8 +1,8 @@
 """SQL queries over the catalog index.
 
-The index lives at `tecanlab/catalog/install_index.db` (inside the package).
+The index lives at `fluentvibe/catalog/install_index.db` (inside the package).
 It's built by `indexer.build_index()` and queried by everything else in
-tecanlab that needs to resolve a catalog name to a file path.
+fluentvibe that needs to resolve a catalog name to a file path.
 """
 
 from __future__ import annotations

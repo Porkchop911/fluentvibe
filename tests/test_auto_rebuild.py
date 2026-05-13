@@ -2,7 +2,7 @@
 
 When the catalog index's stored fingerprint no longer matches the
 on-disk FC install, ``ensure_index()`` must rebuild silently —
-unless ``TECANLAB_NO_AUTO_REBUILD`` is set.
+unless ``FLUENTVIBE_NO_AUTO_REBUILD`` is set.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog import (  # noqa: E402
+from fluentvibe.catalog import (  # noqa: E402
     DEFAULT_INDEX_PATH,
     ensure_index,
     fingerprint_matches,
@@ -61,7 +61,7 @@ def test_fingerprint_mismatch_triggers_rebuild() -> None:
     assert not fingerprint_matches(install_path_default())
 
     # ensure_index() should detect the drift and rebuild.
-    os.environ.pop("TECANLAB_NO_AUTO_REBUILD", None)
+    os.environ.pop("FLUENTVIBE_NO_AUTO_REBUILD", None)
     ensure_index()
 
     after = _read_install_row(DEFAULT_INDEX_PATH)
@@ -74,7 +74,7 @@ def test_fingerprint_mismatch_triggers_rebuild() -> None:
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
 def test_no_auto_rebuild_env_var_keeps_stale_index() -> None:
-    """With TECANLAB_NO_AUTO_REBUILD=1, drift is warned but not rebuilt."""
+    """With FLUENTVIBE_NO_AUTO_REBUILD=1, drift is warned but not rebuilt."""
     before = _read_install_row(DEFAULT_INDEX_PATH)
     assert before
     real_fingerprint = before["fingerprint"]
@@ -82,7 +82,7 @@ def test_no_auto_rebuild_env_var_keeps_stale_index() -> None:
     # Snapshot real fingerprint, then poison and set the env var.
     _set_fingerprint(DEFAULT_INDEX_PATH, "another-stale-marker")
 
-    os.environ["TECANLAB_NO_AUTO_REBUILD"] = "1"
+    os.environ["FLUENTVIBE_NO_AUTO_REBUILD"] = "1"
     try:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -95,6 +95,6 @@ def test_no_auto_rebuild_env_var_keeps_stale_index() -> None:
         intermediate = _read_install_row(DEFAULT_INDEX_PATH)
         assert intermediate["fingerprint"] == "another-stale-marker"
     finally:
-        os.environ.pop("TECANLAB_NO_AUTO_REBUILD", None)
+        os.environ.pop("FLUENTVIBE_NO_AUTO_REBUILD", None)
         # Restore the index to a healthy state for downstream tests.
         _set_fingerprint(DEFAULT_INDEX_PATH, real_fingerprint)

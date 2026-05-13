@@ -1,4 +1,4 @@
-"""Decompiler — turn an .xscr back into a tecanlab Python protocol.
+"""Decompiler — turn an .xscr back into a fluentvibe Python protocol.
 
 The reverse of the renderer: parse FluentControl XML into a Pydantic
 ``Protocol`` IR (xscr_parser), then emit a self-contained Python source

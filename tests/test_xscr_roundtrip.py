@@ -25,8 +25,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
-from tecanlab.decompiler import emit_python, parse_xscr  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe.decompiler import emit_python, parse_xscr  # noqa: E402
 from tests._module_loader import load_module  # noqa: E402
 
 

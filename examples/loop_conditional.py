@@ -10,7 +10,7 @@ The loop count and conditional predicate read from runtime variables;
 ``set_sim_value`` provides the values the simulator walks with.
 """
 
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent,
     Plate96, MCA100Box,
 )

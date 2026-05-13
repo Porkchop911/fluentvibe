@@ -11,15 +11,15 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import FixedDeck, Plate96, Worktable, InvalidSlotError  # noqa: E402
-from tecanlab.catalog.catalog import (  # noqa: E402
+from fluentvibe import FixedDeck, Plate96, Worktable, InvalidSlotError  # noqa: E402
+from fluentvibe.catalog.catalog import (  # noqa: E402
     WorkspaceEntry,
     index_exists,
     resolve_workspace_by_guid,
     resolve_workspace_by_name,
 )
-from tecanlab.catalog.indexer import build_index, install_path_default  # noqa: E402
-from tecanlab.catalog.xcmp import (  # noqa: E402
+from fluentvibe.catalog.indexer import build_index, install_path_default  # noqa: E402
+from fluentvibe.catalog.xcmp import (  # noqa: E402
     load_component_site_location_names,
     load_xsit,
     load_xwsp,
@@ -201,8 +201,8 @@ def test_compile_requires_bound_workspace(tmp_path: Path) -> None:
 
 
 def test_workspace_auto_place_fails_loudly_on_unresolved_occupant(monkeypatch) -> None:
-    from tecanlab.catalog import catalog as catalog_mod
-    from tecanlab.catalog import xcmp as xcmp_mod
+    from fluentvibe.catalog import catalog as catalog_mod
+    from fluentvibe.catalog import xcmp as xcmp_mod
 
     fake_workspace = SimpleNamespace(
         guid="fake-workspace-guid",
@@ -237,8 +237,8 @@ def test_workspace_auto_place_fails_loudly_on_unresolved_occupant(monkeypatch) -
 
 
 def test_workspace_reference_is_not_ambiguous_when_name_and_guid_hit_same_file(monkeypatch) -> None:
-    from tecanlab.catalog import catalog as catalog_mod
-    from tecanlab.catalog import xcmp as xcmp_mod
+    from fluentvibe.catalog import catalog as catalog_mod
+    from fluentvibe.catalog import xcmp as xcmp_mod
 
     same_file = Path("shared.xwsp")
     fake_workspace = SimpleNamespace(
@@ -276,7 +276,7 @@ def test_workspace_reference_is_not_ambiguous_when_name_and_guid_hit_same_file(m
 
 
 def test_workspace_reference_is_ambiguous_when_name_and_guid_hit_different_files(monkeypatch) -> None:
-    from tecanlab.catalog import catalog as catalog_mod
+    from fluentvibe.catalog import catalog as catalog_mod
 
     monkeypatch.setattr(catalog_mod, "index_exists", lambda *args, **kwargs: True)
     monkeypatch.setattr(
@@ -315,7 +315,7 @@ def test_protocol_carries_workspace_guid_and_name() -> None:
 
 def _find_workspace_with_min_sites(min_sites: int) -> str | None:
     import sqlite3
-    from tecanlab.catalog.catalog import DEFAULT_INDEX_PATH
+    from fluentvibe.catalog.catalog import DEFAULT_INDEX_PATH
 
     conn = sqlite3.connect(str(DEFAULT_INDEX_PATH))
     conn.row_factory = sqlite3.Row

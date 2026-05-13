@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest
 
 from tests.test_prompt_authoring import _valid_draft
-from tecanlab.authoring.fluentcontrol_shell import (
+from fluentvibe.authoring.fluentcontrol_shell import (
     DEFAULT_SHELL_XSCR,
     classify_dialog_text,
     extract_comment_to_payload_region,
     precheck_xscr_text,
     replace_comment_to_payload_region,
 )
-from tecanlab.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring.tools import AuthoringToolRegistry
 
 
 def test_shell_region_replace_preserves_backslashes() -> None:

@@ -27,7 +27,7 @@ either (a) or (b) is built.
 
 import random
 
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent,
     Plate96, MCA100Box,
 )
@@ -57,7 +57,7 @@ def build_worktable() -> Worktable:
     rng = random.Random(42)
     for w in src.wells.values():
         w.layers = []  # start empty
-        from tecanlab import Layer
+        from fluentvibe import Layer
         w.layers.append(Layer(reagent=sample, volume_ul=rng.uniform(60.0, 100.0)))
     buf_plate.fill_all(buffer, 100.0)
 

@@ -4,7 +4,7 @@ Move 20 µL from one 96-well plate to another using the MCA-96 head.
 Authoring is purely OO: Worktable, Plate96, MCA100Box, EvaAdapter, Reagent.
 """
 
-from tecanlab import (
+from fluentvibe import (
     Worktable, Reagent,
     Plate96, MCA100Box,
 )

@@ -1,6 +1,6 @@
 # Architecture
 
-tecanlab separates the system into three layers, each with one clear job.
+fluentvibe separates the system into three layers, each with one clear job.
 
 ```
 [Python class hierarchy]   ← BEHAVIOR + invariants (~10 classes)
@@ -8,7 +8,7 @@ tecanlab separates the system into three layers, each with one clear job.
        │  fixed by author OR dispatched by inferred category
        │
 [SQL catalog index]        ← IDENTITY + file pointer (one row per ObjectName)
-       ▲                     stored at tecanlab/catalog/install_index.db
+       ▲                     stored at fluentvibe/catalog/install_index.db
        │  built once on first import; refreshable via CLI
        │
 [FluentControl install XML]   ← FACTS (geometry, sites, occupancy)
@@ -36,10 +36,10 @@ tecanlab separates the system into three layers, each with one clear job.
   one-class-per-catalog-entry; with this split, 629 catalog rows resolve
   through ~10 classes.
 - The FluentControl install changes per machine. Indexing the install
-  removes the need for tecanlab to ship a static catalog, and lets users
-  drop a new component into the install and have tecanlab pick it up via
-  `tecanlab catalog refresh`.
-- The XML stays the source of truth — tecanlab never duplicates facts that
+  removes the need for fluentvibe to ship a static catalog, and lets users
+  drop a new component into the install and have fluentvibe pick it up via
+  `fluentvibe catalog refresh`.
+- The XML stays the source of truth — fluentvibe never duplicates facts that
   already live in `.xcmp`.
 
 ## The data plane
@@ -115,7 +115,7 @@ After this, `wt.place(...)` raises `InvalidSlotError` for any slot not in
 ## Module map and dependencies
 
 ```
-tecanlab/__init__.py
+fluentvibe/__init__.py
    │
    ├── catalog.ensure_index()                     ← runs on first import
    │
@@ -129,7 +129,7 @@ tecanlab/__init__.py
    ├── compiler.render_protocol     ← drives the .xscr renderer
    └── simulator.{Simulator, Snapshot, *Error}
 
-tecanlab/catalog/
+fluentvibe/catalog/
    ├── catalog.py        ← SQL queries (resolve_by_name / find / list)
    ├── indexer.py        ← walk install, infer category, write rows
    ├── inference.py      ← FunctionalGroup + name → category
@@ -138,7 +138,7 @@ tecanlab/catalog/
    ├── fc_install.py     ← bridge to fluentcontrol_core (rewrite_checksum etc.)
    └── install_index.db  ← built artifact (one row per ObjectName)
 
-tecanlab/labware/
+fluentvibe/labware/
    ├── base.py           ← Labware + Layer + Well + offline synthesis path
    ├── plates.py         ← Plate, Plate96, Plate96Deep, Plate384
    ├── troughs.py        ← Trough, Trough25mL, Trough100mL, Waste
@@ -148,21 +148,21 @@ tecanlab/labware/
    ├── tuberack.py       ← TubeRack
    └── deckitems.py      ← WashStation, WasteChute, Hotel, FixedDeck
 
-tecanlab/heads/
+fluentvibe/heads/
    └── mca96.py          ← MCA96Head + Tip dataclass
 
-tecanlab/simulator/
+fluentvibe/simulator/
    ├── walk.py           ← IR walker, dispatch, layered aspirate/dispense math
    ├── snapshots.py      ← deepcopy-frozen Snapshot per step
    └── invariants.py     ← physical-invariant exception hierarchy
 
-tecanlab/ir/
+fluentvibe/ir/
    └── schema.py         ← Pydantic Protocol + Step types
 
-tecanlab/compiler/
+fluentvibe/compiler/
    └── renderer.py       ← Tecan XML renderer
 
-tecanlab/_assets/
+fluentvibe/_assets/
    ├── templates/*.xml          ← XML wrapping templates
    ├── reference/*.yaml,*.txt   ← commands.yaml / labware.yaml / liquid_classes.yaml / locations.txt
    └── config/generation.yaml   ← renderer config
@@ -173,7 +173,7 @@ tecanlab/_assets/
 The IR schema, XML renderer, FluentControl install bundle reader, and the
 templates / reference / config under `_assets/` descend from the earlier
 project-owned fluentdsl implementation. They are now maintained as
-package-local tecanlab code.
+package-local fluentvibe code.
 
 Tecan/FluentControl-facing reference material is documented separately in
 `NOTICE.md` and `REVIEW_NOTES.md`, because command XML, catalog-derived data,

@@ -25,7 +25,7 @@ env/
 Thumbs.db
 
 # Catalog index — built per-machine from the local FluentControl install
-tecanlab/catalog/install_index.db
+fluentvibe/catalog/install_index.db
 
 # Compiled protocol output (regenerated from examples/*.py)
 *.xscr

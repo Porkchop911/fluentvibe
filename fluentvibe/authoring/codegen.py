@@ -42,9 +42,9 @@ class ProtocolCodeGenerator:
         ordered_imports = [name for name in ordered_imports if name != "Layer" or needs_layer]
 
         out: list[str] = []
-        out.append('"""Generated tecanlab protocol from a free-text authoring prompt."""')
+        out.append('"""Generated fluentvibe protocol from a free-text authoring prompt."""')
         out.append("")
-        out.append(f"from tecanlab import {', '.join(ordered_imports)}")
+        out.append(f"from fluentvibe import {', '.join(ordered_imports)}")
         out.append("")
         out.append("")
         out.append("def build_worktable() -> Worktable:")

@@ -1,6 +1,6 @@
-# tecanlab
+# fluentvibe
 
-tecanlab is a Python object model for authoring, simulating, compiling, and
+fluentvibe is a Python object model for authoring, simulating, compiling, and
 inspecting Tecan FluentControl protocols.
 
 The public API is built around `Worktable`, labware, reagents, and pipetting
@@ -35,7 +35,7 @@ automation community. It is not a production release.
 - Simulator with per-step snapshots and physical checks such as occupied
   slots, missing tips/adapters, overdraws, and insufficient volume.
 - `.xscr` compiler for authored protocols.
-- `.xscr` decompiler for recovering a tecanlab-style Python representation
+- `.xscr` decompiler for recovering a fluentvibe-style Python representation
   from supported FluentControl XML.
 - Catalog indexing against a local FluentControl install for labware,
   workspaces, sites, and liquid classes.
@@ -64,7 +64,7 @@ python -m pytest tests/ -q
 Minimal authoring example:
 
 ```python
-from tecanlab import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 input_dna = Reagent("Input gDNA")
 
@@ -96,7 +96,7 @@ A working version is in `examples/simple_transfer.py`.
 
 ## FluentControl Dependency
 
-tecanlab can run some authoring and simulator paths without FluentControl, but
+fluentvibe can run some authoring and simulator paths without FluentControl, but
 install-backed catalog and workspace features need a local FluentControl
 database. By default the catalog indexer looks for:
 
@@ -104,19 +104,19 @@ database. By default the catalog indexer looks for:
 C:\ProgramData\Tecan\VisionX\Database
 ```
 
-Override this with `TECANLAB_FC_INSTALL` or the relevant CLI flag. If no install
+Override this with `FLUENTVIBE_FC_INSTALL` or the relevant CLI flag. If no install
 is reachable, catalog-backed tests should skip or fall back rather than making
 the package impossible to import.
 
 ## CLI
 
 ```bash
-tecanlab compile examples/simple_transfer.py
-tecanlab simulate examples/simple_transfer.py
-tecanlab decompile path/to/protocol.xscr -o protocol.py
-tecanlab catalog info
-tecanlab catalog find magnet
-tecanlab catalog refresh
+fluentvibe compile examples/simple_transfer.py
+fluentvibe simulate examples/simple_transfer.py
+fluentvibe decompile path/to/protocol.xscr -o protocol.py
+fluentvibe catalog info
+fluentvibe catalog find magnet
+fluentvibe catalog refresh
 ```
 
 ## Documentation
@@ -139,7 +139,7 @@ tecanlab catalog refresh
 ```text
 docs/       Documentation for reviewers and developers
 examples/   Example authored protocols
-tecanlab/   Python package
+fluentvibe/   Python package
 tests/      Unit, integration, and regression tests
 scripts/    Local development and validation helpers
 ```

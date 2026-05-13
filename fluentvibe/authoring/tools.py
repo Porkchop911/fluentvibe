@@ -41,7 +41,7 @@ from .fluentcontrol_shell import (
 
 ToolFn = Callable[..., dict[str, Any]]
 
-_EXPORTED_TECANLAB_CLASSES: frozenset[str] = frozenset({
+_EXPORTED_FLUENTVIBE_CLASSES: frozenset[str] = frozenset({
     "Worktable", "Gripper",
     "MCA96Head", "LiHa", "Tip",
     "Labware", "ExternalLabware", "Layer", "Well",
@@ -825,7 +825,7 @@ def tool_definitions() -> list[dict[str, Any]]:
                 "description": "Ordered functional groups; first two are Variables and Labware Placement.",
             },
         }, required=("protocol_name", "summary", "variables", "labware", "groups")),
-        _tool("lookup_api", "Return supported tecanlab public API methods and examples for an object or class.", {
+        _tool("lookup_api", "Return supported fluentvibe public API methods and examples for an object or class.", {
             "object_or_class": {
                 "type": "string",
                 "description": "Object or class name such as Worktable, wt.gripper, wt.liha, wt.mca96, Labware, Plate96, Trough100mL, FCA1000Box.",
@@ -844,7 +844,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "component_subtype": {"type": "string", "description": "Optional normalized component subtype such as runner, nest, microplate, or trough."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         }, required=("query",)),
-        _tool("get_labware", "Return exact installed labware metadata and suggested tecanlab Python class.", {
+        _tool("get_labware", "Return exact installed labware metadata and suggested fluentvibe Python class.", {
             "name": {"type": "string"},
         }),
         _tool("lookup_liquid_class", "Resolve an installed liquid class by exact name.", {
@@ -1189,19 +1189,19 @@ class AuthoringToolRegistry:
                 errors.append({
                     "field": f"labware[{index}].python_class",
                     "label": label,
-                    "message": "Each labware object must include a tecanlab python_class.",
+                    "message": "Each labware object must include a fluentvibe python_class.",
                     "fix": "Set python_class to an exported class returned by lookup_api/get_labware.",
                     "valid_classes": sorted(_CATALOG_BACKED_CLASSES),
                 })
                 continue
-            if python_class not in _EXPORTED_TECANLAB_CLASSES:
+            if python_class not in _EXPORTED_FLUENTVIBE_CLASSES:
                 errors.append({
                     "field": f"labware[{index}].python_class",
                     "label": label,
                     "received": python_class,
-                    "message": f"{python_class!r} is not exported by tecanlab.",
-                    "fix": "Use an exported tecanlab class; for FCA tips use FCA1000Box/FCA200Box/FCA50Box.",
-                    "valid_classes": sorted(_EXPORTED_TECANLAB_CLASSES),
+                    "message": f"{python_class!r} is not exported by fluentvibe.",
+                    "fix": "Use an exported fluentvibe class; for FCA tips use FCA1000Box/FCA200Box/FCA50Box.",
+                    "valid_classes": sorted(_EXPORTED_FLUENTVIBE_CLASSES),
                 })
                 continue
             if python_class in _CATALOG_BACKED_CLASSES and not catalog_name:
@@ -1632,7 +1632,7 @@ class AuthoringToolRegistry:
         return plan_protocol_resources(phases)
 
     def simulate_python_draft(self, source: str, strict: bool = True) -> dict[str, Any]:
-        with tempfile.TemporaryDirectory(prefix="tecanlab-authoring-sim-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="fluentvibe-authoring-sim-") as tmp:
             path = Path(tmp) / "draft.py"
             path.write_text(source, encoding="utf-8")
             contract_error = self.validator._check_contract(source)
@@ -2444,9 +2444,9 @@ def _python_build_failure(exc: Exception) -> dict[str, Any]:
             "category": FailureCategory.PYTHON_BUILD_FAILURE.value,
             "exception_type": type(exc).__name__,
             "message": message,
-            "details": {"valid_exported_classes": sorted(_EXPORTED_TECANLAB_CLASSES)},
-            "valid_exported_classes": sorted(_EXPORTED_TECANLAB_CLASSES),
-            "repair_options": ["use_exported_tecanlab_class", "call_lookup_api_for_unknown_symbol"],
+            "details": {"valid_exported_classes": sorted(_EXPORTED_FLUENTVIBE_CLASSES)},
+            "valid_exported_classes": sorted(_EXPORTED_FLUENTVIBE_CLASSES),
+            "repair_options": ["use_exported_fluentvibe_class", "call_lookup_api_for_unknown_symbol"],
         }
     if isinstance(exc, AttributeError):
         match = re.search(r"'([^']+)' object has no attribute '([^']+)'", message)

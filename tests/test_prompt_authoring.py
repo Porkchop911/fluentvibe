@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from tecanlab.authoring import PromptAuthoringService, PromptAuthoringSession
-from tecanlab.authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
-from tecanlab.authoring.models import AuthoringStatus
-from tecanlab.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring import PromptAuthoringService, PromptAuthoringSession
+from fluentvibe.authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
+from fluentvibe.authoring.models import AuthoringStatus
+from fluentvibe.authoring.tools import AuthoringToolRegistry
 
 
 def _valid_draft() -> str:
     return '''"""Simple live-authoring validator fixture."""
 
-from tecanlab import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 
 def build_worktable() -> Worktable:
@@ -81,7 +81,7 @@ def _tip_box_empty_draft() -> str:
 def _trough_short_volume_draft() -> str:
     return (
         _valid_draft()
-        .replace("from tecanlab import Worktable, Reagent, Plate96, MCA100Box", "from tecanlab import Worktable, Reagent, Plate96, Trough100mL, FCA1000Box")
+        .replace("from fluentvibe import Worktable, Reagent, Plate96, MCA100Box", "from fluentvibe import Worktable, Reagent, Plate96, Trough100mL, FCA1000Box")
         .replace('source = wt.place(Plate96("SourcePlate", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)', 'source = wt.place(Trough100mL("SourceTrough", catalog="100ml Trough 156mm"), "WS_100ml_1", 1)')
         .replace('tips = wt.place(MCA100Box("Tips", catalog="MCA96, 100ul, Box"), "Nest61mm_Pos", 4)', 'tips = wt.place(FCA1000Box("Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)')
         .replace("source.fill_all(water, 80.0)", "source.fill_all(water, 5.0)")

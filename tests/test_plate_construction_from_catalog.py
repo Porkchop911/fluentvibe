@@ -10,8 +10,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import Plate96, Trough100mL, MCA100Box, MagnetRack  # noqa: E402
-from tecanlab.catalog.catalog import index_exists  # noqa: E402
+from fluentvibe import Plate96, Trough100mL, MCA100Box, MagnetRack  # noqa: E402
+from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
@@ -50,7 +50,7 @@ def test_tipbox_carries_catalog_name() -> None:
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
 def test_unknown_catalog_name_raises() -> None:
-    with pytest.raises(ValueError, match="not found in tecanlab catalog index"):
+    with pytest.raises(ValueError, match="not found in fluentvibe catalog index"):
         Plate96("Bogus", catalog="No Such Plate Ever")
 
 
@@ -63,7 +63,7 @@ def test_missing_catalog_when_index_present_raises() -> None:
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
 def test_compile_renders_real_catalog_name() -> None:
     """The IR step's labware_type should be the exact catalog name."""
-    from tecanlab import Worktable
+    from fluentvibe import Worktable
     wt = Worktable(name="Catalog test")
     wt.group("Setup")
     wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)

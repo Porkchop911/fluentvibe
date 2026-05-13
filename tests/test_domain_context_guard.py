@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from tecanlab.authoring.service import (
+from fluentvibe.authoring.service import (
     SYSTEM_PROMPT,
     _SYSTEM_PROMPT_FORBIDDEN_TOKENS,
     assert_no_domain_vocabulary_in_prompt,
@@ -115,7 +115,7 @@ class TestTroughPatternRetrievableViaLookupRules:
 
     def test_lookup_rules_transfer_returns_trough_to_plate_pattern(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
             output_dir=Path("build") / "test_domain_context" / "trough_pattern",
@@ -127,7 +127,7 @@ class TestTroughPatternRetrievableViaLookupRules:
 
     def test_trough_pattern_includes_anti_patterns(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
             output_dir=Path("build") / "test_domain_context" / "trough_anti",
@@ -173,7 +173,7 @@ class TestLookupRulesToolDefinition:
     """The lookup_rules tool must be available with correct parameters."""
 
     def test_lookup_rules_in_tool_definitions(self):
-        from tecanlab.authoring.tools import tool_definitions
+        from fluentvibe.authoring.tools import tool_definitions
 
         tools = {t["function"]["name"]: t for t in tool_definitions()}
         assert "lookup_rules" in tools, (
@@ -181,7 +181,7 @@ class TestLookupRulesToolDefinition:
         )
 
     def test_lookup_rules_has_protocol_type_param(self):
-        from tecanlab.authoring.tools import tool_definitions
+        from fluentvibe.authoring.tools import tool_definitions
 
         tools = {t["function"]["name"]: t for t in tool_definitions()}
         props = tools["lookup_rules"]["function"]["parameters"]["properties"]
@@ -190,7 +190,7 @@ class TestLookupRulesToolDefinition:
         )
 
     def test_lookup_rules_has_category_param(self):
-        from tecanlab.authoring.tools import tool_definitions
+        from fluentvibe.authoring.tools import tool_definitions
 
         tools = {t["function"]["name"]: t for t in tool_definitions()}
         props = tools["lookup_rules"]["function"]["parameters"]["properties"]
@@ -206,7 +206,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_returns_ok_with_keys(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
             output_dir=Path("build") / "test_domain_context" / "rules",
@@ -217,7 +217,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_with_category(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
             output_dir=Path("build") / "test_domain_context" / "rules_cat",
@@ -228,7 +228,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_with_both_params(self):
         from pathlib import Path
-        from tecanlab.authoring.tools import AuthoringToolRegistry
+        from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
             output_dir=Path("build") / "test_domain_context" / "rules_both",

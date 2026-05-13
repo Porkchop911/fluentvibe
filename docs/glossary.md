@@ -1,7 +1,7 @@
 # Glossary
 
-Terms used across tecanlab and the FluentControl ecosystem. Where a term
-has a tecanlab-specific meaning, that's noted explicitly.
+Terms used across fluentvibe and the FluentControl ecosystem. Where a term
+has a fluentvibe-specific meaning, that's noted explicitly.
 
 ## FluentControl / Tecan terms
 
@@ -26,7 +26,7 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **EVA**
    Extended Volume Adapter — a flat head accessory that increases the
-   tip-volume range of the MCA-96. Catalog name `EVA[001]` in tecanlab's
+   tip-volume range of the MCA-96. Catalog name `EVA[001]` in fluentvibe's
    default; not an item placed on the worktable in the FluentControl
    protocol model.
 
@@ -42,11 +42,11 @@ has a tecanlab-specific meaning, that's noted explicitly.
 **FunctionalGroup**
    A structured taxonomy field embedded in each `.xcmp` (`<FunctionalGroup>`).
    Examples: `Labware.Microplate`, `Labware.Trough`, `Carrier.Hotel`,
-   `Carrier.Grid Segment`. tecanlab's category-inference uses this as the
+   `Carrier.Grid Segment`. fluentvibe's category-inference uses this as the
    primary signal.
 
 **Gripper**
-   See CGA. tecanlab's `Gripper` class wraps the IR steps that drive CGA
+   See CGA. fluentvibe's `Gripper` class wraps the IR steps that drive CGA
    moves.
 
 **Hotel**
@@ -56,16 +56,16 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **LiHa**
    Liquid Handling Arm. The single-channel pipetting head; used for
-   per-well precision work. Tecanlab v1.1 doesn't author LiHa steps but
+   per-well precision work. Fluentvibe v1.1 doesn't author LiHa steps but
    the IR schema covers them.
 
 **MCA96 / MCA384**
-   Multi-Channel Arms with 96 / 384 parallel pipetting channels. tecanlab
+   Multi-Channel Arms with 96 / 384 parallel pipetting channels. fluentvibe
    v1.1 implements `MCA96Head`; MCA384 is in the IR but no head class yet.
 
 **MagniFlex**
    A specific magnet-rack family from Tecan (e.g. `24 Eppendorf Adapter
-   Magniflex`). Catalog category: `magnet_rack`. tecanlab's name-substring
+   Magniflex`). Catalog category: `magnet_rack`. fluentvibe's name-substring
    override catches `magniflex` regardless of FunctionalGroup.
 
 **Nest**
@@ -79,11 +79,11 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **RGA**
    Robotic Gripper Arm. Mechanical arm separate from the pipetting heads;
-   moves labware. tecanlab's `Gripper.move()` emits `RgaTransferLabwareStep`.
+   moves labware. fluentvibe's `Gripper.move()` emits `RgaTransferLabwareStep`.
 
 **Runner**
    A linear carrier with multiple sites for tubes or troughs (e.g. "1x16
-   15ml Falcon Tube Runner"). tecanlab's inference distinguishes
+   15ml Falcon Tube Runner"). fluentvibe's inference distinguishes
    tube-bearing runners (`tube_rack`) from trough-bearing runners
    (`fixed_deck`) via the name substring.
 
@@ -94,18 +94,18 @@ has a tecanlab-specific meaning, that's noted explicitly.
 **Site**
    A position on a carrier where a labware can be placed. Identified by a
    GUID + a 0-based index within an arrangement. FluentControl uses
-   1-based positions in the .xscr; tecanlab translates at the boundary
+   1-based positions in the .xscr; fluentvibe translates at the boundary
    (XWSP read = +1).
 
 **Worktable**
    The deck of the FluentControl instrument: a 2D arrangement of
    `(location, position)` slots where carriers and labware are placed.
-   tecanlab's `Worktable` class models this.
+   fluentvibe's `Worktable` class models this.
 
 **Workspace**
    A configured worktable layout — a `.xwsp` file enumerates which sites
    are present, their location names, and which labware is initially
-   placed where. tecanlab's `Worktable.from_workspace(name)` loads one.
+   placed where. fluentvibe's `Worktable.from_workspace(name)` loads one.
 
 **.xcmp**
    FluentControl Worktable Component file. XML; contains a single
@@ -118,35 +118,35 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **.xsit**
    FluentControl Site file. XML; per-site definition (connectors, allowed
-   labware). Lightweight; tecanlab indexes name → file_path only.
+   labware). Lightweight; fluentvibe indexes name → file_path only.
 
 **.xcon**
    FluentControl Connector file. Defines how labware connects to sites.
-   ~14,000 in a typical install; tecanlab doesn't parse them.
+   ~14,000 in a typical install; fluentvibe doesn't parse them.
 
 **.xmsh**
-   FluentControl Mesh file. 3D model. tecanlab doesn't parse them.
+   FluentControl Mesh file. 3D model. fluentvibe doesn't parse them.
 
 **.xscr**
    FluentControl Script file (the rendered protocol). XML. The output of
    `Worktable.compile()`.
 
-## tecanlab terms
+## fluentvibe terms
 
 **Catalog index**
-   The SQL artifact at `tecanlab/catalog/install_index.db`. One row per
+   The SQL artifact at `fluentvibe/catalog/install_index.db`. One row per
    catalog `<ObjectName>` linking name + category + file path + scalar
    attributes. Built once on first import; refreshable via CLI.
 
 **Category**
-   One of 10 strings tecanlab uses to dispatch a Python class. See
-   `tecanlab/catalog/inference.py:CATEGORIES`: `plate`, `trough`,
+   One of 10 strings fluentvibe uses to dispatch a Python class. See
+   `fluentvibe/catalog/inference.py:CATEGORIES`: `plate`, `trough`,
    `tip_box`, `magnet_rack`, `tube_rack`, `wash_station`, `waste_chute`,
    `hotel`, `adapter`, `fixed_deck`.
 
 **Catalog entry**
    A row from the `components` table; mirrored as
-   `tecanlab.catalog.CatalogEntry`. Carries name, category, file_path,
+   `fluentvibe.catalog.CatalogEntry`. Carries name, category, file_path,
    plus cached scalar attributes (grid, dim_mm, site_count).
 
 **Catalog name**
@@ -172,7 +172,7 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **IR**
    Intermediate Representation. A list of `Step` Pydantic objects that
-   the renderer consumes. tecanlab's authoring API emits IR; the simulator
+   the renderer consumes. fluentvibe's authoring API emits IR; the simulator
    reads IR; the renderer turns IR into XML.
 
 **Layered well contents**
@@ -187,7 +187,7 @@ has a tecanlab-specific meaning, that's noted explicitly.
    once per process.
 
 **Parity (v1)**
-   Byte-equal `.xscr` output between tecanlab and fluentdsl for the same
+   Byte-equal `.xscr` output between fluentvibe and fluentdsl for the same
    input protocol — modulo one random WorkspaceDelta GUID. Verified by
    `tests/test_simple_transfer_parity.py`.
 
@@ -237,7 +237,7 @@ has a tecanlab-specific meaning, that's noted explicitly.
 
 **Project-owned fluentdsl lineage**
    Code that descends from the earlier project-owned fluentdsl
-   implementation and is now maintained inside tecanlab rather than imported
+   implementation and is now maintained inside fluentvibe rather than imported
    as a dependency. This applies to the renderer, IR schema, legacy recipe
    database helpers, FluentControl install bridge, and `_assets/` reference
    material. Tecan/FluentControl-facing assets still need separate provenance

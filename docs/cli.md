@@ -1,28 +1,28 @@
 # CLI
 
-`tecanlab/cli.py`
+`fluentvibe/cli.py`
 
-The `tecanlab` command is the operational front-end for the package.
+The `fluentvibe` command is the operational front-end for the package.
 Four top-level subcommands plus a `catalog` group.
 
 ```
-tecanlab compile    <path/to/protocol.py>  [--output OUT]
-tecanlab simulate   <path/to/protocol.py>  [--json]
-tecanlab decompile  <path/to/script.xscr>  [--output OUT.py] [--strict]
-tecanlab catalog refresh [--install <PATH>] [--db <PATH>]
-tecanlab catalog info
-tecanlab catalog find <pattern> [--category CAT]
+fluentvibe compile    <path/to/protocol.py>  [--output OUT]
+fluentvibe simulate   <path/to/protocol.py>  [--json]
+fluentvibe decompile  <path/to/script.xscr>  [--output OUT.py] [--strict]
+fluentvibe catalog refresh [--install <PATH>] [--db <PATH>]
+fluentvibe catalog info
+fluentvibe catalog find <pattern> [--category CAT]
 ```
 
-The `tecanlab` script is registered via `pyproject.toml`'s
+The `fluentvibe` script is registered via `pyproject.toml`'s
 `[project.scripts]` block; running `pip install -e .` from the repo root
 makes the command available.
 
 ## `compile`
 
 ```
-tecanlab compile examples/simple_transfer.py
-tecanlab compile examples/simple_transfer.py -o /tmp/out.xscr
+fluentvibe compile examples/simple_transfer.py
+fluentvibe compile examples/simple_transfer.py -o /tmp/out.xscr
 ```
 
 Loads the input `.py` file, calls its `build_worktable()` factory (or uses
@@ -47,9 +47,9 @@ The CLI loader is in `cli.py:_load_protocol` (`cli.py:101`).
 ## `simulate`
 
 ```
-tecanlab simulate examples/simple_transfer.py
-tecanlab simulate examples/simple_transfer.py --json
-tecanlab simulate decompiled_protocol.py --strict --fail-on-opaque --coverage
+fluentvibe simulate examples/simple_transfer.py
+fluentvibe simulate examples/simple_transfer.py --json
+fluentvibe simulate decompiled_protocol.py --strict --fail-on-opaque --coverage
 ```
 
 Loads the protocol the same way as `compile`, but instead of rendering it
@@ -102,13 +102,13 @@ category in stderr, for example `Simulation failed [workspace_binding]`.
 ## `decompile`
 
 ```
-tecanlab decompile examples/simple_transfer.xscr
-tecanlab decompile some_lab.xscr -o some_lab.py
-tecanlab decompile some_lab.xscr --strict
+fluentvibe decompile examples/simple_transfer.xscr
+fluentvibe decompile some_lab.xscr -o some_lab.py
+fluentvibe decompile some_lab.xscr --strict
 ```
 
 Inverse of `compile`. Parses the `.xscr` into the Pydantic `Protocol`
-IR, then emits a self-contained tecanlab Python module with a
+IR, then emits a self-contained fluentvibe Python module with a
 `build_worktable()` factory. Default output path is the input with
 `.py` extension.
 
@@ -134,15 +134,15 @@ the full per-step emit table and round-trip parity guarantees.
 ## `catalog refresh`
 
 ```
-tecanlab catalog refresh
-tecanlab catalog refresh --install C:\Custom\Tecan\Database
-tecanlab catalog refresh --db /tmp/alt-index.db
+fluentvibe catalog refresh
+fluentvibe catalog refresh --install C:\Custom\Tecan\Database
+fluentvibe catalog refresh --db /tmp/alt-index.db
 ```
 
 Drops and rebuilds the SQL catalog index. By default reads from
 `C:\ProgramData\Tecan\VisionX\Database` (override with `--install` or the
-`TECANLAB_FC_INSTALL` env var) and writes to
-`tecanlab/catalog/install_index.db` (override with `--db`).
+`FLUENTVIBE_FC_INSTALL` env var) and writes to
+`fluentvibe/catalog/install_index.db` (override with `--db`).
 
 Output:
 
@@ -169,7 +169,7 @@ adding custom labware to your install.
 ## `catalog info`
 
 ```
-tecanlab catalog info
+fluentvibe catalog info
 ```
 
 ```
@@ -188,7 +188,7 @@ what's its content distribution.
 If the index is empty:
 
 ```
-Catalog index is empty. Run `tecanlab catalog refresh`.
+Catalog index is empty. Run `fluentvibe catalog refresh`.
 ```
 
 (exit code 1)
@@ -196,8 +196,8 @@ Catalog index is empty. Run `tecanlab catalog refresh`.
 ## `catalog find`
 
 ```
-tecanlab catalog find magnet
-tecanlab catalog find "96 Well" --category plate
+fluentvibe catalog find magnet
+fluentvibe catalog find "96 Well" --category plate
 ```
 
 Substring search (case-insensitive `LIKE %pattern%`) over component names.
@@ -219,15 +219,15 @@ Exit 0 on hits, exit 1 on no matches.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TECANLAB_FC_INSTALL` | `C:\ProgramData\Tecan\VisionX\Database` | Where the catalog indexer reads from. |
+| `FLUENTVIBE_FC_INSTALL` | `C:\ProgramData\Tecan\VisionX\Database` | Where the catalog indexer reads from. |
 
 ## Running without `pip install`
 
 You can run the CLI directly without installing:
 
 ```
-PYTHONPATH=. python -m tecanlab.cli catalog info
-PYTHONPATH=. python -m tecanlab.cli compile examples/simple_transfer.py
+PYTHONPATH=. python -m fluentvibe.cli catalog info
+PYTHONPATH=. python -m fluentvibe.cli compile examples/simple_transfer.py
 ```
 
 This is the pattern the test scripts use.

@@ -2,9 +2,9 @@
 
 Walks the XML tree, identifies each ``<Object>``'s command type, and
 emits the corresponding Step subclass. Inverse of
-``tecanlab.compiler.renderer``.
+``fluentvibe.compiler.renderer``.
 
-Scope (v1.1): the steps tecanlab itself emits — AddLabware,
+Scope (v1.1): the steps fluentvibe itself emits — AddLabware,
 GetHeadAdapter / DropHeadAdapter, PickUpTips / SetTipsBack, Aspirate /
 Dispense, Loop, Conditional, RGA gripper transfers, CGA finger
 operations, basic variable / wait / comment ops. Anything else lands
@@ -497,7 +497,7 @@ def _parse_loop(obj: ET.Element) -> LoopStep:
         number_of_loops = iter_text
 
     # If a LoopVariable string is present, prefer it as number_of_loops over
-    # the literal — that's what tecanlab's authoring API encodes when
+    # the literal — that's what fluentvibe's authoring API encodes when
     # `wt.loop(times='cycles')` is used.
     if loop_var:
         number_of_loops = loop_var

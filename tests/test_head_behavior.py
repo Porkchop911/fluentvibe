@@ -14,10 +14,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import (  # noqa: E402
+from fluentvibe import (  # noqa: E402
     FCA1000Box, Plate96, Reagent, SimulationError, Trough100mL, Worktable,
 )
-from tecanlab.catalog import index_exists  # noqa: E402
+from fluentvibe.catalog import index_exists  # noqa: E402
 
 
 # ── LiHa direct tests ───────────────────────────────────────────────

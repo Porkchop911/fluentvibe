@@ -16,7 +16,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab.catalog import (  # noqa: E402
+from fluentvibe.catalog import (  # noqa: E402
     index_exists,
     load_xlqc,
     resolve_liquid_class_by_name,
@@ -27,7 +27,7 @@ from tecanlab.catalog import (  # noqa: E402
 def test_liquid_classes_table_populated() -> None:
     """The indexer wrote at least one liquid_classes row."""
     import sqlite3
-    from tecanlab.catalog import DEFAULT_INDEX_PATH
+    from fluentvibe.catalog import DEFAULT_INDEX_PATH
 
     conn = sqlite3.connect(str(DEFAULT_INDEX_PATH))
     try:
@@ -53,7 +53,7 @@ def test_water_free_single_resolves() -> None:
     # Cross-check against generation.yaml — the migration is correct only
     # if the SQL lookup returns the same GUID the YAML hardcoded.
     import yaml
-    gen_yaml = REPO_ROOT / "tecanlab" / "_assets" / "config" / "generation.yaml"
+    gen_yaml = REPO_ROOT / "fluentvibe" / "_assets" / "config" / "generation.yaml"
     cfg = yaml.safe_load(gen_yaml.read_text(encoding="utf-8"))
     assert entry.guid == cfg["liquid_class"]["guid"], (
         "liquid-class GUID mismatch: SQL says "

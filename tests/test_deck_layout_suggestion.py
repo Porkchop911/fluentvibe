@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from tecanlab.authoring.tools import AuthoringToolRegistry, suggest_deck_layout
+from fluentvibe.authoring.tools import AuthoringToolRegistry, suggest_deck_layout
 
 
 class TestSuggestDeckLayoutBasic:
@@ -246,7 +246,7 @@ class TestSuggestDeckLayoutToolDefinition:
     """Verify the tool is registered and callable."""
 
     def test_tool_in_definitions(self):
-        from tecanlab.authoring.tools import tool_definitions
+        from fluentvibe.authoring.tools import tool_definitions
         names = [t["function"]["name"] for t in tool_definitions()]
         assert "suggest_deck_layout" in names
 

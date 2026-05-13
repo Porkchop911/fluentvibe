@@ -1,4 +1,4 @@
-"""Worktable — the root of a tecanlab protocol.
+"""Worktable — the root of a fluentvibe protocol.
 
 Collects IR steps, owns the pipetting heads + gripper, exposes sim-time
 values for the simulator to consume. Snapshots are populated when
@@ -113,7 +113,7 @@ class Worktable:
         if not index_exists():
             raise MissingSimValueError(
                 "Catalog index is not built; cannot resolve workspace. "
-                "Run `tecanlab catalog refresh` first."
+                "Run `fluentvibe catalog refresh` first."
             )
 
         ws_by_guid = resolve_workspace_by_guid(workspace_guid) if workspace_guid else None
@@ -135,7 +135,7 @@ class Worktable:
                 raise ValueError(
                     "Workspace reference could not be resolved from the local catalog index: "
                     f"name={name!r}, guid={workspace_guid!r}. "
-                    "Run `tecanlab catalog refresh` if the workspace is installed locally."
+                    "Run `fluentvibe catalog refresh` if the workspace is installed locally."
                 )
             lookup = workspace_guid or name
             raise ValueError(f"Workspace {lookup!r} not found in catalog index")
@@ -205,7 +205,7 @@ class Worktable:
                     raise ValueError(
                         f"Workspace {ws.name!r} requires occupant {occ.catalog_name!r} "
                         f"at {(loc, position)!r}, but that catalog name is not installed "
-                        "in the local tecanlab catalog index."
+                        "in the local fluentvibe catalog index."
                     )
                 cls_for_category = CATEGORY_TO_CLASS.get(
                     catalog_entry.category, CATEGORY_TO_CLASS["fixed_deck"]

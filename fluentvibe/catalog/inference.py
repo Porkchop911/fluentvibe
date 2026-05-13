@@ -7,7 +7,7 @@ the functional group for the few cases where the name is more specific (a
 'Magnet Teleshake Segment' is a `Carrier.Deck Segment` but behaves as a
 magnet rack), and serve as a fallback when functional group is missing.
 
-Categories tecanlab cares about (one Python class per category):
+Categories fluentvibe cares about (one Python class per category):
 
 - `plate`        — flat plate (microplate / deep-well / 384)
 - `trough`       — single-pool reservoir

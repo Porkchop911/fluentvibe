@@ -1,7 +1,7 @@
 """Multi-turn prompt-authoring session, backed by a LangGraph state machine.
 
 The previous hand-rolled while-loop has been replaced with `build_authoring_graph`
-in `tecanlab.authoring.graph`. This file is now a thin coordinator: it owns the
+in `fluentvibe.authoring.graph`. This file is now a thin coordinator: it owns the
 accumulated message history and per-session state, then delegates each `send()`
 call to the graph.
 """

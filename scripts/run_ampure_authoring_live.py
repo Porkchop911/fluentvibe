@@ -15,10 +15,10 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tecanlab.authoring import PromptAuthoringSession
+from fluentvibe.authoring import PromptAuthoringSession
 
 
-DEFAULT_PROMPT = Path(os.environ.get("TECANLAB_AMPURE_PROMPT", "ampure_protocol.txt"))
+DEFAULT_PROMPT = Path(os.environ.get("FLUENTVIBE_AMPURE_PROMPT", "ampure_protocol.txt"))
 DEFAULT_OUTPUT_DIR = Path("build") / "ampure_authoring_live"
 DEFAULT_ANSWERS = (
     "20 uL per well",
@@ -35,8 +35,8 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--log-jsonl", type=Path, default=DEFAULT_OUTPUT_DIR / "ampure_authoring_trace.jsonl")
     parser.add_argument("--retry-budget", type=int, default=12)
-    parser.add_argument("--workspace", default=os.environ.get("TECANLAB_AUTHORING_WORKSPACE"))
-    parser.add_argument("--workspace-guid", default=os.environ.get("TECANLAB_AUTHORING_WORKSPACE_GUID"))
+    parser.add_argument("--workspace", default=os.environ.get("FLUENTVIBE_AUTHORING_WORKSPACE"))
+    parser.add_argument("--workspace-guid", default=os.environ.get("FLUENTVIBE_AUTHORING_WORKSPACE_GUID"))
     parser.add_argument(
         "--model", default=None,
         help="LM Studio model name (default: DEFAULT_LM_STUDIO_MODEL from lm_client.py)",

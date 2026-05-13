@@ -13,7 +13,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tecanlab import (  # noqa: E402
+from fluentvibe import (  # noqa: E402
     CannotAspirateError, InsufficientVolumeError, MissingAdapterError,
     MissingTipsError, OccupiedSlotError, OverdrawError,
     MCA100Box, MagnetRack, Plate96, Reagent, Worktable,
