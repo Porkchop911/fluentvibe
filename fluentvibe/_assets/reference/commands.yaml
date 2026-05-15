@@ -3009,7 +3009,6 @@ observed_values:
   - MCA384, 50ul
   - MCA96, 200ul, Box
   - MCA96, 50ul, Box
-  - Zzqvpx_LV_Alpaqua_A000350
   - 96_ABgene_SuperPlate_Thermo_AB2800
   - LV_Alpaqua_A000350
   - 384_Echo_PP
@@ -3053,9 +3052,6 @@ observed_values:
   - Water Free Multi
   - Leakage Test EVA
   - Oligo_Transfer_to_IDOT_plate
-  - $Zzqvpx_Beaver_Beads_Pellet_Resuspension
-  - $Zzqvpx_MagMax-Binding_Buffer_removal_reuse
-  - $Zzqvpx_MagMax-Binding_Buffer_removal
   locations:
   - Alpaqua_Magnet
   - MCA384_Diti_ActiveNest

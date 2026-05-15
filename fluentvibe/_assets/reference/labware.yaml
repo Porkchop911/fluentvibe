@@ -47,10 +47,6 @@ labware:
   functional_group: Labware.Microplate
   name: MCA96, 50ul, Box
   wells: 96
-- category: magnet_plate
-  functional_group: Labware.Microplate
-  name: Zzqvpx_LV_Alpaqua_A000350
-  wells: 96
 other:
   types:
   - name: 3 Grid
@@ -1213,9 +1209,6 @@ plates:
   - name: MagniFlex DiTiDropStation OnDeck
     wells: 8
     functional_group: Labware.Wash and Waste
-  - name: 2 MCA384 DiTi Active Nest Front_Zzqvpx
-    wells: null
-    functional_group: Carrier.Deck Segment
   - name: 96 Well Skirted PCR
     wells: 96
     functional_group: Labware.Microplate
@@ -1237,7 +1230,7 @@ plates:
   - name: 96 Well Crystal Quick
     wells: 96
     functional_group: Labware.Microplate
-  - name: 61mm Nest_Zzqvpx
+  - name: 61mm Nest
     wells: null
     functional_group: Carrier.Nest
   - name: 96 FA sample plate
@@ -1312,7 +1305,7 @@ plates:
   - name: 96 Well PCR Plate DPNGS_for_MCA
     wells: 96
     functional_group: Labware.Microplate
-  - name: 7mm Nest_Zzqvpx
+  - name: 7mm Nest
     wells: null
     functional_group: Carrier.Nest
   - name: Echo_384LDV
@@ -1378,15 +1371,9 @@ plates:
   - name: 96 Deep Well 1ml_completly_overfilled
     wells: 96
     functional_group: Labware.Deep Well
-  - name: 4 Landscape Nests Cooled_Zzqvpx
-    wells: null
-    functional_group: Carrier.Deck Segment
   - name: 384_Echo_PP
     wells: 384
     functional_group: Labware.Microplate
-  - name: Landscape Nest Base Segment_Zzqvpx
-    wells: null
-    functional_group: Carrier.Deck Segment
   - name: 6 Well Flat 2
     wells: 6
     functional_group: Labware.Microplate
