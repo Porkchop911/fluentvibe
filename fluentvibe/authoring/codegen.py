@@ -76,7 +76,7 @@ class ProtocolCodeGenerator:
         for reagent_name in reagent_names:
             var_name = reagent_vars[reagent_name]
             if any(layer.reagent_name == reagent_name and layer.pinned_when_magnetized for seeded in spec.seeded_labware for layer in seeded.layers):
-                out.append(f"    {var_name} = Reagent({reagent_name!r}, pinned_when_magnetized=True)")
+                out.append(f'    {var_name} = Reagent({reagent_name!r}, role="bead_carrier")')
             else:
                 out.append(f"    {var_name} = Reagent({reagent_name!r})")
         if reagent_names:

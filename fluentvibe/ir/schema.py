@@ -62,6 +62,10 @@ class StepType(str, Enum):
     # Worktable and routine commands
     SET_LOCATION = "set_location"
     SUBROUTINE = "subroutine"
+    # Worklist commands
+    WORKLIST_IMPORT = "worklist_import"
+    LOAD_WORKLIST = "load_worklist"
+    EXECUTE_WORKLIST = "execute_worklist"
 
 
 class BaseStep(BaseModel):
@@ -432,6 +436,52 @@ class SubRoutineStep(BaseStep):
     variable_mappings_end: list[VariableMapping] = Field(default_factory=list, description="End mappings")
 
 
+class WorklistColumnMapping(BaseModel):
+    """CSV column assignment for FluentControl Convert CSV to GWL."""
+    column_name: str = Field(..., description="CSV column letter, e.g. A")
+    column_index: int = Field(..., ge=0, description="Zero-based column index")
+    gwl_index: str = Field(..., description="FluentControl worklist field name")
+
+
+class WorklistImportStep(BaseStep):
+    """Convert a CSV file into a GWL worklist inside FluentControl."""
+    step_type: Literal[StepType.WORKLIST_IMPORT] = StepType.WORKLIST_IMPORT
+    csv_path: str
+    gwl_path: str
+    start_line: int = Field(default=1, ge=1)
+    stop_with_last_line: bool = True
+    stop_with_line: int = Field(default=1, ge=1)
+    separator: str = ","
+    columns: list[WorklistColumnMapping] = Field(default_factory=list)
+
+
+class LoadWorklistStep(BaseStep):
+    """Load a GWL file for later execution by FluentControl."""
+    step_type: Literal[StepType.LOAD_WORKLIST] = StepType.LOAD_WORKLIST
+    gwl_path: str
+    liquid_class: Optional[str] = None
+    diti_type: str = "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 50ul SBS"
+    selected_tips: list[int] = Field(default_factory=lambda: list(range(8)))
+    handle_missing_labware: str = "SkipWithoutWarning"
+    skip_initial_wash: bool = False
+    waste_labware: str = "FCA Thru Deck Waste Chute_1"
+    empty_tips_liquid_class: str = "Empty Tip"
+    use_legacy_gwl_file_format: bool = False
+    ignore_filename_until_run: bool = True
+    device_alias: Optional[str] = None
+    well_positions: str = Field(default="numeric", description="numeric or alphanumeric")
+    dynamic_diti_table: str = ""
+    dynamic_diti_handling: bool = False
+    airgap_speed: int = 70
+    airgap_volume: int = 10
+
+
+class ExecuteWorklistStep(BaseStep):
+    """Execute all loaded worklists since the previous Execute Worklist command."""
+    step_type: Literal[StepType.EXECUTE_WORKLIST] = StepType.EXECUTE_WORKLIST
+    delete_gwl_scripts: bool = False
+
+
 class GenericStep(BaseModel):
     """
     Generic step that accepts any step type from the reference.
@@ -533,6 +583,9 @@ Step = Union[
     DelayStep,
     SetLocationStep,
     SubRoutineStep,
+    WorklistImportStep,
+    LoadWorklistStep,
+    ExecuteWorklistStep,
     ScriptGroupStep,
     LoopStep,
     ConditionalStep,
@@ -567,6 +620,7 @@ class Protocol(BaseModel):
     worktable_name: Optional[str] = None
     liquid_class: Optional[str] = None
     device_alias: Optional[str] = None
+    file_references: list[str] = Field(default_factory=list, description="External files referenced by the script")
 
     def total_steps(self) -> int:
         """Count total steps across all groups."""
@@ -659,4 +713,7 @@ STEP_TO_COMMAND_ID = {
     # Worktable/routines
     StepType.SET_LOCATION: "SetLocation",
     StepType.SUBROUTINE: "SubRoutine",
+    StepType.WORKLIST_IMPORT: "WorklistImport",
+    StepType.LOAD_WORKLIST: "LoadWorklist",
+    StepType.EXECUTE_WORKLIST: "ExecuteWorklist",
 }

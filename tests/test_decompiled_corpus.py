@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import os
 from pathlib import Path
 
 import pytest
@@ -15,8 +14,9 @@ from fluentvibe.decompiler import run_decompiled_corpus, summarize_corpus_result
 
 
 CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "decompiled_corpus"
-_PRODUCTION_XSCR_ENV = os.environ.get("FLUENTVIBE_PRODUCTION_XSCR")
-PRODUCTION_XSCR = Path(_PRODUCTION_XSCR_ENV) if _PRODUCTION_XSCR_ENV else None
+PRODUCTION_XSCR = Path(
+    r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\ec51eed2-b428-48fd-bf81-581743e7f93b.xscr"
+)
 
 
 def _install_present() -> bool:
@@ -78,10 +78,7 @@ def test_decompiled_corpus_classifies_strict_outcomes(tmp_path: Path) -> None:
     assert liquid["total_executed_steps"] == 2
 
 
-@pytest.mark.skipif(
-    PRODUCTION_XSCR is None or not PRODUCTION_XSCR.exists(),
-    reason="production corpus fixture not configured",
-)
+@pytest.mark.skipif(not PRODUCTION_XSCR.exists(), reason="production corpus fixture not installed")
 def test_production_corpus_reclassifies_to_next_catalog_issue(tmp_path: Path) -> None:
     results = run_decompiled_corpus([PRODUCTION_XSCR], output_dir=tmp_path)
     summary = summarize_corpus_results(results)
@@ -89,6 +86,7 @@ def test_production_corpus_reclassifies_to_next_catalog_issue(tmp_path: Path) ->
     assert summary["status_counts"] == {"failed": 1}
 
     result = summary["protocols"][0]
+    assert result["name"] == "ec51eed2-b428-48fd-bf81-581743e7f93b"
     assert result["generated_python"] is not None
     assert result["classification"] == "workspace_or_catalog"
     assert result["failure"]["category"] == "catalog"

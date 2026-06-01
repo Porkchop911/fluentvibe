@@ -215,11 +215,30 @@ Output:
 
 Exit 0 on hits, exit 1 on no matches.
 
+## `chat` / `author` (LM authoring)
+
+```
+fluentvibe chat --output-dir build/run [--model-trace] [--lab-scope skills|enforce|cheatsheet|off] [--retry-budget N]
+```
+
+`--lab-scope` (env `FLUENTVIBE_LAB_SCOPE`) selects the narrowed-scope
+grounding layer: `skills` (**default** — assemble context from the relevant
+granular skill files and restrict tools to the curated whitelist),
+`enforce` (inject the monolithic cheatsheet + the same whitelist/tool
+restriction), `cheatsheet` (inject the cheatsheet only), `off`
+(byte-identical to the pre-experiment baseline).
+
+**To reproduce the baseline, pass `--lab-scope off`** (or
+`FLUENTVIBE_LAB_SCOPE=off`). The repair loop has a structural ~8-iteration
+floor; pair a scoped run with `--retry-budget 2` so a clean compile
+terminates instead of grinding to the floor.
+
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `FLUENTVIBE_FC_INSTALL` | `C:\ProgramData\Tecan\VisionX\Database` | Where the catalog indexer reads from. |
+| `FLUENTVIBE_LAB_SCOPE` | `skills` | Narrowed-scope mode (`skills`/`enforce`/`cheatsheet`/`off`); `--lab-scope` overrides it. |
 
 ## Running without `pip install`
 

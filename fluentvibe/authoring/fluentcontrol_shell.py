@@ -19,10 +19,7 @@ from typing import Optional
 
 
 DEFAULT_SHELL_XSCR = Path(
-    os.environ.get(
-        "FLUENTVIBE_SHELL_XSCR",
-        r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\shell.xscr",
-    )
+    r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\b010c60d-813d-40cf-848a-584d0432f789.xscr"
 )
 
 

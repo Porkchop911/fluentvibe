@@ -20,7 +20,7 @@ fluentvibe/catalog/
 ├── indexer.py         build_index() walks install, infers, writes rows.
 ├── install_index.db   The built artifact (SQLite, inside the package).
 ├── fc_install.py      Bridge to the upstream fluentcontrol_core (legacy).
-└── database.py        Legacy recipe database and lookup helpers.
+└── database.py        Vendored fluentdsl tecan.db (legacy; not used by v1.1).
 ```
 
 ## The .xcmp parser
@@ -298,6 +298,88 @@ CREATE TABLE liquid_classes (
 );
 CREATE INDEX liquid_classes_by_name ON liquid_classes(name);
 ```
+
+### Compatibility tables (schema v2)
+
+```sql
+-- One row per arrangement site exposed by a carrier/labware.
+CREATE TABLE component_sites (
+    component_guid TEXT NOT NULL,
+    site_index     INTEGER NOT NULL,   -- 1-based, FC convention
+    footprint      TEXT,               -- footprint the site accepts
+    grip_modes     TEXT,               -- JSON list of CGA names
+    PRIMARY KEY (component_guid, site_index)
+);
+CREATE INDEX component_sites_by_footprint ON component_sites(footprint);
+
+-- Reverse index: workspace -> components actually placed in it.
+-- component_name is the *canonical* catalog name (FC's "[001]" positional
+-- suffix on the workspace's LabwareName is stripped at index time so
+-- joins to components.name match cleanly).
+CREATE TABLE workspace_components (
+    workspace_guid TEXT NOT NULL,
+    component_name TEXT NOT NULL,
+    site_path      TEXT NOT NULL,      -- '0/2/1' style
+    base_location  TEXT,
+    PRIMARY KEY (workspace_guid, component_name, site_path)
+);
+CREATE INDEX workspace_components_by_name ON workspace_components(component_name);
+
+-- LC ↔ head: queryable shape derived from liquid_classes.supported_heads JSON.
+CREATE TABLE liquid_class_heads (
+    liquid_class_guid TEXT NOT NULL,
+    head              TEXT NOT NULL,
+    PRIMARY KEY (liquid_class_guid, head)
+);
+CREATE INDEX liquid_class_heads_by_head ON liquid_class_heads(head);
+```
+
+Three columns also promoted onto `components`:
+
+```sql
+ALTER TABLE components ADD COLUMN footprint           TEXT;
+ALTER TABLE components ADD COLUMN is_lid              INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE components ADD COLUMN renderer            TEXT;
+ALTER TABLE components ADD COLUMN allowed_grip_modes  TEXT;  -- JSON {site_idx: [CGA,…]}
+CREATE INDEX components_by_footprint ON components(footprint);
+```
+
+### Compatibility query API
+
+```python
+from fluentvibe.catalog import (
+    find_sites_for,            # (name) -> list[CompatibleSite]
+    find_labware_for_site,     # (carrier_name, site_index) -> list[CatalogEntry]
+    find_grip_modes,           # (name, site_index?) -> list[str]
+    find_legal_stacks,         # (name) -> {'above': [...], 'below': [...]}
+    find_workspaces_using,     # (name) -> list[WorkspaceEntry]
+    liquid_classes_for_head,   # (head) -> list[LiquidClassEntry]
+    CompatibleSite,
+)
+```
+
+`CompatibleSite` carries `workspace_guid/name`, `component_guid/name`,
+`site_index` (1-based), `footprint`, `grip_modes`, `base_location`.
+
+Stack legality is **derived**, not stored — `find_legal_stacks` joins on
+footprint + `is_lid` + `category in ('adapter', 'magnet_rack')`. This
+keeps the heuristic editable without an index rebuild.
+
+### Schema-version guard
+
+`fluentvibe/catalog/catalog.py:INDEX_SCHEMA_VERSION` is bumped whenever the
+on-disk shape changes. Every read-side query calls `_check_schema(conn)`
+before its SELECT; an outdated DB raises `CatalogSchemaOutOfDate` whose
+message names `fluentvibe catalog refresh`. No silent auto-rebuild — the
+trigger stays manual by design.
+
+The `install` table gained:
+
+```sql
+ALTER TABLE install ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 0;
+```
+
+so legacy DBs report `0` and trip the guard on first query after upgrade.
 
 The `liquid_classes` table is populated by walking
 `SystemSpecific/LiquidClasses/*.xlqc` during `build_index`. The renderer

@@ -325,6 +325,25 @@ def _parse_arrangement(template: Optional[ET.Element]) -> Optional[XcmpArrangeme
     )
 
 
+def site_footprint(comp: XcmpComponent, site_index_zero_based: int) -> Optional[str]:
+    """Footprint accepted at one site of a component's arrangement.
+
+    For carriers and pure labware in this install, sites do not carry a
+    distinct accepted-footprint string in the parsed XCMP — the parent
+    component's `footprint` describes both what *it has* (when used as a
+    labware) and what its sites *accept* (when used as a carrier). For
+    homogeneous arrangements this is the right answer; per-site override
+    semantics live in the linked `.xsit` files which v1 does not parse
+    deeply. Treat this as a v1 simplification.
+    """
+    # `site_index_zero_based` is the dict key used elsewhere in
+    # `XcmpArrangement` (offsets, grip modes). It is currently
+    # informational here — the per-site footprint reduces to the parent
+    # component's footprint until we lift data out of `.xsit`.
+    del site_index_zero_based
+    return comp.footprint
+
+
 def _parse_pipettable(template: Optional[ET.Element]) -> Optional[XcmpPipettable]:
     if template is None:
         return None

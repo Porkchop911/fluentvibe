@@ -14,10 +14,11 @@ from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
 
 from .ir.schema import (
     AddLabwareStep, CommentStep, ConditionalStep, ExecuteApplicationStep,
-    ExportVariableStep, GenericStep, Group, ImportVariableStep, LoopStep,
-    Protocol, QueryVariableStep, RemoveLabwareStep, ScriptGroupStep,
-    SetLocationStep, SetVariableStep, StartTimerStep, Step, UserPromptStep,
-    WaitForTimerStep, WaitStep,
+    ExecuteWorklistStep, ExportVariableStep, GenericStep, Group,
+    ImportVariableStep, LoadWorklistStep, LoopStep, Protocol,
+    QueryVariableStep, RemoveLabwareStep, ScriptGroupStep, SetLocationStep,
+    SetVariableStep, StartTimerStep, Step, UserPromptStep, WaitForTimerStep,
+    WaitStep, WorklistColumnMapping, WorklistImportStep,
 )
 from .labware.base import Labware
 
@@ -58,6 +59,7 @@ class Worktable:
         self._groups: list[Group] = []
         self._active_group: Optional[Group] = None
         self.protocol_variables: dict[str, Union[float, int, str]] = {}
+        self.file_references: list[str] = []
 
         # Sim-time values — required for any runtime variable the simulator
         # must resolve (loop counts, conditional predicates, imports).
@@ -353,6 +355,157 @@ class Worktable:
             rotation=rotation,
         ))
 
+    def worklist(
+        self,
+        source_path: Union[str, Path],
+        *,
+        gwl_path: Optional[Union[str, Path]] = None,
+        liquid_class: Optional[str] = None,
+        diti_type: str = "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 1000ul SBS",
+        selected_tips: Optional[Union[range, list[int], tuple[int, ...]]] = None,
+        columns: Union[str, dict[str, str]] = "standard",
+        start_line: int = 2,
+        separator: str = ",",
+        execute: bool = True,
+        well_positions: Optional[str] = None,
+        **load_options: Any,
+    ) -> None:
+        """Load a CSV or GWL worklist and execute it by default.
+
+        CSV sources emit FluentControl's Convert CSV to GWL command first.
+        Existing GWL sources are loaded directly.
+        """
+        from .worklists import (
+            infer_csv_well_positions,
+            infer_gwl_well_positions,
+            normalize_columns,
+        )
+
+        source = Path(source_path)
+        suffix = source.suffix.lower()
+        if suffix not in {".csv", ".gwl"}:
+            raise ValueError(f"Worklist source must be .csv or .gwl, got {source_path!r}")
+
+        selected = list(selected_tips) if selected_tips is not None else list(range(8))
+        if suffix == ".csv":
+            target_gwl = Path(gwl_path) if gwl_path is not None else source.with_suffix(".gwl")
+            if well_positions is None:
+                if not source.exists():
+                    raise ValueError("well_positions is required when CSV source cannot be inspected")
+                well_positions = infer_csv_well_positions(
+                    source,
+                    columns=columns,
+                    start_line=start_line,
+                    separator=separator,
+                )
+            self.convert_csv_to_gwl(
+                source,
+                target_gwl,
+                columns=columns,
+                start_line=start_line,
+                separator=separator,
+            )
+            load_path = target_gwl
+        else:
+            if gwl_path is not None:
+                raise ValueError("gwl_path is only valid when source_path is a CSV file")
+            if well_positions is None:
+                if not source.exists():
+                    raise ValueError("well_positions is required when GWL source cannot be inspected")
+                well_positions = infer_gwl_well_positions(source)
+            load_path = source
+
+        self.load_worklist(
+            load_path,
+            liquid_class=liquid_class,
+            diti_type=diti_type,
+            selected_tips=selected,
+            well_positions=well_positions,
+            **load_options,
+        )
+        if execute:
+            self.execute_worklist()
+
+    def convert_csv_to_gwl(
+        self,
+        csv_path: Union[str, Path],
+        gwl_path: Union[str, Path],
+        *,
+        columns: Union[str, dict[str, str]] = "standard",
+        start_line: int = 1,
+        stop_with_last_line: bool = True,
+        stop_with_line: int = 1,
+        separator: str = ",",
+    ) -> None:
+        from .worklists import normalize_columns
+
+        mappings = [
+            WorklistColumnMapping(column_name=name, column_index=index, gwl_index=gwl_index)
+            for name, index, gwl_index in normalize_columns(columns)
+        ]
+        csv_text = str(csv_path)
+        gwl_text = str(gwl_path)
+        self._add_file_reference(csv_text)
+        self._add_file_reference(gwl_text)
+        self._emit(WorklistImportStep(
+            csv_path=csv_text,
+            gwl_path=gwl_text,
+            start_line=start_line,
+            stop_with_last_line=stop_with_last_line,
+            stop_with_line=stop_with_line,
+            separator=separator,
+            columns=mappings,
+        ))
+
+    def load_worklist(
+        self,
+        gwl_path: Union[str, Path],
+        *,
+        liquid_class: Optional[str] = None,
+        diti_type: str = "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 1000ul SBS",
+        selected_tips: Optional[Union[range, list[int], tuple[int, ...]]] = None,
+        handle_missing_labware: str = "SkipWithoutWarning",
+        skip_initial_wash: bool = False,
+        waste_labware: str = "FCA Thru Deck Waste Chute_1",
+        empty_tips_liquid_class: str = "Empty Tip",
+        use_legacy_gwl_file_format: bool = False,
+        ignore_filename_until_run: bool = True,
+        device_alias: Optional[str] = None,
+        well_positions: str = "numeric",
+        dynamic_diti_table: str = "",
+        dynamic_diti_handling: bool = False,
+        airgap_speed: int = 70,
+        airgap_volume: int = 10,
+    ) -> None:
+        gwl_text = str(gwl_path)
+        self._add_file_reference(gwl_text)
+        # The worklist LiquidClassName is rendered literally (no variable
+        # reference like head.aspirate). Resolve a declared-variable name to its
+        # value so the LIQUID_CLASS_* idiom doesn't leak the placeholder into FC.
+        if liquid_class is not None and liquid_class in self.protocol_variables:
+            liquid_class = str(self.protocol_variables[liquid_class])
+        self._emit(LoadWorklistStep(
+            gwl_path=gwl_text,
+            liquid_class=liquid_class,
+            diti_type=diti_type,
+            selected_tips=list(selected_tips) if selected_tips is not None else list(range(8)),
+            handle_missing_labware=handle_missing_labware,
+            skip_initial_wash=skip_initial_wash,
+            waste_labware=waste_labware,
+            empty_tips_liquid_class=empty_tips_liquid_class,
+            use_legacy_gwl_file_format=use_legacy_gwl_file_format,
+            ignore_filename_until_run=ignore_filename_until_run,
+            device_alias=device_alias,
+            well_positions=well_positions,
+            dynamic_diti_table=dynamic_diti_table,
+            dynamic_diti_handling=dynamic_diti_handling,
+            airgap_speed=airgap_speed,
+            airgap_volume=airgap_volume,
+        ))
+
+    def execute_worklist(self, *, delete_gwl_scripts: bool = False) -> None:
+        self._emit(ExecuteWorklistStep(delete_gwl_scripts=delete_gwl_scripts))
+
     def generic_step(self, step_type: str, **parameters: Any) -> None:
         """Emit a recognized but not yet modeled FluentControl command."""
         self._emit(GenericStep(step_type=step_type, parameters=parameters))
@@ -367,18 +520,23 @@ class Worktable:
         *,
         times: Union[int, str],
         name: str = "Loop",
+        loop_variable: str | None = None,
     ) -> Iterator[LoopStep]:
         """Emit a `LoopStep` whose body is everything authored inside the
         `with` block.
 
         ``times`` is either a literal `int` (loop runs that many times) or a
         `str` naming a runtime variable. The variable's value at simulation
-        time is resolved through `set_sim_value(name, value)`.
+        time is resolved through `set_sim_value(name, value)`. ``loop_variable``
+        optionally names FluentControl's in-scope loop counter variable.
         """
+        counter = loop_variable if loop_variable is not None else (
+            times if isinstance(times, str) else None
+        )
         loop_step = LoopStep(
             name=name,
             iterations=times if isinstance(times, int) else 1,
-            loop_variable=times if isinstance(times, str) else None,
+            loop_variable=counter,
             number_of_loops=times,
             steps=[],
         )
@@ -455,6 +613,35 @@ class Worktable:
                 f"Slot {slot!r} is not on workspace {self.workspace_name!r}. "
                 f"Valid examples: {sorted(self.valid_slots)[:5]}…"
             )
+        # Trough placement guard rail — scoped to the deployment-target
+        # SAT_Fluent_780 deck (the rule is empirical to that workspace):
+        #   - Troughs only reach on `WS_100ml_*` sites.
+        #   - The `100ml` catalog is too tall for standard tips (Z-Max
+        #     unreachable) unless the trough is earmarked for ethanol/wash.
+        is_780 = (self.workspace_name or "") == "SAT_Fluent_780_Rev3"
+        if is_780 and getattr(labware, "category", None) == "trough":
+            from .simulator.invariants import TroughPlacementError
+            if not location.startswith("WS_100ml_"):
+                raise TroughPlacementError(
+                    f"Trough {labware.label!r} must be placed on a "
+                    f"`WS_100ml_*` site (the only reachable trough family on "
+                    f"SAT_Fluent_780). Got {slot!r}."
+                )
+            catalog = (labware.catalog_name or "").strip().lower()
+            label_l = (labware.label or "").lower()
+            if catalog == "100ml":
+                wash_marker = any(
+                    m in label_l for m in ("ethanol", "etoh", "wash", "alcohol")
+                )
+                if not wash_marker:
+                    raise TroughPlacementError(
+                        f"Trough {labware.label!r} uses the `100ml` catalog "
+                        f"but isn't marked for ethanol/wash use. Standard tips "
+                        f"cannot reach its Z-Max. Use `catalog='25ml_short'` "
+                        f"instead, or name the trough with an `Ethanol`/`Wash` "
+                        f"marker if the run actually needs 96 × ≥200 µL wash "
+                        f"capacity."
+                    )
         if slot in self.slot_map and self.slot_map[slot] and not allow_occupied:
             occupied_by = self.slot_map[slot][-1]
             raise ValueError(
@@ -502,6 +689,7 @@ class Worktable:
             groups=[Group(name=g.name, steps=list(g.steps)) for g in self._groups],
             worktable_guid=self.workspace_guid,
             worktable_name=self.workspace_name,
+            file_references=list(self.file_references),
         )
         protocol.assign_line_numbers()
         return protocol
@@ -512,6 +700,9 @@ class Worktable:
         from .catalog import rewrite_checksum_in_place
 
         self._require_bound_workspace()
+        self._validate_liha_tipbox_presence()
+        self._validate_liha_tip_pickup()
+        self._validate_mix_liquid_classes()
         protocol = self.to_protocol()
         xml = render_protocol(protocol)
         path = Path(out_path)
@@ -538,6 +729,139 @@ class Worktable:
 
     # ── Internal helpers ────────────────────────────────────────────
 
+    def _iter_all_steps(self) -> Iterator[Step]:
+        """Yield every authored step, recursing into loop/conditional/group bodies."""
+        def walk(steps: list[Step]) -> Iterator[Step]:
+            for step in steps:
+                yield step
+                inner = getattr(step, "steps", None)
+                if inner:
+                    yield from walk(inner)
+                then_branch = getattr(step, "then_steps", None)
+                if then_branch:
+                    yield from walk(then_branch)
+                else_branch = getattr(step, "else_steps", None)
+                if else_branch:
+                    yield from walk(else_branch)
+        for group in self._groups:
+            yield from walk(group.steps)
+
+    def _validate_liha_tipbox_presence(self) -> None:
+        """Refuse to compile a LiHa/worklist protocol without an FCA tip box.
+
+        FluentControl raises `No DiTi-Labware … found` + `Tip(s) are not
+        mounted` at runtime when the LiHa is asked to pipette but the deck
+        carries no compatible FCA tip box. The LM-authored protocols regress
+        on this rule despite the skill spelling it out, so the DSL refuses
+        the compile up front to feed the repair loop a concrete traceback.
+
+        Scoped to the deployment-target workspace `SAT_Fluent_780_Rev3` —
+        the empty/generic workspaces used in IR-fidelity tests don't carry
+        the same tip-box assumption.
+        """
+        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+            return
+        liha_step_prefixes = ("Liha", "Worklist", "LoadWorklist", "ExecuteWorklist")
+        uses_liha = any(
+            type(step).__name__.startswith(liha_step_prefixes)
+            for step in self._iter_all_steps()
+        )
+        if not uses_liha:
+            return
+        from .labware.tipboxes import TipBox
+        has_fca_box = any(
+            isinstance(lw, TipBox) and "fca" in (lw.catalog_name or "").lower()
+            for stack in self.slot_map.values()
+            for lw in stack
+        )
+        if has_fca_box:
+            return
+        from .simulator.invariants import MissingFCATipBoxError
+        raise MissingFCATipBoxError(
+            "Protocol uses the LiHa head (or a worklist Load) but no FCA "
+            "tip box is placed on the worktable. FluentControl will reject "
+            "this at load time with `No DiTi-Labware … found`. "
+            "Add: `wt.place(TipBox(\"FCA_Tips\", catalog=\"FCA, 1000ul SBS\"), "
+            "\"Nest61mm_Pos\", 6)`."
+        )
+
+    def _validate_liha_tip_pickup(self) -> None:
+        """Refuse to compile when the LiHa head picks up a non-FCA tip box.
+
+        `_validate_liha_tipbox_presence` only checks that *an* FCA box is on
+        the deck — an LM regression places one but still calls
+        `wt.liha.get_tips(mca_box)`, which FluentControl rejects with
+        `No DiTi-Labware MCA96 … found` + `Tip(s) are not mounted`. Resolve
+        each LiHa tip-pickup to its placed labware and require an FCA catalog.
+
+        Scoped to `SAT_Fluent_780_Rev3` like the other deck guards.
+        """
+        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+            return
+        placed = {
+            lw.label: lw for stack in self.slot_map.values() for lw in stack
+        }
+        for step in self._iter_all_steps():
+            if type(step).__name__ != "LihaGetTipsStep":
+                continue
+            name = getattr(step, "labware_name", None)
+            if not name:
+                continue
+            lw = placed.get(name)
+            if lw is None:
+                continue  # missing labware is the presence check's job
+            catalog = (getattr(lw, "catalog_name", "") or "")
+            if "fca" not in catalog.lower():
+                from .simulator.invariants import LihaTipMismatchError
+                raise LihaTipMismatchError(
+                    f"The LiHa head picks up tip box {name!r} (catalog "
+                    f"{catalog!r}), which is not an FCA DiTi box. The LiHa/FCA "
+                    f"arm can only mount FCA tips; an `MCA96 …` box belongs to "
+                    f"the MCA head. Place and pick up an FCA box, e.g. "
+                    f"`fca = wt.place(TipBox(\"FCA_Tips\", catalog=\"FCA, 200ul "
+                    f"SBS\"), \"Nest61mm_Pos\", 6)` then `wt.liha.get_tips(fca)`."
+                )
+
+    def _validate_mix_liquid_classes(self) -> None:
+        """Refuse to compile a Mix step whose liquid class has no Mix section.
+
+        FluentControl rejects `head.mix(..., liquid_class="Water Free Single")`
+        with `Liquid subclass section "Mix" is missing`. The class name is
+        often a declared variable, so resolve against `protocol_variables`
+        first, then check the `.xlqc` for an actual `Mix` micro-script section
+        (data-driven — matches FC's own model). Unknown classes / no catalog
+        index are left alone so this never blocks on missing data.
+
+        Scoped to `SAT_Fluent_780_Rev3` like the other deck guards.
+        """
+        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+            return
+        try:
+            from .catalog import index_exists, liquid_class_supports_section
+            if not index_exists():
+                return
+        except Exception:
+            return
+        defaults = self.protocol_variables
+        for step in self._iter_all_steps():
+            if type(step).__name__ not in ("Mca384MixStep", "LihaMixStep"):
+                continue
+            lc = getattr(step, "liquid_class", None)
+            if not lc:
+                continue
+            resolved = defaults.get(lc, lc)
+            if not isinstance(resolved, str):
+                continue
+            if liquid_class_supports_section(resolved, "Mix") is False:
+                from .simulator.invariants import LiquidClassSectionError
+                raise LiquidClassSectionError(
+                    f"Mix step uses liquid class {resolved!r}, which has no "
+                    f"\"Mix\" micro-script section — FluentControl rejects it "
+                    f"with `Liquid subclass section \"Mix\" is missing`. Use a "
+                    f"Mix-capable class such as \"Water Mix\" for mixing steps "
+                    f"(keep \"Water Free Single\" for plain transfers)."
+                )
+
     def _emit(self, step: Step) -> None:
         if self._emit_target_stack:
             self._emit_target_stack[-1].append(step)
@@ -546,6 +870,10 @@ class Worktable:
             self._active_group = Group(name="Steps", steps=[])
             self._groups.append(self._active_group)
         self._active_group.steps.append(step)
+
+    def _add_file_reference(self, path: str) -> None:
+        if path and path not in self.file_references:
+            self.file_references.append(path)
 
     def _register_child_valid_slots(self, labware: Labware) -> None:
         """Extend valid workspace slots from a placed carrier's child sites."""

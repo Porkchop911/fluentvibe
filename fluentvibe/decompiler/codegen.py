@@ -36,6 +36,7 @@ from ..ir.schema import (
     QueryVariableStep, RemoveLabwareStep, RgaTransferLabwareStep,
     ScriptGroupStep, SetLocationStep, SetTipsBackStep, SetVariableStep,
     StartTimerStep, Step, UserPromptStep, WaitForTimerStep, WaitStep,
+    WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep,
 )
 
 
@@ -82,7 +83,7 @@ def emit_python(protocol: Protocol, *, source_xscr: Optional[str] = None) -> str
     body_lines.append("")
     body_lines.append('    default_reagent = Reagent("liquid")')
     body_lines.append("    # Stand-in reagent — replace with real Reagent(...) instances")
-    body_lines.append("    # to model identity (e.g. beads with pinned_when_magnetized=True).")
+    body_lines.append('    # to model identity (e.g. beads with role="bead_carrier").')
     classes_used.update({"Worktable", "Reagent"})
 
     # Emit protocol variables. set_sim_value is also seeded with the default
@@ -188,6 +189,26 @@ def _emit_steps(
     i = 0
     while i < len(steps_list):
         step = steps_list[i]
+
+        if (
+            isinstance(step, WorklistImportStep)
+            and i + 2 < len(steps_list)
+            and isinstance(steps_list[i + 1], LoadWorklistStep)
+            and isinstance(steps_list[i + 2], ExecuteWorklistStep)
+            and steps_list[i + 1].gwl_path == step.gwl_path
+        ):
+            out.append(indent + _emit_worklist(step, steps_list[i + 1], steps_list[i + 2], source_path=step.csv_path))
+            i += 3
+            continue
+
+        if (
+            isinstance(step, LoadWorklistStep)
+            and i + 1 < len(steps_list)
+            and isinstance(steps_list[i + 1], ExecuteWorklistStep)
+        ):
+            out.append(indent + _emit_worklist(None, step, steps_list[i + 1], source_path=step.gwl_path))
+            i += 2
+            continue
 
         # Collapse Cga(Get|Drop)Fingers + RgaTransferLabware triplet into
         # a single gripper.move(...) call.
@@ -455,6 +476,21 @@ def _emit_steps(
             i += 1
             continue
 
+        if isinstance(step, WorklistImportStep):
+            out.append(indent + _emit_convert_csv_to_gwl(step))
+            i += 1
+            continue
+
+        if isinstance(step, LoadWorklistStep):
+            out.append(indent + _emit_load_worklist(step))
+            i += 1
+            continue
+
+        if isinstance(step, ExecuteWorklistStep):
+            out.append(indent + _emit_execute_worklist(step))
+            i += 1
+            continue
+
         if isinstance(step, SetLocationStep):
             out.append(indent + (
                 f"wt.set_location({step.labware!r}, {step.location!r}, "
@@ -602,6 +638,82 @@ def _emit_execute_application(step: ExecuteApplicationStep) -> str:
     if step.variable:
         parts.append(f"variable={step.variable!r}")
     return f"wt.execute_application({', '.join(parts)})"
+
+
+def _emit_worklist(
+    import_step: WorklistImportStep | None,
+    load_step: LoadWorklistStep,
+    execute_step: ExecuteWorklistStep,
+    *,
+    source_path: str,
+) -> str:
+    parts = [repr(source_path)]
+    if import_step is not None:
+        parts.append(f"gwl_path={import_step.gwl_path!r}")
+        if import_step.start_line != 2:
+            parts.append(f"start_line={import_step.start_line!r}")
+        if import_step.separator != ",":
+            parts.append(f"separator={import_step.separator!r}")
+        columns = _columns_dict(import_step)
+        if columns != {"A": "SourceLabel", "B": "SourcePosition", "C": "DestLabel", "D": "DestPosition", "E": "Volume"}:
+            parts.append(f"columns={columns!r}")
+    parts.extend(_load_worklist_kwargs(load_step))
+    if execute_step.delete_gwl_scripts:
+        return "; ".join([
+            f"wt.worklist({', '.join(parts)}, execute=False)",
+            f"wt.execute_worklist(delete_gwl_scripts={execute_step.delete_gwl_scripts!r})",
+        ])
+    return f"wt.worklist({', '.join(parts)})"
+
+
+def _emit_convert_csv_to_gwl(step: WorklistImportStep) -> str:
+    parts = [repr(step.csv_path), repr(step.gwl_path)]
+    if step.start_line != 1:
+        parts.append(f"start_line={step.start_line!r}")
+    if not step.stop_with_last_line:
+        parts.append(f"stop_with_last_line={step.stop_with_last_line!r}")
+    if step.stop_with_line != 1:
+        parts.append(f"stop_with_line={step.stop_with_line!r}")
+    if step.separator != ",":
+        parts.append(f"separator={step.separator!r}")
+    parts.append(f"columns={_columns_dict(step)!r}")
+    return f"wt.convert_csv_to_gwl({', '.join(parts)})"
+
+
+def _emit_load_worklist(step: LoadWorklistStep) -> str:
+    parts = [repr(step.gwl_path), *_load_worklist_kwargs(step)]
+    return f"wt.load_worklist({', '.join(parts)})"
+
+
+def _emit_execute_worklist(step: ExecuteWorklistStep) -> str:
+    if step.delete_gwl_scripts:
+        return f"wt.execute_worklist(delete_gwl_scripts={step.delete_gwl_scripts!r})"
+    return "wt.execute_worklist()"
+
+
+def _load_worklist_kwargs(step: LoadWorklistStep) -> list[str]:
+    parts: list[str] = []
+    if step.liquid_class:
+        parts.append(f"liquid_class={step.liquid_class!r}")
+    if step.diti_type != "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 50ul SBS":
+        parts.append(f"diti_type={step.diti_type!r}")
+    if step.selected_tips != list(range(8)):
+        parts.append(f"selected_tips={step.selected_tips!r}")
+    if step.well_positions != "numeric":
+        parts.append(f"well_positions={step.well_positions!r}")
+    if step.handle_missing_labware != "SkipWithoutWarning":
+        parts.append(f"handle_missing_labware={step.handle_missing_labware!r}")
+    if step.skip_initial_wash:
+        parts.append(f"skip_initial_wash={step.skip_initial_wash!r}")
+    if step.waste_labware != "FCA Thru Deck Waste Chute_1":
+        parts.append(f"waste_labware={step.waste_labware!r}")
+    if not step.ignore_filename_until_run:
+        parts.append(f"ignore_filename_until_run={step.ignore_filename_until_run!r}")
+    return parts
+
+
+def _columns_dict(step: WorklistImportStep) -> dict[str, str]:
+    return {col.column_name: col.gwl_index for col in step.columns}
 
 
 def _emit_generic_step(step: GenericStep) -> str:

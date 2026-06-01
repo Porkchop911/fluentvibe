@@ -1,0 +1,239 @@
+"""Narrowed-scope experiment: a curated lab subset injected into model context.
+
+Forum advice (luis/Stefan): the FluentControl install is general-purpose, the
+lab is not. Enumerate the finite subset actually used and give the model a
+tutorial-style cheatsheet instead of relying on open-ended catalog search.
+
+This module is the loader/gate. ``skills`` is the **default generation mode**;
+set ``--lab-scope off`` / ``FLUENTVIBE_LAB_SCOPE=off`` to reproduce the exact
+pre-experiment (7fa6e88) baseline.
+
+Modes:
+- ``off``        — nothing loaded, baseline behavior (opt-in via off)
+- ``cheatsheet`` — inject ``lab_scope.md`` into model context (Lever A)
+- ``enforce``    — cheatsheet + restrict labware/liquid-class tool results to
+                    the curated whitelist (Lever A + B)
+- ``skills``     — like ``enforce`` (same tool restriction + whitelist), but
+                    the context is assembled from a relevant subset of granular
+                    skill files chosen by an LM pre-pass (see ``lab_skills``)
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .grounding import load_generation_config
+
+_VALID_MODES = ("off", "cheatsheet", "enforce", "skills")
+_ENV_VAR = "FLUENTVIBE_LAB_SCOPE"
+_CONFIG_DIR = Path(__file__).resolve().parent.parent / "_assets" / "config"
+
+
+_DEFAULT_MODE = "skills"
+
+
+def resolve_lab_scope_mode(cli_value: str | None = None) -> str:
+    """Resolve the active mode. Precedence: explicit CLI arg > env > ``skills``.
+
+    ``skills`` is the default generation mode. Any unrecognized value
+    normalizes to the default (rather than silently disabling the scope);
+    pass an explicit ``off`` to reproduce the pre-experiment baseline.
+    """
+    raw = cli_value if cli_value is not None else os.environ.get(_ENV_VAR)
+    if raw is None:
+        return _DEFAULT_MODE
+    value = str(raw).strip().lower()
+    return value if value in _VALID_MODES else _DEFAULT_MODE
+
+
+@dataclass(frozen=True)
+class LabScope:
+    """Resolved curated scope. ``mode == "off"`` ⇒ everything below is inert."""
+
+    mode: str = "off"
+    cheatsheet_text: str | None = None
+    labware: frozenset[str] = field(default_factory=frozenset)
+    liquid_classes: frozenset[str] = field(default_factory=frozenset)
+    # Populated only in ``skills`` mode (loaded from ``_assets/config/skills``).
+    skill_catalog: tuple = ()
+
+    @property
+    def is_active(self) -> bool:
+        """True when curated context should be injected."""
+        return self.mode in ("cheatsheet", "enforce", "skills")
+
+    @property
+    def enforces(self) -> bool:
+        """True when tool surface + labware/liquid-class results are restricted.
+
+        ``skills`` shares enforce's entire runtime posture (autogrounding, the
+        labware/liquid whitelist, the two-tool surface); it differs only in how
+        the context message is built (a selected subset vs the whole monolith).
+        """
+        return self.mode in ("enforce", "skills")
+
+    def allows_labware(self, name: str | None) -> bool:
+        """Whitelist check (no-op pass-through unless ``enforces``)."""
+        if not self.enforces:
+            return True
+        return name in self.labware if name is not None else False
+
+    def allows_liquid_class(self, name: str | None) -> bool:
+        if not self.enforces:
+            return True
+        return name in self.liquid_classes if name is not None else False
+
+    # Catalog *discovery* / fan-out tools. In ``enforce`` the curated
+    # whitelist IS the catalog, so these are removed from the model's tool
+    # surface entirely (the whitelist is treated as already-grounded — see
+    # AuthoringToolRegistry._confirmed_catalog_names). ``ground_in_parallel``
+    # is included so the orchestrator cannot spawn catalog-search subagents.
+    _SEARCH_TOOLS = frozenset(
+        {"search_labware", "get_labware", "ground_in_parallel"}
+    )
+
+    # In ``enforce`` the cheatsheet + reference doc carry every fact the
+    # grounding/planning tools used to fetch at runtime, so the model needs
+    # no tool but the two that judge the draft: simulate the Python and
+    # compile it to .xscr. Everything else is withheld (see
+    # ``allowed_tools``) and all pre-simulation gates are disabled.
+    _ENFORCE_ALLOWED_TOOLS = frozenset({"simulate_python_draft", "compile_and_simulate"})
+
+    def allowed_tools(self) -> frozenset[str] | None:
+        """Tool names the LLM may call. ``None`` ⇒ no allow-list (all permitted).
+
+        Only ``enforce`` constrains the surface; off/cheatsheet return ``None``
+        so their tool exposure is byte-identical to baseline.
+        """
+        return self._ENFORCE_ALLOWED_TOOLS if self.enforces else None
+
+    def denied_tools(self) -> frozenset[str]:
+        """Tool names to withhold from the LLM for this mode."""
+        return self._SEARCH_TOOLS if self.enforces else frozenset()
+
+    def as_context_message(self) -> str | None:
+        """The cheatsheet wrapped as a standalone system-context block.
+
+        Injected as a SEPARATE message after SYSTEM_PROMPT — never woven into
+        it (SYSTEM_PROMPT is guarded against domain vocabulary at
+        ``service.assert_no_domain_vocabulary_in_prompt``; this block is the
+        sanctioned place for lab/assay-specific terms).
+        """
+        if not self.is_active or not self.cheatsheet_text:
+            return None
+        return context_header(self.enforces) + self.cheatsheet_text
+
+
+# Header text prepended to the injected context block. Factored out of
+# ``as_context_message`` so ``lab_skills.assemble_context`` can reuse the
+# enforce header verbatim for ``skills`` mode (which shares enforce's posture).
+_ENFORCE_HEADER = (
+    "LAB SCOPE (authoritative — this IS the catalog for this run). "
+    "Grounding, planning, and approval tools are intentionally "
+    "unavailable: the ONLY tools you can call are "
+    "`simulate_python_draft` and `compile_and_simulate`. Everything "
+    "the removed tools used to look up (the head/object API, valid "
+    "deck positions, the workspace GUID, liquid classes, and the "
+    "authoring rules) is provided below and in the reference section "
+    "— do not ask for it and do not attempt catalog search.\n\n"
+    "WORKFLOW: write the COMPLETE protocol as a single "
+    "`build_worktable()` in one pass — all variables, labware, and "
+    "every functional group — then call `simulate_python_draft` with "
+    "the full source. Do NOT stage group-by-group and do NOT wait for "
+    "any approval; there are no object-draft or functional-group "
+    "gates. Fix any simulator error and re-call `simulate_python_draft`; "
+    "once it passes, call `compile_and_simulate` on the same source. "
+    "Use the exact `catalog=` names and `python_class` values listed "
+    "below directly. If the request needs labware not in this list, "
+    "say so explicitly and stop rather than substituting.\n\n"
+)
+
+_CHEATSHEET_HEADER = (
+    "LAB SCOPE (authoritative for this lab). Prefer the curated "
+    "deck, labware, liquid classes, and workflow shapes below over "
+    "open-ended catalog search. Still ground exact names through "
+    "tools, but pick from this set unless the request genuinely "
+    "needs something else.\n\n"
+)
+
+
+def context_header(enforces: bool) -> str:
+    """The header block for an injected lab-scope context message."""
+    return _ENFORCE_HEADER if enforces else _CHEATSHEET_HEADER
+
+
+_OFF = LabScope()
+
+
+def load_lab_scope(cli_value: str | None = None) -> LabScope:
+    """Build the active :class:`LabScope` for this run.
+
+    Returns the inert singleton when mode is ``off`` or the ``lab_scope``
+    config block is absent/disabled, so callers can unconditionally consult
+    the result without branching on configuration.
+    """
+    mode = resolve_lab_scope_mode(cli_value)
+    if mode == "off":
+        return _OFF
+
+    block = (load_generation_config() or {}).get("lab_scope") or {}
+    if not block.get("enabled", False):
+        return _OFF
+
+    labware = frozenset(
+        str(x).strip() for x in (block.get("labware") or []) if str(x).strip()
+    )
+    liquid_classes = frozenset(
+        str(x).strip() for x in (block.get("liquid_classes") or []) if str(x).strip()
+    )
+
+    # ``skills`` mode assembles context at runtime from a selected subset of
+    # granular skill files instead of injecting the monolith. It reuses the
+    # same whitelist (shared with enforce). Inert if the skills block is absent
+    # or disabled, so a misconfigured run can never silently change behavior.
+    if mode == "skills":
+        skills_block = block.get("skills") or {}
+        if not skills_block.get("enabled", False):
+            return _OFF
+        from .lab_skills import discover_skills  # lazy: avoids import cycle
+
+        skills_dir = _CONFIG_DIR / (skills_block.get("dir") or "skills")
+        catalog = discover_skills(skills_dir)
+        if not catalog:
+            return _OFF
+        return LabScope(
+            mode=mode,
+            cheatsheet_text=None,
+            labware=labware,
+            liquid_classes=liquid_classes,
+            skill_catalog=catalog,
+        )
+
+    cheatsheet_name = block.get("cheatsheet") or "lab_scope.md"
+    cheatsheet_path = _CONFIG_DIR / cheatsheet_name
+    try:
+        text: str | None = cheatsheet_path.read_text(encoding="utf-8")
+    except OSError:
+        text = None
+
+    # In enforce mode the grounding/planning tools are removed, so the facts
+    # they used to fetch live in a reference doc that is appended to the
+    # cheatsheet. Only appended for enforce so cheatsheet mode stays
+    # byte-identical to baseline.
+    if mode == "enforce" and text is not None:
+        reference_name = block.get("reference") or "lab_scope_reference.md"
+        try:
+            reference_text = (_CONFIG_DIR / reference_name).read_text(encoding="utf-8")
+        except OSError:
+            reference_text = None
+        if reference_text:
+            text = f"{text}\n\n---\n\n{reference_text}"
+
+    return LabScope(
+        mode=mode,
+        cheatsheet_text=text,
+        labware=labware,
+        liquid_classes=liquid_classes,
+    )

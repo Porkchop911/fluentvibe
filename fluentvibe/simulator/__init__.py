@@ -5,6 +5,8 @@ from .invariants import (
     MissingTipsError, InsufficientVolumeError, OverdrawError,
     OccupiedSlotError, CannotAspirateError, MissingAdapterError,
     MissingSimValueError, InvalidSlotError,
+    TroughPlacementError, MissingFCATipBoxError,
+    LihaTipMismatchError, LiquidClassSectionError,
 )
 from .snapshots import Snapshot
 from .report import EffectKind, SimulationFailure, SimulationReport, StepCoverage
@@ -16,4 +18,6 @@ __all__ = [
     "MissingTipsError", "InsufficientVolumeError", "OverdrawError",
     "OccupiedSlotError", "CannotAspirateError", "MissingAdapterError",
     "MissingSimValueError", "InvalidSlotError",
+    "TroughPlacementError", "MissingFCATipBoxError",
+    "LihaTipMismatchError", "LiquidClassSectionError",
 ]

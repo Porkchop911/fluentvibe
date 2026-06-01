@@ -26,9 +26,9 @@ fluentvibe\
 │   │   └── deckitems.py    ← WashStation, WasteChute, Hotel, FixedDeck (39 LOC)
 │   ├── heads\              ← Pipetting heads
 │   │   └── mca96.py        ← MCA96Head + Tip (105 LOC)
-│   ├── ir\                 ← Pydantic step models
+│   ├── ir\                 ← Vendored Pydantic step models
 │   │   └── schema.py       ← (611 LOC)
-│   ├── compiler\           ← XML renderer
+│   ├── compiler\           ← Vendored XML renderer
 │   │   └── renderer.py     ← (1787 LOC)
 │   ├── decompiler\         ← Phase B: .xscr → .py
 │   │   ├── xscr_parser.py  ← XML → Pydantic Protocol IR (~330 LOC)
@@ -39,10 +39,10 @@ fluentvibe\
 │   │   ├── inference.py    ← Category rules (157 LOC)
 │   │   ├── xcmp.py         ← .xcmp / .xwsp parser (597 LOC)
 │   │   ├── xlqc.py         ← .xlqc liquid-class loader (Phase C.2, ~60 LOC)
-│   │   ├── database.py     ← Legacy recipe database and lookup helpers
+│   │   ├── database.py     ← Vendored fluentdsl tecan.db (legacy, unused by v1.1)
 │   │   ├── fc_install.py   ← Bridge to fluentcontrol_core (78 LOC)
 │   │   └── install_index.db   ← Built artifact (gitignored)
-│   ├── _assets\            ← Templates / reference / config
+│   ├── _assets\            ← Vendored: templates / reference / config
 │   └── simulator\          ← The IR walker
 │       ├── walk.py         ← Simulator class (346 LOC)
 │       ├── snapshots.py    ← Snapshot dataclass (53 LOC)
@@ -98,7 +98,8 @@ fluentvibe\
 ## Running tests
 
 ```
-python -m pytest tests/ -v
+cd D:\python\fluentvibe
+PYTHONPATH=. python -m pytest tests/ -v
 ```
 
 Expected output (truncated):
@@ -115,9 +116,9 @@ tests\test_worktable_from_workspace.py ....                     [100%]
 ============================== 61 passed ==============================
 ```
 
-The parity test (`test_simple_transfer_parity_xml`) requires access to the
-earlier fluentdsl implementation; otherwise it skips. The catalog tests skip
-when the install isn't reachable.
+The parity test (`test_simple_transfer_parity_xml`) requires the
+`fluentdsl` repo to be available at `D:\python\fluentdsl`; otherwise it
+skips. The catalog tests skip when the install isn't reachable.
 
 ## Test inventory
 
@@ -147,8 +148,9 @@ when the install isn't reachable.
 
 ## Adding a new IR step type
 
-The IR descends from the earlier project-owned fluentdsl implementation. If
-you need a new step type, add it locally and update every consumer:
+The IR is vendored from fluentdsl; if you need a new step type, the
+canonical answer is to upstream it into fluentdsl first. If you must add
+locally:
 
 1. Add the step class to `fluentvibe/ir/schema.py` (Pydantic model with
    `step_type: Literal[StepType.X]`).
@@ -207,7 +209,7 @@ know what's already been thought through.
 - **Liquid-class catalog** — *shipped (Phase C.2).* Walks
   `SystemSpecific/LiquidClasses/*.xlqc` and populates a `liquid_classes`
   table. Renderer resolves the liquid-class GUID via SQL by name. The
-  legacy `_assets/reference/liquid_classes.yaml` (which the renderer
+  vendored `_assets/reference/liquid_classes.yaml` (which the renderer
   never actually loaded) was deleted.
 - **Multiple FluentControl installs on one machine** isn't handled —
   the index only stores one install_path row. v1.2: keyed index (one
@@ -241,11 +243,11 @@ know what's already been thought through.
 
 ### Tests / CI
 
-- The parity test depends on an out-of-tree copy of the earlier fluentdsl
-  implementation. CI should either install that dependency explicitly or pin
-  the expected XML as a fixture with the GUID-normalized form.
-- `.gitignore` should keep machine-local catalog indexes, generated `.xscr`
-  files, build output, agent state, and scratch directories out of Git.
+- The parity test depends on an out-of-tree path (`D:\python\fluentdsl`).
+  CI would need to either install fluentdsl as a sibling repo or pin the
+  expected XML as a fixture (with the GUID-normalized form).
+- No `.gitignore` in the repo today. `fluentvibe/catalog/install_index.db`,
+  `build/`, `simple_transfer.xscr`, and `__pycache__/` should be ignored.
 
 ## Quick recipes
 

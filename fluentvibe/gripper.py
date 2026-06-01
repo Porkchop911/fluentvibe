@@ -44,10 +44,10 @@ class Gripper:
             dest_loc, dest_pos = to  # type: ignore[misc]
 
         labware_name = labware.label if isinstance(labware, Labware) else labware
-        self._wt._emit(CgaGetFingersStep(labware_name=labware_name))
+        self._wt._emit(CgaGetFingersStep())
         self._wt._emit(RgaTransferLabwareStep(
             labware_name=labware_name,
             destination_location=dest_loc,
             destination_site=dest_pos,
         ))
-        self._wt._emit(CgaDropFingersStep(labware_name=labware_name))
+        self._wt._emit(CgaDropFingersStep())

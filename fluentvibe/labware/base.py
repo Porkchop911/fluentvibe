@@ -61,14 +61,43 @@ class Layer:
 
 
 @dataclass
+class BeadPhase:
+    """Magnetic-bead solid phase of a well.
+
+    Beads are an *attribute*, not a liquid layer — they are non-volumetric
+    (never counted in `Well.volume_ul`) and a magnet never withholds liquid
+    from a tip. The magnet only immobilises the beads (and any analyte bound
+    to them). `bound` holds analyte that has associated with the beads;
+    binding/release is driven by mix steps (see the simulator).
+    """
+
+    present: bool = True
+    suspended: bool = True
+    """True when the beads are dispersed in the liquid (labware not
+    magnetized); False when pelleted against the magnet wall."""
+    bound: list[Layer] = field(default_factory=list)
+    """Analyte associated with the beads (travels with the beads, not the
+    free liquid)."""
+
+    @property
+    def bound_volume_ul(self) -> float:
+        return sum(layer.volume_ul for layer in self.bound)
+
+
+@dataclass
 class Well:
     address: str
     max_volume_ul: float
     layers: list[Layer] = field(default_factory=list)
     position_mm: Optional[tuple[float, float, float]] = None
+    bead_phase: Optional[BeadPhase] = None
+    """Solid-phase bead attribute, or None when the well has never received a
+    bead-carrier reagent. Non-volumetric — excluded from `volume_ul`."""
 
     @property
     def volume_ul(self) -> float:
+        """Free (aspirable) liquid only. Beads and bead-bound analyte are a
+        separate solid-phase attribute and never count here."""
         return sum(layer.volume_ul for layer in self.layers)
 
     @property

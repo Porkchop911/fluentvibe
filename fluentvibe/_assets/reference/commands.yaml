@@ -2755,7 +2755,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072967'
     occurrences: 1
 - id: SetLocation
@@ -2771,7 +2771,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072977'
     occurrences: 1
 - id: SubRoutine
@@ -2796,7 +2796,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072979'
     occurrences: 1
 - id: VariableMapping
@@ -2810,7 +2810,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072981'
     occurrences: 1
 - id: Delay
@@ -2825,7 +2825,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072992'
     occurrences: 1
 - id: LihaReagentDistributionSmartCommand
@@ -2962,7 +2962,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072997'
     occurrences: 1
 - id: LabwareSectionInfo
@@ -2987,7 +2987,7 @@ commands:
   _template_source: programmatic
   parameters: []
   sources:
-  - file: <source-script>.xscr
+  - file: ec51eed2-b428-48fd-bf81-581743e7f93b.xscr
     first_seen: '2026-01-28T22:58:29.072999'
     occurrences: 1
 metadata:
@@ -3009,6 +3009,7 @@ observed_values:
   - MCA384, 50ul
   - MCA96, 200ul, Box
   - MCA96, 50ul, Box
+  - Ribbon_LV_Alpaqua_A000350
   - 96_ABgene_SuperPlate_Thermo_AB2800
   - LV_Alpaqua_A000350
   - 384_Echo_PP
@@ -3052,6 +3053,9 @@ observed_values:
   - Water Free Multi
   - Leakage Test EVA
   - Oligo_Transfer_to_IDOT_plate
+  - $Ribbon_Beaver_Beads_Pellet_Resuspension
+  - $Ribbon_MagMax-Binding_Buffer_removal_reuse
+  - $Ribbon_MagMax-Binding_Buffer_removal
   locations:
   - Alpaqua_Magnet
   - MCA384_Diti_ActiveNest

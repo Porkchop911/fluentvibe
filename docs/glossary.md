@@ -235,10 +235,9 @@ has a fluentvibe-specific meaning, that's noted explicitly.
    worktable allows. `place()` raises `InvalidSlotError` for any slot
    outside this set.
 
-**Project-owned fluentdsl lineage**
-   Code that descends from the earlier project-owned fluentdsl
-   implementation and is now maintained inside fluentvibe rather than imported
-   as a dependency. This applies to the renderer, IR schema, legacy recipe
-   database helpers, FluentControl install bridge, and `_assets/` reference
-   material. Tecan/FluentControl-facing assets still need separate provenance
-   review before public release.
+**Vendored**
+   Code copied from another repo (`fluentdsl`) and owned locally — not
+   re-imported as a dependency. Vendored modules in fluentvibe:
+   `compiler/renderer.py`, `ir/schema.py`, `catalog/database.py`,
+   `catalog/fc_install.py`, all of `_assets/`. Two import paths were
+   rewritten; otherwise the vendored code is byte-identical.

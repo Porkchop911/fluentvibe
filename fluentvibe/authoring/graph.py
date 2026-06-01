@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import re
-from dataclasses import dataclass
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Callable, TypedDict
 
@@ -34,8 +37,38 @@ from langgraph.types import Command
 from .lc_tools import make_lc_tools
 from .models import ApprovalRequest, AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
 from .repair_lock import RepairLockState
-from .tools import AuthoringToolRegistry
+from .tools import PARALLEL_SAFE_TOOLS, AuthoringToolRegistry
+from .trace import ModelTraceRecorder
 from .validator import AuthoringValidator
+
+
+@dataclass(frozen=True)
+class AuthoringConcurrencyConfig:
+    """Toggles for the parallelization phases.
+
+    Each phase can be disabled to bisect a regression. Defaults are tuned
+    for live use; tests that care about ordering pass the all-off config.
+    """
+    parallel_tool_dispatch: bool = True
+    speculative_compile: bool = True
+    prefetch_deterministic: bool = True
+    orchestrator_grounding: bool = True
+    prefetch_subagent: bool = field(
+        default_factory=lambda: os.environ.get("FLUENTVIBE_PREFETCH_LM") == "1"
+    )
+    worker_pool_size: int = field(
+        default_factory=lambda: min(8, (os.cpu_count() or 4))
+    )
+
+    @classmethod
+    def all_off(cls) -> "AuthoringConcurrencyConfig":
+        return cls(
+            parallel_tool_dispatch=False,
+            speculative_compile=False,
+            prefetch_deterministic=False,
+            orchestrator_grounding=False,
+            prefetch_subagent=False,
+        )
 
 
 # ── Graph state ──────────────────────────────────────────────────────
@@ -69,6 +102,8 @@ def build_authoring_graph(
     repair_lock: RepairLockState | None = None,
     system_prompt: str | None = None,
     helpers: Any | None = None,
+    concurrency: AuthoringConcurrencyConfig | None = None,
+    trace_recorder: ModelTraceRecorder | None = None,
 ) -> Any:
     """Compile a LangGraph state machine for one authoring run/session.
 
@@ -80,7 +115,19 @@ def build_authoring_graph(
         from .service import PromptAuthoringService
         helpers = PromptAuthoringService.__new__(PromptAuthoringService)  # no LM init
     client = adapt_client(client)
-    lc_tools = make_lc_tools(registry)
+    _scope = getattr(registry, "lab_scope", None)
+    _denied = _scope.denied_tools() if _scope is not None else None
+    # Enforce mode: the LM may call only simulate_python_draft and
+    # compile_and_simulate (everything the other tools fetched now lives in
+    # the cheatsheet/reference doc). Translate the allow-list into a deny-set
+    # against the full tool universe.
+    if _scope is not None and _scope.allowed_tools() is not None:
+        from .tools import tool_definitions
+        allowed = _scope.allowed_tools() or frozenset()
+        _denied = frozenset(
+            d["function"]["name"] for d in tool_definitions()
+        ) - allowed
+    lc_tools = make_lc_tools(registry, denied=_denied or None)
     try:
         client_with_tools = client.bind_tools(lc_tools)
     except NotImplementedError:
@@ -101,6 +148,8 @@ def build_authoring_graph(
         max_iterations=max_iterations,
         max_tool_calls=max_tool_calls,
         helpers=helpers,
+        concurrency=concurrency or AuthoringConcurrencyConfig(),
+        trace_recorder=trace_recorder,
     )
 
     builder = StateGraph(GraphState)
@@ -129,6 +178,8 @@ def run_graph(
     system_prompt: str,
     initial_messages: list[BaseMessage] | None = None,
     initial_state: GraphState | None = None,
+    concurrency: AuthoringConcurrencyConfig | None = None,
+    trace_recorder: ModelTraceRecorder | None = None,
 ) -> AuthoringResult:
     """Compile and run the graph; return the terminal AuthoringResult."""
     graph = build_authoring_graph(
@@ -136,18 +187,27 @@ def run_graph(
         client=client,
         output_dir=output_dir,
         retry_budget=retry_budget,
+        concurrency=concurrency,
+        trace_recorder=trace_recorder,
     )
     if initial_state is None:
-        registry.current_prompt = prompt
+        registry.set_authoring_context(
+            original_prompt=prompt,
+            latest_user_text=prompt,
+            user_history_text=prompt,
+        )
         messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
         if initial_messages:
             messages.extend(initial_messages)
         messages.append(HumanMessage(content=prompt))
 
-        from .service import _intent_axis_message, _missing_intent_axes
-        missing_axes = _missing_intent_axes(prompt)
-        if missing_axes and not registry.current_intent.is_specified():
-            messages.append(_to_lc_message(_intent_axis_message(missing_axes)))
+        # Enforce removes the intent gate too — the model drafts directly from
+        # the cheatsheet/reference and the user's prose, no declare_intent.
+        if not _gates_off(registry):
+            from .service import _intent_axis_message, _missing_intent_axes
+            missing_axes = _missing_intent_axes(prompt)
+            if missing_axes and not registry.current_intent.is_specified():
+                messages.append(_to_lc_message(_intent_axis_message(missing_axes)))
 
         initial_state = GraphState(
             messages=messages,
@@ -187,6 +247,8 @@ class _Nodes:
     max_iterations: int
     max_tool_calls: int
     helpers: Any
+    concurrency: AuthoringConcurrencyConfig = field(default_factory=AuthoringConcurrencyConfig)
+    trace_recorder: ModelTraceRecorder | None = None
 
     # Intent-axis nudge — runs once at the start of each `invoke`. Kept as a
     # node (not in run_graph) so multi-turn callers re-evaluate per send().
@@ -207,9 +269,31 @@ class _Nodes:
                     message="Model authoring loop exhausted its iteration budget.",
                 ),
             }
+        import time as _time
+        request_id = ""
+        if self.trace_recorder is not None:
+            request_id = self.trace_recorder.begin_request(
+                model=_client_attr(self.client_with_tools, "model"),
+                endpoint=_client_attr(self.client_with_tools, "endpoint")
+                or _client_attr(self.client_with_tools, "base_url"),
+                iteration=iterations,
+            )
+            self.trace_recorder.record(
+                "request_payload",
+                request_id=request_id,
+                messages=[_message_to_trace_dict(m) for m in state["messages"]],
+            )
+        t0 = _time.monotonic()
         try:
             response = self.client_with_tools.invoke(state["messages"])
         except Exception as exc:
+            if self.trace_recorder is not None:
+                self.trace_recorder.record(
+                    "request_error",
+                    request_id=request_id,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
             return {
                 "iterations": iterations,
                 "result": _build_failure(
@@ -219,6 +303,34 @@ class _Nodes:
                     message=str(exc),
                 ),
             }
+        dt = _time.monotonic() - t0
+        n_tool_calls = len(getattr(response, "tool_calls", None) or [])
+        self.registry.record_model_turn(
+            iteration=iterations,
+            elapsed_ms=dt * 1000.0,
+            tool_calls=list(getattr(response, "tool_calls", None) or []),
+        )
+        if self.trace_recorder is not None:
+            self.trace_recorder.record(
+                "model_turn",
+                request_id=request_id,
+                iteration=iterations,
+                duration_ms=dt * 1000.0,
+                model=_client_attr(self.client_with_tools, "model"),
+                endpoint=_client_attr(self.client_with_tools, "endpoint")
+                or _client_attr(self.client_with_tools, "base_url"),
+                assistant=_message_to_trace_dict(response),
+                tool_calls=list(getattr(response, "tool_calls", None) or []),
+                response_metadata=getattr(response, "response_metadata", None) or {},
+            )
+        names = ", ".join((tc.get("name") or "?") for tc in (getattr(response, "tool_calls", None) or []))
+        import sys as _sys
+        print(
+            f"[lm] turn {iterations}: {dt:.1f}s, {n_tool_calls} tool_call(s)"
+            + (f" [{names}]" if names else ""),
+            file=_sys.stderr,
+            flush=True,
+        )
         return {"iterations": iterations, "messages": [response]}
 
     def route_after_model(self, state: GraphState) -> str:
@@ -233,6 +345,15 @@ class _Nodes:
     # ── dispatch_tools ────────────────────────────────────────────
 
     def dispatch_tools(self, state: GraphState) -> Command:
+        return _dispatch_tools_with_concurrency(self, state)
+
+    def _dispatch_tools_serial_body(
+        self,
+        state: GraphState,
+        *,
+        parallel_futures: "dict[int, Future[dict[str, Any]]]",
+        speculative_compiles: "dict[str, Future[dict[str, Any]]]",
+    ) -> Command:
         last = state["messages"][-1]
         tool_calls = getattr(last, "tool_calls", None) or []
         appended: list[BaseMessage] = []
@@ -242,7 +363,7 @@ class _Nodes:
         current_group_index = state.get("current_group_index", 0)
         last_accepted_source_hash = state.get("last_accepted_source_hash")
 
-        for call in tool_calls:
+        for _enum_idx, call in enumerate(tool_calls):
             tool_call_count += 1
             if tool_call_count > self.max_tool_calls:
                 return Command(
@@ -312,7 +433,14 @@ class _Nodes:
                 appended.append(HumanMessage(content=stage_block["message"]))
                 continue
 
-            result = self.registry.dispatch(name, arguments)
+            result = _resolve_dispatch(
+                registry=self.registry,
+                name=name,
+                arguments=arguments,
+                index=_enum_idx,
+                parallel_futures=parallel_futures,
+                speculative_compiles=speculative_compiles,
+            )
             if result.get("status") == "needs_approval":
                 return Command(
                     update={
@@ -336,6 +464,13 @@ class _Nodes:
                     },
                     goto=END,
                 )
+            if name == "declare_intent" and result.get("ok") is True:
+                grounding = _run_orchestrator_grounding_if_ready(self)
+                if grounding is not None:
+                    appended.append(HumanMessage(content=(
+                        "Automatic parallel grounding completed after intent declaration. "
+                        f"Result: {json.dumps(grounding, default=str)}"
+                    )))
             if name == "declare_protocol_workflow" and result.get("ok") is True:
                 appended.append(ToolMessage(
                     content=json.dumps(result, default=str),
@@ -355,6 +490,8 @@ class _Nodes:
                 if repair_guidance is not None:
                     result = dict(result)
                     result["retrieved_recipes"] = repair_guidance["recipes"]
+            if name in {"present_object_draft", "present_functional_group_plan"}:
+                _supersede_prior_drafts(name, list(state["messages"]) + appended)
             appended.append(ToolMessage(
                 content=json.dumps(result, default=str),
                 tool_call_id=tool_call_id,
@@ -444,16 +581,21 @@ class _Nodes:
                     )
 
             if name == "simulate_python_draft" and result.get("ok") is True:
-                source = self.registry.calls[-1]["arguments"].get("source")
+                # Prefer an autogrounded source (e.g. pipetting volume literals
+                # rewritten to their approved variable) over the model's raw
+                # draft, so compile_and_simulate runs the corrected version.
+                source = result.get("source") or self.registry.calls[-1]["arguments"].get("source")
                 if isinstance(source, str):
                     best_code = source
                     last_accepted_source_hash = _source_hash(source)
-                    current_group_index = _advance_workflow_index(self.registry, current_group_index)
+                    current_group_index = _advance_workflow_index(self.registry, current_group_index, source=source)
                     if not _workflow_complete(self.registry, current_group_index):
                         appended.append(_workflow_next_group_message(self.registry, current_group_index))
                         continue
-                    compile_result = self.registry.dispatch(
-                        "compile_and_simulate", {"source": source}
+                    compile_result = _consume_speculative_compile(
+                        registry=self.registry,
+                        source=source,
+                        speculative_compiles=speculative_compiles,
                     )
                     last_validation = self.helpers._report_from_tool_result(compile_result)
                     appended.append(HumanMessage(content=(
@@ -486,13 +628,14 @@ class _Nodes:
 
         # End of tool-call loop — apply draft-pressure nudge if applicable
         # and fall back to model_call.
-        from .service import _draft_pressure_message
-        pressure = _draft_pressure_message(
-            tuple(self.registry.calls),
-            iteration=state.get("iterations", 0),
-        )
-        if pressure is not None:
-            appended.append(_to_lc_message(pressure))
+        if not _gates_off(self.registry):
+            from .service import _draft_pressure_message
+            pressure = _draft_pressure_message(
+                tuple(self.registry.calls),
+                iteration=state.get("iterations", 0),
+            )
+            if pressure is not None:
+                appended.append(_to_lc_message(pressure))
         return Command(
             update={
                 "tool_call_count": tool_call_count,
@@ -564,7 +707,7 @@ class _Nodes:
                 goto="model_call",
             )
 
-        if self.registry.workflow_plan is None:
+        if not _gates_off(self.registry) and self.registry.workflow_plan is None:
             return Command(
                 update={
                     "best_code": code,
@@ -618,11 +761,268 @@ class _Nodes:
         )
 
 
+# ── Concurrency orchestration ───────────────────────────────────────
+
+def _dispatch_tools_with_concurrency(nodes: "_Nodes", state: GraphState) -> Command:
+    """Pre-launch parallel-safe lookups + speculative compiles, then run the
+    existing serial dispatch_tools body with futures threaded through.
+
+    The body relies on `parallel_futures` and `speculative_compiles` being
+    consulted via `_resolve_dispatch` and `_consume_speculative_compile`.
+    Pool ownership is local to this call: futures still in flight after the
+    body returns are abandoned (their results discarded). Catalog lookups
+    are short SQLite reads, so this leak is bounded and harmless.
+    """
+    last = state["messages"][-1]
+    tool_calls = getattr(last, "tool_calls", None) or []
+
+    cfg = nodes.concurrency
+    pool: ThreadPoolExecutor | None = None
+    parallel_futures: dict[int, Future[dict[str, Any]]] = {}
+    speculative_compiles: dict[str, Future[dict[str, Any]]] = {}
+
+    if (cfg.parallel_tool_dispatch or cfg.speculative_compile) and tool_calls:
+        try:
+            pool = ThreadPoolExecutor(
+                max_workers=max(2, cfg.worker_pool_size),
+                thread_name_prefix="authoring-parallel",
+            )
+        except RuntimeError:
+            pool = None
+
+    if pool is not None and cfg.parallel_tool_dispatch:
+        cache_hits: list[str] = []
+        for idx, call in enumerate(tool_calls):
+            name = _tool_call_name(call)
+            if name not in PARALLEL_SAFE_TOOLS:
+                continue
+            payload = nodes.registry._parse_arguments(_tool_call_args(call))
+            if nodes.registry.cache_lookup(name, payload) is not None:
+                cache_hits.append(name)
+                continue
+            parallel_futures[idx] = pool.submit(
+                nodes.registry._dispatch_pure, name, payload
+            )
+        if parallel_futures or cache_hits:
+            import sys as _sys
+            _msg_parts = []
+            if parallel_futures:
+                _names = [_tool_call_name(tool_calls[i]) for i in parallel_futures]
+                _msg_parts.append(f"{len(parallel_futures)} parallel: {_names}")
+            if cache_hits:
+                _msg_parts.append(f"{len(cache_hits)} cache-hit: {cache_hits}")
+            print(
+                f"[parallel] dispatch: {', '.join(_msg_parts)}",
+                file=_sys.stderr,
+                flush=True,
+            )
+
+    if pool is not None and cfg.speculative_compile:
+        for call in tool_calls:
+            if _tool_call_name(call) != "simulate_python_draft":
+                continue
+            payload = nodes.registry._parse_arguments(_tool_call_args(call))
+            source = payload.get("source")
+            if not isinstance(source, str):
+                continue
+            shash = _source_hash(source)
+            if shash in speculative_compiles:
+                continue
+            speculative_compiles[shash] = pool.submit(
+                nodes.registry._dispatch_pure,
+                "compile_and_simulate",
+                {"source": source},
+            )
+
+    try:
+        return nodes._dispatch_tools_serial_body(
+            state,
+            parallel_futures=parallel_futures,
+            speculative_compiles=speculative_compiles,
+        )
+    finally:
+        for fut in parallel_futures.values():
+            fut.cancel()
+        for fut in speculative_compiles.values():
+            fut.cancel()
+        if pool is not None:
+            pool.shutdown(wait=False)
+
+
+def _run_orchestrator_grounding_if_ready(nodes: "_Nodes") -> dict[str, Any] | None:
+    cfg = nodes.concurrency
+    if not cfg.orchestrator_grounding:
+        return None
+    registry = nodes.registry
+    # enforce mode: the curated whitelist is the only grounding source —
+    # never auto-fan catalog-search subagents.
+    _scope = getattr(registry, "lab_scope", None)
+    if _scope is not None and _scope.enforces:
+        return None
+    client = getattr(registry, "_subagent_client", None)
+    if client is None:
+        return None
+    intent = registry.current_intent
+    if not all(
+        value is not None
+        for value in (
+            intent.target_volume_ul,
+            intent.source_label,
+            intent.destination_label,
+            intent.destination_wells,
+            intent.liquid_class,
+        )
+    ):
+        return None
+    from .grounding_coordinator import GroundingCoordinator
+
+    return GroundingCoordinator(
+        registry=registry,
+        client=client,
+        pool_size=cfg.worker_pool_size,
+        timeout_s=getattr(registry, "_subagent_timeout_s", 240.0),
+    ).run(registry.authoring_context())
+
+
+_SUPERSEDED_STUB = json.dumps({"superseded": True})
+
+
+def _supersede_prior_drafts(name: str, messages: list[BaseMessage]) -> None:
+    """A re-presented draft/plan supersedes every prior echo of the same
+    kind. Those stale payloads carry no decision value once a newer draft
+    exists but are re-sent verbatim every turn — replace their body with a
+    tiny stub (the ToolMessage structure / `tool_call_id` is preserved so
+    the transcript stays well-formed). Only the newest payload is kept
+    verbatim. Mutates the message objects in place.
+    """
+    for msg in messages:
+        if (
+            isinstance(msg, ToolMessage)
+            and getattr(msg, "name", None) == name
+            and msg.content != _SUPERSEDED_STUB
+        ):
+            msg.content = _SUPERSEDED_STUB
+
+
+def _resolve_dispatch(
+    *,
+    registry: AuthoringToolRegistry,
+    name: str,
+    arguments: Any,
+    index: int,
+    parallel_futures: "dict[int, Future[dict[str, Any]]]",
+    speculative_compiles: "dict[str, Future[dict[str, Any]]]",
+) -> dict[str, Any]:
+    """Run a tool, preferring (in order): prefetch cache, parallel future,
+    speculative-compile future, fresh dispatch.
+
+    Always records the call on the registry's `calls` log so the rest of the
+    authoring code can introspect tool history as if `dispatch` had run.
+    """
+    payload = registry._parse_arguments(arguments)
+
+    if name in PARALLEL_SAFE_TOOLS:
+        t0 = time.monotonic()
+        cached = registry.cache_lookup(name, payload)
+        if cached is not None:
+            return registry._record_call(
+                name,
+                payload,
+                cached,
+                elapsed_ms=(time.monotonic() - t0) * 1000.0,
+                dispatch_source="cache",
+            )
+        future = parallel_futures.pop(index, None)
+        if future is not None:
+            try:
+                result = future.result()
+            except Exception as exc:
+                result = {"ok": False, "category": "tool_error", "message": str(exc)}
+            registry.cache_store(name, payload, result)
+            return registry._record_call(
+                name,
+                payload,
+                result,
+                elapsed_ms=(time.monotonic() - t0) * 1000.0,
+                dispatch_source="parallel",
+            )
+        # Cache miss + no pre-launch (concurrency disabled): run directly.
+        result = registry._dispatch_pure(name, payload)
+        registry.cache_store(name, payload, result)
+        return registry._record_call(
+            name,
+            payload,
+            result,
+            elapsed_ms=(time.monotonic() - t0) * 1000.0,
+            dispatch_source="live",
+        )
+
+    if name == "compile_and_simulate":
+        source = payload.get("source")
+        if isinstance(source, str):
+            shash = _source_hash(source)
+            future = speculative_compiles.pop(shash, None)
+            if future is not None:
+                t0 = time.monotonic()
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = {"ok": False, "category": "tool_error", "message": str(exc)}
+                return registry._record_call(
+                    name,
+                    payload,
+                    result,
+                    elapsed_ms=(time.monotonic() - t0) * 1000.0,
+                    dispatch_source="speculative",
+                )
+
+    # Fallback: serial dispatch (preserves all existing behavior).
+    return registry.dispatch(name, arguments)
+
+
+def _consume_speculative_compile(
+    *,
+    registry: AuthoringToolRegistry,
+    source: str,
+    speculative_compiles: "dict[str, Future[dict[str, Any]]]",
+) -> dict[str, Any]:
+    """Used by the inline simulate→compile path inside dispatch_tools.
+
+    Same semantics as `registry.dispatch("compile_and_simulate", {"source": source})`,
+    but consumes a speculative future when one exists for this source.
+    """
+    shash = _source_hash(source)
+    future = speculative_compiles.pop(shash, None)
+    payload = {"source": source}
+    if future is not None:
+        t0 = time.monotonic()
+        try:
+            result = future.result()
+        except Exception as exc:
+            result = {"ok": False, "category": "tool_error", "message": str(exc)}
+        return registry._record_call(
+            "compile_and_simulate",
+            payload,
+            result,
+            elapsed_ms=(time.monotonic() - t0) * 1000.0,
+            dispatch_source="speculative",
+        )
+    return registry.dispatch("compile_and_simulate", payload)
+
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _missing_grounding(registry: AuthoringToolRegistry) -> list[str]:
+    # Enforce: all grounding lives in the cheatsheet/reference doc — no tool
+    # call is mandatory before accepting a draft.
+    if _gates_off(registry):
+        return []
     from .service import missing_authoring_grounding
-    return missing_authoring_grounding(tuple(registry.calls))
+    _scope = getattr(registry, "lab_scope", None)
+    return missing_authoring_grounding(
+        tuple(registry.calls),
+        lab_scope_enforces=bool(_scope is not None and _scope.enforces),
+    )
 
 
 def _grounding_nudge_message(missing: list[str]) -> HumanMessage:
@@ -664,6 +1064,15 @@ def _source_hash(source: str) -> str:
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
+def _gates_off(registry: AuthoringToolRegistry) -> bool:
+    """Enforce mode removes every pre-simulation gate (grounding, intent,
+    object-draft / functional-group approval, staged-group workflow,
+    draft-pressure). The model writes the complete protocol in one pass and
+    is judged solely by simulate_python_draft / compile_and_simulate."""
+    scope = getattr(registry, "lab_scope", None)
+    return bool(scope is not None and scope.enforces)
+
+
 def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
     plan = getattr(registry, "workflow_plan", None)
     if plan is None:
@@ -672,14 +1081,25 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
 
 
 def _workflow_complete(registry: AuthoringToolRegistry, current_group_index: int) -> bool:
+    # Enforce: the single full-source draft is always "complete" — there is no
+    # staged group plan, so a passing simulate goes straight to compile.
+    if _gates_off(registry):
+        return True
     groups = _workflow_groups(registry)
     return bool(groups) and current_group_index >= len(groups)
 
 
-def _advance_workflow_index(registry: AuthoringToolRegistry, current_group_index: int) -> int:
+def _advance_workflow_index(
+    registry: AuthoringToolRegistry,
+    current_group_index: int,
+    source: str | None = None,
+) -> int:
     groups = _workflow_groups(registry)
     if not groups:
         return current_group_index
+    if source:
+        group_call_count = len(re.findall(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source))
+        return min(len(groups), max(current_group_index, 1 + group_call_count))
     if current_group_index < 2:
         return min(2, len(groups))
     return min(current_group_index + 1, len(groups))
@@ -723,6 +1143,8 @@ def _workflow_stage_block(
     arguments: dict[str, Any],
     current_group_index: int,
 ) -> dict[str, Any] | None:
+    if _gates_off(registry):
+        return None
     if tool_name not in {"simulate_python_draft", "compile_and_simulate"}:
         return None
     groups = _workflow_groups(registry)
@@ -773,6 +1195,8 @@ def _approval_stage_block(
     registry: AuthoringToolRegistry,
     tool_name: str,
 ) -> dict[str, Any] | None:
+    if _gates_off(registry):
+        return None
     if tool_name == "ask_user":
         return None
     if tool_name in {
@@ -781,10 +1205,12 @@ def _approval_stage_block(
         "search_labware",
         "get_labware",
         "lookup_liquid_class",
+        "lookup_compatibility",
         "lookup_rules",
         "lookup_api",
         "plan_protocol_resources",
         "suggest_deck_layout",
+        "ground_in_parallel",
         "declare_intent",
         "present_object_draft",
     }:
@@ -831,11 +1257,14 @@ def _check_workflow_source_stage(source: str, groups: list[str], current_group_i
     if first_place < 0 or first_place < first_group_start:
         return "Labware placement must happen inside the Labware Placement group."
 
-    expected = groups[: max(2, current_group_index + 1)]
-    present = set(re.findall(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source))
-    missing = [name for name in expected[1:] if name not in present]
-    if missing:
-        return "Current staged draft is missing required group(s): " + ", ".join(missing)
+    expected_count = max(0, max(2, current_group_index + 1) - 1)
+    group_calls = re.findall(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source)
+    if len(group_calls) < expected_count:
+        return (
+            f"Current staged draft has {len(group_calls)} wt.group(...) call(s); "
+            f"expected at least {expected_count} after the Variables phase. "
+            "Extend the draft with the next functional group and call simulate_python_draft."
+        )
     return None
 
 
@@ -969,6 +1398,55 @@ def _source_snippet(source: Any, method: str | None) -> str | None:
     return None
 
 
+# ── Model-trace helpers ──────────────────────────────────────────────
+
+def _client_attr(client: Any, name: str) -> Any:
+    value = getattr(client, name, None)
+    if value is not None:
+        return str(value)
+    inner = getattr(client, "_legacy", None)
+    if inner is not None:
+        value = getattr(inner, name, None)
+        if value is not None:
+            return str(value)
+    return None
+
+
+def _message_to_trace_dict(message: BaseMessage) -> dict[str, Any]:
+    if isinstance(message, SystemMessage):
+        role = "system"
+    elif isinstance(message, HumanMessage):
+        role = "user"
+    elif isinstance(message, ToolMessage):
+        role = "tool"
+    elif isinstance(message, AIMessage):
+        role = "assistant"
+    else:
+        role = str(getattr(message, "type", type(message).__name__))
+    out: dict[str, Any] = {
+        "role": role,
+        "content": getattr(message, "content", None),
+    }
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if tool_calls:
+        out["tool_calls"] = list(tool_calls)
+    if isinstance(message, ToolMessage):
+        out["tool_call_id"] = message.tool_call_id
+        out["name"] = message.name
+    response_metadata = getattr(message, "response_metadata", None) or {}
+    if response_metadata:
+        out["response_metadata"] = response_metadata
+    additional_kwargs = getattr(message, "additional_kwargs", None) or {}
+    reasoning = {
+        key: value
+        for key, value in additional_kwargs.items()
+        if "reasoning" in key.lower() and value not in (None, "")
+    }
+    if reasoning:
+        out["reasoning_fields"] = reasoning
+    return out
+
+
 # ── Legacy-client adapter ────────────────────────────────────────────
 
 class LegacyClientAdapter:
@@ -978,20 +1456,38 @@ class LegacyClientAdapter:
     Existing tests (`tests/test_authoring_session.py::FakeClient`) pre-date the
     LangChain migration and supply raw OpenAI-style dict responses. Wrapping
     those clients here keeps the test contract unchanged.
+
+    `bind_tools(tools)` returns a sibling adapter whose `invoke` filters the
+    legacy `tool_definitions()` payload down to the bound names — this lets
+    category-agent subagents send a restricted toolset to LM Studio.
     """
 
-    def __init__(self, legacy_client: Any) -> None:
+    def __init__(self, legacy_client: Any, *, bound_names: "frozenset[str] | None" = None) -> None:
         self._legacy = legacy_client
+        self._bound_names = bound_names
 
     def bind_tools(self, tools: Any) -> "LegacyClientAdapter":
-        # The legacy client always sends `tool_definitions()` directly; the
-        # StructuredTool list is irrelevant to it.
-        return self
+        names: set[str] = set()
+        for t in tools or ():
+            n = getattr(t, "name", None)
+            if isinstance(n, str):
+                names.add(n)
+        if not names:
+            # Empty/unknown shape — preserve the original "send everything"
+            # contract for the graph's own invocations.
+            return LegacyClientAdapter(self._legacy)
+        return LegacyClientAdapter(self._legacy, bound_names=frozenset(names))
 
     def invoke(self, messages: list[BaseMessage]) -> AIMessage:
         from .tools import tool_definitions
+        defs = tool_definitions()
+        if self._bound_names is not None:
+            defs = [
+                d for d in defs
+                if d.get("function", {}).get("name") in self._bound_names
+            ]
         raw_messages = [_lc_to_legacy_dict(m) for m in messages]
-        response = self._legacy.complete(messages=raw_messages, tools=tool_definitions())
+        response = self._legacy.complete(messages=raw_messages, tools=defs)
         return _legacy_dict_to_aimessage(response)
 
 
