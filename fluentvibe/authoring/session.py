@@ -13,7 +13,13 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
-from .graph import GraphState, _to_lc_message, adapt_client, build_authoring_graph
+from .graph import (
+    AuthoringConcurrencyConfig,
+    GraphState,
+    _to_lc_message,
+    adapt_client,
+    build_authoring_graph,
+)
 from .lm_client import (
     DEFAULT_LM_STUDIO_ENDPOINT,
     DEFAULT_LM_STUDIO_MODEL,
@@ -27,7 +33,9 @@ from .service import (
     _intent_axis_message,
     _missing_intent_axes,
 )
+from .lab_scope import load_lab_scope
 from .tools import AuthoringToolRegistry
+from .trace import ModelTraceConfig, ModelTraceRecorder
 from .validator import AuthoringValidator
 
 
@@ -44,26 +52,67 @@ class PromptAuthoringSession:
         endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
         model: str = DEFAULT_LM_STUDIO_MODEL,
         client: Any | None = None,
+        concurrency: AuthoringConcurrencyConfig | None = None,
+        trace_config: ModelTraceConfig | None = None,
+        lab_scope: str | None = None,
     ) -> None:
         self.output_dir = output_dir
         self.retry_budget = retry_budget
-        self._client = adapt_client(
+        self._lab_scope = load_lab_scope(lab_scope)
+        self._trace = ModelTraceRecorder(
+            trace_config
+            if trace_config is not None
+            else ModelTraceConfig.from_env(output_dir=output_dir)
+        )
+        raw_client = (
             client
             if client is not None
-            else LMStudioChatClient(endpoint=endpoint, model=model)
+            else LMStudioChatClient(endpoint=endpoint, model=model, trace_recorder=self._trace)
         )
+        if hasattr(raw_client, "trace_recorder"):
+            raw_client.trace_recorder = self._trace
+        self._client = adapt_client(raw_client)
         self._registry = AuthoringToolRegistry(
             output_dir=output_dir,
             workspace_name=workspace_name,
             workspace_guid=workspace_guid,
         )
+        # Narrowed-scope experiment: inert unless --lab-scope/env is set.
+        # Stored on the registry so the Lever-B tool filter can consult it.
+        self._registry.lab_scope = self._lab_scope
         self._validator = AuthoringValidator()
         self._helpers = PromptAuthoringService.__new__(PromptAuthoringService)
         self._messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        # skills mode selects its context from the prompt, which isn't known
+        # until the first send(); defer injection (see _inject_skill_context).
+        # off/cheatsheet/enforce have static context, so inject it now.
+        self._skill_msg_pending = self._lab_scope.mode == "skills"
+        if not self._skill_msg_pending:
+            _scope_text = self._lab_scope.as_context_message()
+            if _scope_text is not None:
+                self._messages.append(SystemMessage(content=_scope_text))
+        self._user_turns: list[str] = []
+        self._original_prompt: str = ""
         self._best_code: str | None = None
         self._last_validation: Any | None = None
         self._iterations: int = 0
         self._pending_approval_kind: str | None = None
+        self._concurrency = concurrency or AuthoringConcurrencyConfig()
+        self._prefetcher = None
+        self._prefetch_done = False
+        # Track whether the intent-axis nudge has been added to the
+        # message history yet. Re-adding it on every clarification turn
+        # made the LM re-ask the same questions even after the user had
+        # already answered them in the original prompt.
+        self._intent_nudge_added = False
+        # Wire the LM client into the registry so the new
+        # `ground_in_parallel` tool can fan out subagents on demand.
+        # The main agent calls it AFTER clarifications, not before.
+        self._registry.configure_subagent_client(
+            self._client,
+            pool_size=self._concurrency.worker_pool_size,
+            timeout_s=240.0,
+        )
 
     @property
     def tool_calls(self) -> tuple[dict[str, Any], ...]:
@@ -74,6 +123,22 @@ class PromptAuthoringSession:
     def _tools(self) -> AuthoringToolRegistry:
         return self._registry
 
+    def _inject_skill_context(self, prompt: str) -> None:
+        """Select + inject the skills-mode context on the first turn.
+
+        No-op unless skills mode is pending. Runs the LM pre-pass against the
+        first prompt and inserts the assembled context right after the system
+        prompt, mirroring where static cheatsheets land for the other modes.
+        """
+        if not self._skill_msg_pending:
+            return
+        self._skill_msg_pending = False
+        from .lab_skills import build_initial_scope_message
+
+        scope_text = build_initial_scope_message(self._lab_scope, prompt, self._client)
+        if scope_text is not None:
+            self._messages.insert(1, SystemMessage(content=scope_text))
+
     def send(self, user_text: str) -> AuthoringResult:
         text = user_text.strip()
         if not text:
@@ -81,7 +146,17 @@ class PromptAuthoringSession:
                 "empty_prompt", "What protocol would you like me to author?"
             )
 
-        self._registry.current_prompt = text
+        if not self._user_turns:
+            self._original_prompt = text
+            self._inject_skill_context(text)
+        self._user_turns.append(text)
+        self._trace.start_turn(len(self._user_turns))
+        history_text = "\n".join(self._user_turns)
+        self._registry.set_authoring_context(
+            original_prompt=self._original_prompt,
+            latest_user_text=text,
+            user_history_text=history_text,
+        )
         if self._pending_approval_kind is not None:
             if _looks_like_approval(text):
                 self._registry.approve_pending(self._pending_approval_kind)
@@ -100,9 +175,16 @@ class PromptAuthoringSession:
                 )))
         else:
             self._messages.append(HumanMessage(content=text))
-        missing_axes = _missing_intent_axes(text)
-        if missing_axes and not self._registry.current_intent.is_specified():
-            self._messages.append(_to_lc_message(_intent_axis_message(missing_axes)))
+        # Inject the intent-axis nudge AT MOST ONCE per session. The check
+        # runs against the union of every prior user message so a volume
+        # mentioned in turn 1 still counts when turn 3 only says "yes".
+        if not self._intent_nudge_added and not self._registry.current_intent.is_specified():
+            missing_axes = _missing_intent_axes(history_text)
+            if missing_axes:
+                self._messages.append(_to_lc_message(_intent_axis_message(missing_axes)))
+            self._intent_nudge_added = True
+
+        self._start_prefetch(history_text)
 
         graph = build_authoring_graph(
             registry=self._registry,
@@ -111,6 +193,8 @@ class PromptAuthoringSession:
             retry_budget=self.retry_budget,
             validator=self._validator,
             helpers=self._helpers,
+            concurrency=self._concurrency,
+            trace_recorder=self._trace,
         )
 
         initial_state: GraphState = {
@@ -122,7 +206,7 @@ class PromptAuthoringSession:
             "current_group_index": 0,
             "last_accepted_source_hash": None,
             "result": None,
-            "prompt": text,
+            "prompt": self._registry.current_prompt or history_text,
         }
 
         final_state = graph.invoke(initial_state)
@@ -145,9 +229,42 @@ class PromptAuthoringSession:
     def validate_fluentcontrol_shell(self, xscr_path: str) -> dict[str, Any]:
         return self._registry.validate_fluentcontrol_shell(xscr_path=xscr_path)
 
+    def _start_prefetch(self, prompt: str) -> None:
+        # Run the deterministic (SQLite-only) prefetch ONCE per session,
+        # on the first send. Clarification turns are short answers like
+        # "20ul" — re-running prefetch on those is wasted work, and the
+        # main authoring agent now controls LM-driven grounding via the
+        # `ground_in_parallel` tool.
+        if self._prefetch_done:
+            return
+        cfg = self._concurrency
+        if not cfg.prefetch_deterministic:
+            self._prefetch_done = True
+            return
+        from .prefetch import GroundingPrefetcher, PrefetchConfig
+
+        if self._prefetcher is None:
+            self._prefetcher = GroundingPrefetcher(
+                registry=self._registry,
+                config=PrefetchConfig(
+                    deterministic=True,
+                    subagent=False,
+                    pool_size=max(4, cfg.worker_pool_size),
+                ),
+            )
+        self._prefetcher.start(prompt)
+        self._prefetch_done = True
+
+    def close(self) -> None:
+        if self._prefetcher is not None:
+            self._prefetcher.shutdown()
+            self._prefetcher = None
+
     # ── Internal terminal-result builders (for the empty-prompt path) ────
 
     def _latest_user_prompt(self) -> str:
+        if self._user_turns:
+            return self._user_turns[-1]
         for message in reversed(self._messages):
             if isinstance(message, HumanMessage):
                 return str(message.content or "")

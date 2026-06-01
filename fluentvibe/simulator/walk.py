@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import operator
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -19,7 +21,8 @@ from ..ir.schema import (
     LihaDropTipsStep, LihaEmptyTipsStep, LihaGetTipsStep, LihaMixStep,
     Mca384DropTipsStep, Mca384GetTipsStep, Mca384MoveArmStep,
     QueryVariableStep, ScriptGroupStep, StartTimerStep, UserPromptStep,
-    WaitForTimerStep, WaitStep,
+    WaitForTimerStep, WaitStep, WorklistImportStep, LoadWorklistStep,
+    ExecuteWorklistStep,
 )
 from ..labware.base import Labware, Layer
 from ..labware.tipboxes import TipBox
@@ -210,6 +213,8 @@ class Simulator:
             effect = EffectKind.VALIDATION_ONLY
         elif isinstance(step, (ImportVariableStep, QueryVariableStep, ExecuteApplicationStep)):
             message = "runtime/user/external side effect is not modeled"
+        elif isinstance(step, (WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep)):
+            effect = EffectKind.VALIDATION_ONLY
         elif isinstance(step, GenericStep):
             effect, message = self._on_generic_step(step)
         # All other step types (waits, comments, timers, variables, externals)
@@ -557,6 +562,7 @@ class Simulator:
             return
         for tip, well in zip(self._mca_tips, self._iter_aspirate_wells(target)):
             self._validate_mix_one(target, well, volume, tip)
+            self._mix_equilibrate(target, well)
 
     def _on_empty_tips(self, step: Mca384EmptyTipsStep) -> None:
         if not self._mca_tips:
@@ -632,6 +638,7 @@ class Simulator:
         for ch, well in self._liha_wells(target, step.well_offset, step.selection):
             tip = self._require_liha_tip(ch, "Mix")
             self._validate_mix_one(target, well, volume, tip)
+            self._mix_equilibrate(target, well)
 
     def _on_liha_empty_tips(self, step: LihaEmptyTipsStep) -> None:
         target = self._twin.get(step.labware_name)
@@ -846,10 +853,10 @@ class Simulator:
             return value
 
     def _aspirate_one(self, labware: Labware, well, volume_ul: float, tip: Tip) -> None:
-        # Magnet-aware: top-down aspirate skips pinned layers when magnetized.
-        # Strict: explicit aspirate of a pinned layer would be an explicit-layer
-        # call (not yet wired in v1). Plain auto-parallel aspirate is treated
-        # as "draw top-down across non-pinned layers."
+        # A magnet never withholds liquid from a tip — it only immobilises the
+        # magnetic beads (and analyte bound to them). So liquid always draws
+        # top-down across ALL layers, magnetized or not. Bead retention vs.
+        # entrainment is handled separately via the well's bead phase.
         is_mag = labware.is_magnetized
         remaining = volume_ul
         if remaining <= 0:
@@ -861,13 +868,11 @@ class Simulator:
         )
         well_map = self._source_requested_by_well_ul.setdefault(labware.label, {})
         well_map[well.address] = well_map.get(well.address, 0.0) + volume_ul
-        # Walk layers top-down.
+        free_before = well.volume_ul
+        # Walk liquid layers top-down — nothing is skipped for magnetization.
         i = len(well.layers) - 1
         while remaining > 0 and i >= 0:
             layer = well.layers[i]
-            if is_mag and layer.reagent.pinned_when_magnetized:
-                i -= 1
-                continue
             take = min(layer.volume_ul, remaining)
             layer.volume_ul -= take
             remaining -= take
@@ -876,11 +881,30 @@ class Simulator:
                 # Remove the now-empty layer; index unchanged for next iter.
                 del well.layers[i]
             i -= 1
+        # Bead phase: the magnet holds beads + bound analyte in the well; off
+        # the magnet (beads suspended) a draw entrains them into the tip in
+        # proportion to the free liquid removed. Modelled silently in state.
+        bp = getattr(well, "bead_phase", None)
+        if bp is not None and bp.present and not is_mag and free_before > 1e-9:
+            drawn = free_before - well.volume_ul
+            frac = max(0.0, min(1.0, drawn / free_before))
+            if frac > 1e-9 and bp.bound:
+                for bl in list(bp.bound):
+                    moved = bl.volume_ul * frac
+                    if moved <= 1e-9:
+                        continue
+                    tip.layers.append(Layer(reagent=bl.reagent, volume_ul=moved))
+                    bl.volume_ul -= moved
+                bp.bound = [b for b in bp.bound if b.volume_ul > 1e-9]
+            if well.volume_ul <= 1e-9:
+                # The last of the liquid left, carrying the beads with it.
+                bp.present = False
+                bp.bound = []
         if remaining > 1e-6:
             raise _with_sim_details(
                 InsufficientVolumeError(
                     f"Aspirate: well {well.address!r} on {labware.label!r} short by "
-                    f"{remaining:.2f} uL (after skipping pinned layers if magnetized)"
+                    f"{remaining:.2f} uL"
                 ),
                 category="source_volume_short",
                 operation="Aspirate",
@@ -927,14 +951,29 @@ class Simulator:
             )
         # Tip dispenses FIFO (bottom of tip's layer stack first).
         remaining = volume_ul
+        deposited_bead_carrier = False
         while remaining > 0 and tip.layers:
             layer = tip.layers[0]
             take = min(layer.volume_ul, remaining)
             layer.volume_ul -= take
             remaining -= take
             well.add_layer(layer.reagent, take)
+            if layer.reagent.carries_beads:
+                deposited_bead_carrier = True
             if layer.volume_ul <= 1e-9:
                 del tip.layers[0]
+        # A bead-carrier reagent landing in a well establishes (or refreshes)
+        # the well's bead phase. Suspended unless the plate is magnetized.
+        if deposited_bead_carrier:
+            from ..labware.base import BeadPhase
+
+            if getattr(well, "bead_phase", None) is None:
+                well.bead_phase = BeadPhase(
+                    present=True, suspended=not labware.is_magnetized
+                )
+            else:
+                well.bead_phase.present = True
+                well.bead_phase.suspended = not labware.is_magnetized
 
     def _empty_tip_one(self, tip: Tip | None, volume_ul: float, well=None) -> None:
         if tip is None:
@@ -953,11 +992,8 @@ class Simulator:
     def _validate_mix_one(self, labware: Labware, well, volume_ul: float, tip: Tip) -> None:
         if volume_ul <= 0:
             return
-        available = sum(
-            layer.volume_ul
-            for layer in well.layers
-            if not (labware.is_magnetized and layer.reagent.pinned_when_magnetized)
-        )
+        # A magnet does not withhold liquid — all free liquid is mixable.
+        available = sum(layer.volume_ul for layer in well.layers)
         if available + 1e-9 < volume_ul:
             raise InsufficientVolumeError(
                 f"Mix: well {well.address!r} on {labware.label!r} holds "
@@ -968,6 +1004,36 @@ class Simulator:
                 f"Mix: tip would hold {tip.volume_ul + volume_ul:.2f} uL but "
                 f"capacity is {tip.capacity_ul:.2f} uL"
             )
+
+    def _mix_equilibrate(self, labware: Labware, well) -> None:
+        """A mix is the only equilibrating event for the bead phase.
+
+        Off the magnet (beads suspended): an ``analyte`` in the free liquid
+        binds to the beads; conversely, if an ``eluent`` is present and the
+        beads carry bound analyte, the analyte is released back into the free
+        liquid. On the magnet the beads are pelleted — a mix cannot
+        re-suspend them, so it only records that state. Bind/release tracks
+        analyte *association* with the beads; the bulk liquid (sample buffer,
+        bead suspension, eluent) stays liquid, so supernatant/eluate volume
+        accounting is unaffected. Authors model the captured species as a
+        small ``analyte`` reagent distinct from the bulk ``plain`` buffer.
+        """
+        bp = getattr(well, "bead_phase", None)
+        if bp is None or not bp.present:
+            return
+        if labware.is_magnetized:
+            bp.suspended = False
+            return
+        bp.suspended = True
+        free_analyte = [layer for layer in well.layers if layer.reagent.is_analyte]
+        if free_analyte:
+            for layer in free_analyte:
+                bp.bound.append(Layer(reagent=layer.reagent, volume_ul=layer.volume_ul))
+                well.layers.remove(layer)
+        elif bp.bound and any(layer.reagent.is_eluent for layer in well.layers):
+            for b in list(bp.bound):
+                well.add_layer(b.reagent, b.volume_ul)
+            bp.bound = []
 
     def _iter_aspirate_wells(self, labware: Labware):
         if labware.wells:
@@ -1077,9 +1143,20 @@ class Simulator:
         count = step.number_of_loops if step.number_of_loops is not None else step.iterations
         if isinstance(count, str):
             count = self._resolve_sim_number(count)
-        for _ in range(int(count)):
-            for child in step.steps:
-                self._dispatch(child)
+        previous = self._wt.sim_values.get(step.loop_variable) if step.loop_variable else None
+        had_previous = bool(step.loop_variable and step.loop_variable in self._wt.sim_values)
+        try:
+            for index in range(1, int(count) + 1):
+                if step.loop_variable:
+                    self._wt.sim_values[step.loop_variable] = index
+                for child in step.steps:
+                    self._dispatch(child)
+        finally:
+            if step.loop_variable:
+                if had_previous:
+                    self._wt.sim_values[step.loop_variable] = previous
+                else:
+                    self._wt.sim_values.pop(step.loop_variable, None)
 
     def _on_conditional(self, step: ConditionalStep) -> None:
         left = self._resolve_sim_value(step.left_variable)
@@ -1303,16 +1380,59 @@ class Simulator:
             return self._wt.sim_values[name]
         if name in self._wt.protocol_variables:
             return self._wt.protocol_variables[name]
+        if _looks_like_numeric_expr(name):
+            return self._eval_numeric_expr(name)
         raise MissingSimValueError(
             f"No sim-time value for runtime variable {name!r}. "
             f"Call `wt.set_sim_value({name!r}, <value>)` before simulating."
         )
+
+    def _eval_numeric_expr(self, expr: str) -> float:
+        allowed_binary = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+            ast.FloorDiv: operator.floordiv,
+            ast.Mod: operator.mod,
+        }
+        allowed_unary = {
+            ast.UAdd: operator.pos,
+            ast.USub: operator.neg,
+        }
+
+        def visit(node: ast.AST) -> float:
+            if isinstance(node, ast.Expression):
+                return visit(node.body)
+            if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                return float(node.value)
+            if isinstance(node, ast.Name):
+                return self._resolve_sim_number(node.id)
+            if isinstance(node, ast.BinOp) and type(node.op) in allowed_binary:
+                return allowed_binary[type(node.op)](visit(node.left), visit(node.right))
+            if isinstance(node, ast.UnaryOp) and type(node.op) in allowed_unary:
+                return allowed_unary[type(node.op)](visit(node.operand))
+            raise MissingSimValueError(f"Unsupported sim-time numeric expression {expr!r}")
+
+        try:
+            tree = ast.parse(expr, mode="eval")
+        except SyntaxError as exc:
+            raise MissingSimValueError(f"Invalid sim-time numeric expression {expr!r}") from exc
+        return visit(tree)
 
 
 def _with_sim_details(exc: Exception, *, category: str, **details):
     setattr(exc, "sim_category", category)
     setattr(exc, "sim_details", {key: value for key, value in details.items() if value is not None})
     return exc
+
+
+def _looks_like_numeric_expr(value: str) -> bool:
+    return bool(
+        isinstance(value, str)
+        and any(op in value for op in "+-*/()%")
+        and any(ch.isalpha() or ch.isdigit() for ch in value)
+    )
 
 
 def _failure_operation(command_id: str | None) -> str | None:

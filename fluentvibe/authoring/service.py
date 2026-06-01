@@ -13,8 +13,10 @@ from .lm_client import (
     LMStudioChatClient,
     LMStudioError,
 )
+from .lab_scope import load_lab_scope
 from .models import AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
 from .repair_lock import RepairLockState
+from .trace import ModelTraceConfig, ModelTraceRecorder
 from .tools import AuthoringToolRegistry, tool_definitions
 from .validator import AuthoringValidator
 
@@ -47,11 +49,16 @@ question per missing axis BEFORE generating Python. Do not guess. After the user
 responds, call declare_intent with the resolved values; the post-simulation
 check verifies that destination wells actually received the declared volume.
 
-You must ground facts through tools before writing final code:
+LABWARE IS PROVIDED, NOT SEARCHED. The exact `catalog=` and `python_class`
+values you need are given to you directly (in the lab-scope context and/or
+the approved object draft). Use those names verbatim. Do NOT call
+search_labware, get_labware, or ground_in_parallel — there is no catalog
+search step in this workflow.
+
+Before writing final code, still use these tools:
 - resolve the workspace and valid positions
 - call lookup_api when using an unfamiliar fluentvibe object or after any
   missing-attribute Python build failure
-- search/get exact installed labware names
 - resolve exact liquid-class names
 - call lookup_rules for protocol-family patterns and learned best practices
 - call plan_protocol_resources before drafting multi-step protocols or after
@@ -64,13 +71,13 @@ You must ground facts through tools before writing final code:
 - call present_object_draft and wait for approval before functional-group planning
 - call present_functional_group_plan and wait for approval before drafting Python;
   its first groups must be Variables and Labware Placement
-Native tool use is mandatory. If you answer with Python before grounding,
-the orchestrator will reject that draft and ask you to call the missing tools.
+If you answer with Python before working through this cooperative flow,
+the orchestrator will reject that draft and ask you to continue.
 
 The final protocol must be Python source only. It must define:
     def build_worktable() -> Worktable:
-and must use Worktable.from_workspace(..., workspace_guid=...). Use exact catalog=
-names returned by tools. Do not use raw_xml_step or generic_step.
+and must use Worktable.from_workspace(..., workspace_guid=...). Use the
+exact catalog= names provided to you. Do not use raw_xml_step or generic_step.
 
 Use the fluentvibe public API. Typical imports are:
     from fluentvibe import Worktable, Reagent, Plate96, MCA100Box, MCA200Box, MCA500Box
@@ -85,8 +92,8 @@ from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
 
 def build_worktable() -> Worktable:
     wt = Worktable.from_workspace(
-        "WORKSPACE_NAME_FROM_TOOLS",
-        workspace_guid="WORKSPACE_GUID_FROM_TOOLS",
+        "SAT_Fluent_780_Rev3",
+        workspace_guid="291ba293-6361-4f8f-aa8d-7c2643d3f096",
         auto_place=False,
         protocol_name="Authored Transfer",
         comment="20 uL 96-well transfer",
@@ -96,6 +103,9 @@ def build_worktable() -> Worktable:
     wt.declare_variable("LIQUID_CLASS_TRANSFER", "Water Free Single")
     wt.set_sim_value("LIQUID_CLASS_TRANSFER", "Water Free Single")
     LIQUID_CLASS_TRANSFER = "Water Free Single"
+    wt.declare_variable("TARGET_VOLUME_UL", 20.0)
+    wt.set_sim_value("TARGET_VOLUME_UL", 20.0)
+    TARGET_VOLUME_UL = 20.0
     sample = Reagent("Sample")
     wt.group("Labware Placement")
     source = wt.place(Plate96("SourcePlate", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
@@ -106,8 +116,8 @@ def build_worktable() -> Worktable:
     head = wt.mca96
     head.mount_adapter()
     head.pick_up(tips)
-    head.aspirate(source, 20.0, liquid_class=LIQUID_CLASS_TRANSFER)
-    head.dispense(dest, 20.0, liquid_class=LIQUID_CLASS_TRANSFER)
+    head.aspirate(source, TARGET_VOLUME_UL, liquid_class=LIQUID_CLASS_TRANSFER)
+    head.dispense(dest, TARGET_VOLUME_UL, liquid_class=LIQUID_CLASS_TRANSFER)
     head.return_tips(tips)
     head.drop_adapter()
     return wt
@@ -120,15 +130,30 @@ vendor gate, use validate_fluentcontrol_shell only after compile_and_simulate
 has passed. Treat zero load failures and zero InfoPad error lines as vendor
 acceptance.
 
-For site-specific decks, use only workspace names, GUIDs, labware catalogs,
-liquid classes, and positions returned by grounding tools. Do not assume a
-canonical local deck unless the tools confirm it in the current environment.
+For the canonical SAT deck, prefer these known-good simple-transfer defaults
+after grounding confirms them: workspace SAT_Fluent_780_Rev3 with GUID
+291ba293-6361-4f8f-aa8d-7c2643d3f096, Plate96 catalog
+96_ABgene_SuperPlate_Thermo_AB2800, MCA100Box catalog MCA96, 100ul, Box for
+20 uL transfers, liquid class variables defaulting to Water Free Single,
+positions Nest61mm_Pos 1, 2, and 4.
 
 When a user says liquid classes should be variables, declare one variable per
 liquid-class role with default and simulator value "Water Free Single", include
 those variable names in present_object_draft liquid_classes, and pass the
 variables to aspirate/dispense instead of hardcoded liquid-class string
 literals.
+
+When plan_protocol_resources reports required_variables of kind "volume" or
+"split_volume", declare those variables before any wt.group(...), seed them with
+wt.set_sim_value(...), include them in present_object_draft variables, and pass
+the variable name (not a literal number) to every aspirate/dispense/mix/empty_tips
+call whose volume equals the planned value. Hardcoded numeric volumes that match
+an approved phase volume are rejected by the contract check.
+
+fluentvibe does not expose a separate wt.fca head; FCA-style fixed-channel
+pipetting (single-channel or trough-to-plate dispenses) is authored through
+wt.liha. When a request mentions "FCA", map it to wt.liha and use wt.mca96 only
+for 96-channel plate-to-plate operations.
 
 For trough/reservoir-to-plate fill requests, MCA-96 cannot fan one trough
 well across 96 destination wells in a single aspirate. Call lookup_rules
@@ -185,9 +210,12 @@ class PromptAuthoringService:
         endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
         model: str = DEFAULT_LM_STUDIO_MODEL,
         client: LMStudioChatClient | None = None,
+        concurrency: "AuthoringConcurrencyConfig | None" = None,
     ) -> None:
         self._client = client or LMStudioChatClient(endpoint=endpoint, model=model)
         self._validator = AuthoringValidator()
+        from .graph import AuthoringConcurrencyConfig
+        self._concurrency = concurrency or AuthoringConcurrencyConfig()
 
     def author(
         self,
@@ -197,6 +225,8 @@ class PromptAuthoringService:
         retry_budget: int = 2,
         workspace_name: str | None = None,
         workspace_guid: str | None = None,
+        trace_config: ModelTraceConfig | None = None,
+        lab_scope: str | None = None,
     ) -> AuthoringResult:
         # Delegated to the LangGraph state machine. The graph encodes the same
         # control flow that previously lived inline here: model_call →
@@ -210,6 +240,43 @@ class PromptAuthoringService:
             workspace_guid=workspace_guid,
             current_prompt=prompt,
         )
+        registry.set_authoring_context(
+            original_prompt=prompt,
+            latest_user_text=prompt,
+            user_history_text=prompt,
+        )
+        # Narrowed-scope experiment: inert unless --lab-scope/env is set.
+        # Stored on the registry so the Lever-B tool filter can consult it.
+        scope = load_lab_scope(lab_scope)
+        registry.lab_scope = scope
+        initial_messages: list[Any] | None = None
+        # For off/cheatsheet/enforce this is the static cheatsheet; for skills
+        # mode it runs the LM pre-pass to select the relevant skill subset (the
+        # prompt is known here, so selection happens once before run_graph).
+        from .graph import adapt_client
+        from .lab_skills import build_initial_scope_message
+        scope_text = build_initial_scope_message(scope, prompt, adapt_client(self._client))
+        if scope_text is not None:
+            from langchain_core.messages import SystemMessage
+            initial_messages = [SystemMessage(content=scope_text)]
+        # Wire the LM client into the registry so the new
+        # `ground_in_parallel` tool can fan out subagents on demand.
+        # The main agent calls it AFTER clarifications, not before.
+        from .graph import adapt_client
+        registry.configure_subagent_client(
+            adapt_client(self._client),
+            pool_size=self._concurrency.worker_pool_size,
+            timeout_s=240.0,
+        )
+        trace = ModelTraceRecorder(
+            trace_config
+            if trace_config is not None
+            else ModelTraceConfig.from_env(output_dir=output_dir)
+        )
+        trace.start_turn(1)
+        if hasattr(self._client, "trace_recorder"):
+            self._client.trace_recorder = trace
+        prefetcher = self._start_prefetch(prompt, registry)
         try:
             return run_graph(
                 prompt=prompt,
@@ -218,6 +285,9 @@ class PromptAuthoringService:
                 registry=registry,
                 client=self._client,
                 system_prompt=SYSTEM_PROMPT,
+                initial_messages=initial_messages,
+                concurrency=self._concurrency,
+                trace_recorder=trace,
             )
         except LMStudioError as exc:
             return self._failure(
@@ -229,6 +299,30 @@ class PromptAuthoringService:
                 validation=None,
                 attempts=0,
             )
+        finally:
+            if prefetcher is not None:
+                prefetcher.shutdown()
+
+    def _start_prefetch(self, prompt: str, registry: AuthoringToolRegistry):
+        # Auto-prefetch is intentionally restricted to the deterministic
+        # (no-LM, SQLite-only) path. LM-driven category subagents are now
+        # invoked on-demand by the main authoring agent via the
+        # `ground_in_parallel` tool — we don't fire them speculatively.
+        cfg = self._concurrency
+        if not cfg.prefetch_deterministic:
+            return None
+        from .prefetch import GroundingPrefetcher, PrefetchConfig
+
+        prefetcher = GroundingPrefetcher(
+            registry=registry,
+            config=PrefetchConfig(
+                deterministic=True,
+                subagent=False,
+                pool_size=max(4, cfg.worker_pool_size),
+            ),
+        )
+        prefetcher.start(prompt)
+        return prefetcher
 
     def _assistant_message(self, message: dict[str, Any]) -> dict[str, Any]:
         out = {"role": "assistant", "content": message.get("content")}
@@ -300,13 +394,18 @@ def _clarification_question(question: str) -> ClarificationQuestion:
         )
 
 
-def missing_authoring_grounding(calls: tuple[dict[str, Any], ...] | list[dict[str, Any]]) -> list[str]:
+def missing_authoring_grounding(
+    calls: tuple[dict[str, Any], ...] | list[dict[str, Any]],
+    *,
+    lab_scope_enforces: bool = False,  # retained for call-site compat; unused
+) -> list[str]:
     names = {str(call.get("name") or "") for call in calls}
     missing: list[str] = []
     if not names.intersection({"lookup_workspace", "list_valid_positions"}):
         missing.append("lookup_workspace or list_valid_positions")
-    if not names.intersection({"search_labware", "get_labware"}):
-        missing.append("search_labware or get_labware")
+    # SYSTEM_PROMPT no longer instructs catalog search (labware names are
+    # provided, not searched). Do not let the orchestrator re-impose a
+    # search/get requirement the prompt removed — in any mode.
     if "lookup_liquid_class" not in names:
         missing.append("lookup_liquid_class")
     if "lookup_rules" not in names:
@@ -401,6 +500,7 @@ def author_protocol(
     retry_budget: int = 2,
     workspace_name: str | None = None,
     workspace_guid: str | None = None,
+    trace_config: ModelTraceConfig | None = None,
 ) -> AuthoringResult:
     return PromptAuthoringService().author(
         prompt,
@@ -408,4 +508,5 @@ def author_protocol(
         retry_budget=retry_budget,
         workspace_name=workspace_name,
         workspace_guid=workspace_guid,
+        trace_config=trace_config,
     )

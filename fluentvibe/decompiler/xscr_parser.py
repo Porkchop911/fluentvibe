@@ -35,7 +35,8 @@ from ..ir.schema import (
     Protocol, QueryVariableStep, RemoveLabwareStep, RgaTransferLabwareStep,
     ScriptGroupStep, SetLocationStep, SetTipsBackStep, SetVariableStep,
     StartTimerStep, STEP_TO_COMMAND_ID, Step, StepType, UserPromptStep,
-    WaitForTimerStep, WaitStep,
+    WaitForTimerStep, WaitStep, WorklistColumnMapping, WorklistImportStep,
+    LoadWorklistStep, ExecuteWorklistStep,
 )
 
 
@@ -77,6 +78,7 @@ def parse_xscr(path: Union[Path, str]) -> Protocol:
     name = _text(_find(payload, "ObjectName")) or "Untitled Protocol"
     comment = _text(_find(payload, "Comment")) or ""
     worktable_guid, worktable_name = _parse_worktable_reference(payload)
+    file_references = _parse_file_references(payload)
 
     variables, variable_defaults = _parse_variable_declarations(root)
 
@@ -126,6 +128,7 @@ def parse_xscr(path: Union[Path, str]) -> Protocol:
         groups=groups,
         worktable_guid=worktable_guid,
         worktable_name=worktable_name,
+        file_references=file_references,
     )
 
 
@@ -139,6 +142,19 @@ def _parse_worktable_reference(payload: Optional[ET.Element]) -> tuple[Optional[
             continue
         return _text(_find(child, "Guid")), _text(_find(child, "ObjectName"))
     return None, None
+
+
+def _parse_file_references(payload: Optional[ET.Element]) -> list[str]:
+    if payload is None:
+        return []
+    refs: list[str] = []
+    for child in list(payload):
+        if not isinstance(child.tag, str) or _local(child.tag) != "FileReference":
+            continue
+        file_text = _text(_find(child, "File"))
+        if file_text:
+            refs.append(file_text)
+    return refs
 
 
 def _parse_variable_declarations(
@@ -354,6 +370,40 @@ def _parse_step_object(obj: ET.Element) -> Optional[Step]:
             location=_extract_field(obj, "Location") or "Site",
             site=_parse_int(_extract_field(obj, "Site"), default=1),
             rotation=_parse_int(_extract_field(obj, "Rotation"), default=0),
+        )
+    if step_type == StepType.WORKLIST_IMPORT:
+        return WorklistImportStep(
+            csv_path=_strip_wrapping_quotes(_extract_field(obj, "CsvExpressionOrFilename") or ""),
+            gwl_path=_strip_wrapping_quotes(_extract_field(obj, "GwlExpressionOrFilename") or ""),
+            start_line=_parse_int(_extract_field(obj, "StartLinenumber"), default=1),
+            stop_with_last_line=_parse_bool(_extract_field(obj, "IsStopWithLastLine"), default=True),
+            stop_with_line=_parse_int(_extract_field(obj, "StopWithLine"), default=1),
+            separator=_extract_field(obj, "SelectedColumnSeperator") or ",",
+            columns=_parse_worklist_columns(obj),
+        )
+    if step_type == StepType.LOAD_WORKLIST:
+        well_numeric = _parse_bool(_extract_field(obj, "UseWellIndexNumbers"), default=True)
+        return LoadWorklistStep(
+            gwl_path=_strip_wrapping_quotes(_extract_field(obj, "WorklistPath") or ""),
+            liquid_class=_extract_field(obj, "LiquidClassName") or None,
+            diti_type=_extract_field(obj, "DitiType") or "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 50ul SBS",
+            selected_tips=_list_int_values(obj, "SelectedTips") or list(range(8)),
+            handle_missing_labware=_extract_field(obj, "HandleMissingLabwareOptionEnum") or "SkipWithoutWarning",
+            skip_initial_wash=_parse_bool(_extract_field(obj, "SkipInitialWash")),
+            waste_labware=_strip_wrapping_quotes(_first_field_after_parent(obj, "DropDiTiParameters", "LabwareName") or "FCA Thru Deck Waste Chute_1"),
+            empty_tips_liquid_class=_extract_field(obj, "EmptyTipsLiquidClassNameBySelection") or "Empty Tip",
+            use_legacy_gwl_file_format=_parse_bool(_extract_field(obj, "UseLegacyGwlFileFormat")),
+            ignore_filename_until_run=_parse_bool(_extract_field(obj, "IgnoreFilenameUntilRun"), default=True),
+            device_alias=_extract_field(obj, "DeviceAlias") or None,
+            well_positions="numeric" if well_numeric else "alphanumeric",
+            dynamic_diti_table=_extract_field(obj, "DynamicDiTiTable") or "",
+            dynamic_diti_handling=_parse_bool(_extract_field(obj, "IsDynamicDiTiHandling")),
+            airgap_speed=_parse_int(_extract_field(obj, "AirgapSpeed"), default=70),
+            airgap_volume=_parse_int(_extract_field(obj, "AirgapVolume"), default=10),
+        )
+    if step_type == StepType.EXECUTE_WORKLIST:
+        return ExecuteWorklistStep(
+            delete_gwl_scripts=_parse_bool(_extract_field(obj, "DeleteGwlScripts")),
         )
     if step_type == StepType.LIHA_GET_TIPS:
         if raw_command_id == "LihaPickUp" or _liha_get_tips_requires_raw(obj):
@@ -636,6 +686,19 @@ def _parse_rga_transfer(obj: ET.Element) -> RgaTransferLabwareStep:
     )
 
 
+def _parse_worklist_columns(obj: ET.Element) -> list[WorklistColumnMapping]:
+    out: list[WorklistColumnMapping] = []
+    for sub in obj.iter():
+        if not isinstance(sub.tag, str) or _local(sub.tag) != "InputParameter":
+            continue
+        out.append(WorklistColumnMapping(
+            column_name=_child_text(sub, "ColumnName") or "",
+            column_index=_parse_int(_child_text(sub, "ColumnIndex"), default=0),
+            gwl_index=_child_text(sub, "GwlIndex") or "",
+        ))
+    return out
+
+
 # ── XML helpers ─────────────────────────────────────────────────────
 
 
@@ -666,6 +729,23 @@ def _find_first(obj: ET.Element, local_name: str) -> Optional[ET.Element]:
     for child in _walk_skipping_objects(obj):
         if isinstance(child.tag, str) and _local(child.tag) == local_name:
             return child
+    return None
+
+
+def _child_text(obj: ET.Element, local_name: str) -> Optional[str]:
+    for child in obj:
+        if isinstance(child.tag, str) and _local(child.tag) == local_name:
+            return (child.text or "").strip()
+    return None
+
+
+def _first_field_after_parent(obj: ET.Element, parent_name: str, field_name: str) -> Optional[str]:
+    for parent in obj.iter():
+        if not isinstance(parent.tag, str) or _local(parent.tag) != parent_name:
+            continue
+        for sub in parent.iter():
+            if isinstance(sub.tag, str) and _local(sub.tag) == field_name and sub.text is not None:
+                return sub.text.strip()
     return None
 
 
@@ -756,4 +836,20 @@ def _list_values(obj: ET.Element, list_name: str) -> list[str]:
             continue
         if _local(el.tag) in {"string", "String"} and el.text is not None:
             values.append(el.text.strip())
+    return values
+
+
+def _list_int_values(obj: ET.Element, list_name: str) -> list[int]:
+    container = _find_first(obj, list_name)
+    if container is None:
+        return []
+    values: list[int] = []
+    for el in container.iter():
+        if not isinstance(el.tag, str):
+            continue
+        if _local(el.tag) == "int" and el.text is not None:
+            try:
+                values.append(int(el.text.strip()))
+            except ValueError:
+                pass
     return values

@@ -39,6 +39,9 @@ fluentvibe/catalog/install_index.db
 .claude/
 _tmp_decompile_checks/
 plans/
+.gen-test/
+# Runtime worktable snapshot written by the authoring/grounding loop
+current_worktable.py
 
 # Review/build artifacts
 htmlcov/

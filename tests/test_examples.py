@@ -47,37 +47,51 @@ def test_round_trip_780_empty() -> None:
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
 def test_ampure_cleanup_magnet_roundtrip() -> None:
-    """A.3 — magnet round-trip: stack-derived is_magnetized flips correctly,
-    pinned-when-magnetized layers are skipped during supernatant draw."""
+    """A.3 — bead model: stack-derived is_magnetized flips; the magnet
+    retains beads + bound DNA while supernatant liquid still aspirates;
+    elution releases the DNA into the recovered eluate."""
     module = _load_example("ampure_cleanup")
     wt = module.build_worktable()
     wt.simulate()
 
+    def _sample_mag(s):
+        try:
+            return s.labware("Sample").is_magnetized
+        except KeyError:
+            return None
+
+    # Magnetization round-trip is observable on the Sample plate.
+    sample_mag = [m for m in (_sample_mag(s) for s in wt.snapshots) if m is not None]
+    assert any(sample_mag) and not all(sample_mag)
+
+    # The supernatant draw (first aspirate while Sample is magnetised)
+    # carries bulk liquid but NOT the DNA — DNA is bound to the retained
+    # beads.
     types = [type(s.step).__name__ for s in wt.snapshots]
-    on_idx = next(i for i, t in enumerate(types) if t == "RgaTransferLabwareStep")
+    on_idx = next(
+        i for i, s in enumerate(wt.snapshots) if _sample_mag(s) is True
+    )
     asp_idx = next(
         i for i, t in enumerate(types[on_idx:], start=on_idx) if t == "AspirateStep"
     )
-    off_idx = next(
-        i for i, t in enumerate(types[asp_idx:], start=asp_idx)
-        if t == "RgaTransferLabwareStep"
-    )
+    sup = {l.reagent.name for l in wt.snapshots[asp_idx].mca_tips[0].layers}
+    assert "AMPure beads" in sup and "Sample DNA" not in sup
 
-    # Move onto magnet → derived magnetization is True.
-    assert wt.snapshots[on_idx].labware("Sample").is_magnetized is True
-    # Aspirate skips beads (pinned_when_magnetized) — supernatant only.
-    asp_layers = wt.snapshots[asp_idx].mca_tips[0].layers
-    asp_reagents = {layer.reagent.name for layer in asp_layers}
-    assert "AMPure beads" not in asp_reagents
-    assert "Sample DNA" in asp_reagents
-    # Move off magnet → derived magnetization is False.
-    assert wt.snapshots[off_idx].labware("Sample").is_magnetized is False
-
-    # End-state: sample plate has buffer dispensed back in.
-    final_sample = wt.snapshots[-1].labware("Sample")
-    final_reagents = {layer.reagent.name for layer in final_sample.well("A1").layers}
-    assert "Wash buffer" in final_reagents
-    assert "AMPure beads" in final_reagents  # beads stayed (were pinned)
+    final = wt.snapshots[-1]
+    # DNA was retained on beads through the supernatant draw, never washed
+    # to waste.
+    waste_reagents = {
+        l.reagent.name
+        for w in final.labware("Waste").wells.values()
+        for l in w.layers
+    }
+    assert "Sample DNA" not in waste_reagents
+    # Elution released the DNA; it is recovered in the eluate plate.
+    eluate = {l.reagent.name for l in final.labware("Eluate").well("A1").layers}
+    assert "Sample DNA" in eluate and "Elution buffer" in eluate
+    # Beads stayed behind in the sample well (bead phase retained).
+    sample_a1 = final.labware("Sample").well("A1")
+    assert sample_a1.bead_phase is not None and sample_a1.bead_phase.present
 
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")

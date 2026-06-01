@@ -38,7 +38,8 @@ from ..ir.schema import (
     LihaGetTipsStep, LihaDropTipsStep, LihaEmptyTipsStep,
     ExportVariableStep, ImportVariableStep, QueryVariableStep,
     ExecuteApplicationStep, DelayStep, SetLocationStep, SubRoutineStep,
-    VariableMapping, GenericStep, ScriptGroupStep
+    VariableMapping, GenericStep, ScriptGroupStep,
+    WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep
 )
 
 
@@ -93,7 +94,7 @@ def _get_adapter_config(labware_name: str) -> Dict:
         return dict(_EVA_CONFIG)
 
     try:
-        from ..database import get_database
+        from ..catalog.database import get_database
         db = get_database()
         config = db.get_adapter_config(labware_name)
         # Database returns 384 Combo default when adapter not found;
@@ -224,6 +225,11 @@ class Renderer:
         # to known names in the database. The LLM frequently produces approximate
         # names (e.g. "50ml SBS MCA96" instead of "60ml SBS MCA96").
         self._normalize_labware_names(protocol)
+        # After normalization, any add_labware whose catalog still isn't in the
+        # database is a hard failure — surface a "did you mean X?" hint so the
+        # authoring loop can repair on the next draft instead of producing a
+        # silently-broken .xscr that FluentControl rejects at load time.
+        self._validate_catalog_names_known(protocol)
 
         # Pre-scan set_variable steps to build variable value map
         # (needed to resolve variable references in labware types, e.g. DitiType)
@@ -234,6 +240,16 @@ class Renderer:
             for step in group.steps:
                 if self._step_type_name(step) == "set_variable":
                     self._variable_values[step.variable_name] = str(step.value)
+        self._protocol_variables = {
+            str(v)
+            for v in (getattr(protocol, "variables", []) or [])
+            if isinstance(v, str) and _is_valid_variable_name(v)
+        }
+        self._protocol_variables.update(
+            str(v)
+            for v in (getattr(protocol, "variable_defaults", {}) or {}).keys()
+            if isinstance(v, str) and _is_valid_variable_name(v)
+        )
 
         # Assign line numbers if not already done
         protocol.assign_line_numbers()
@@ -385,7 +401,8 @@ class Renderer:
             "expected_duration": str(self.config["script"]["expected_duration"]),
             "workspace_delta_guid": str(uuid.uuid4()),
             "groups": "\n".join(groups_xml),
-            "variable_declarations": variable_declarations_xml
+            "variable_declarations": variable_declarations_xml,
+            "file_references": self._file_references_xml(getattr(protocol, "file_references", []) or []),
         })
 
         return xml
@@ -435,6 +452,10 @@ class Renderer:
             return self._render_conditional(step, protocol, group, loop_depth=loop_depth + 1)
         if stype == "script_group":
             return self._render_script_group_step(step, protocol, group, loop_depth=loop_depth + 1)
+        if stype in {"worklist_import", "load_worklist", "execute_worklist"}:
+            xml = self._render_worklist_step(step, protocol)
+            lines = xml.strip().split("\n")
+            return "\n".join("                        " + line for line in lines)
 
         command_id = None
 
@@ -659,6 +680,9 @@ class Renderer:
 
     def _post_process_step_xml(self, xml: str, step: Step, params: dict) -> str:
         stype = self._step_type_name(step)
+        if "LiquidClassName" in params:
+            xml = self._post_process_liquid_class_xml(xml, str(params.get("LiquidClassName") or ""))
+
         if stype in {"export_variable", "import_variable"}:
             xml = re.sub(
                 r"<Variables>.*?</Variables>",
@@ -716,6 +740,228 @@ class Renderer:
                 )
         return xml
 
+    def _render_worklist_step(self, step: Step, protocol: Protocol) -> str:
+        if isinstance(step, WorklistImportStep):
+            return self._render_worklist_import(step)
+        if isinstance(step, LoadWorklistStep):
+            return self._render_load_worklist(step, protocol)
+        if isinstance(step, ExecuteWorklistStep):
+            return self._render_execute_worklist(step)
+        raise RenderError(f"Unsupported worklist step {type(step).__name__}")
+
+    def _render_worklist_import(self, step: WorklistImportStep) -> str:
+        input_params = "\n".join(
+            f'''      <Object Type="Tecan.Core.Worklist.InputParameter">
+        <InputParameter>
+          <ColumnName>{self._xml_escape(col.column_name)}</ColumnName>
+          <ColumnIndex>{col.column_index}</ColumnIndex>
+          <GwlIndex>{self._xml_escape(col.gwl_index)}</GwlIndex>
+        </InputParameter>
+      </Object>'''
+            for col in step.columns
+        )
+        return f'''<Object Type="Tecan.Core.Worklist.Data.WorklistImportStatementDataV2">
+  <WorklistImportStatementDataV2>
+    <CsvExpressionOrFilename>"{self._xml_escape(step.csv_path)}"</CsvExpressionOrFilename>
+    <StartLinenumber>{step.start_line}</StartLinenumber>
+    <IsStopWithLastLine>{self._bool_text(step.stop_with_last_line)}</IsStopWithLastLine>
+    <StopWithLine>{step.stop_with_line}</StopWithLine>
+    <SelectedColumnSeperator>{self._xml_escape(step.separator)}</SelectedColumnSeperator>
+    <SelectedSourceLabware>
+      <guid>00000000-0000-0000-0000-000000000000</guid>
+    </SelectedSourceLabware>
+    <SelectedSourceLabwareForce>False</SelectedSourceLabwareForce>
+    <SelectedDestinationLabware>
+      <guid>00000000-0000-0000-0000-000000000000</guid>
+    </SelectedDestinationLabware>
+    <InputParameters>
+{input_params}
+    </InputParameters>
+    <GwlExpressionOrFilename>"{self._xml_escape(step.gwl_path)}"</GwlExpressionOrFilename>
+    <Data Type="Tecan.Core.Worklist.Data.WorklistStatementBaseDataV1">
+      <WorklistStatementBaseDataV1>
+        <Data Type="Tecan.Core.Scripting.Helpers.ScriptStatementBaseDataV1">
+          <ScriptStatementBaseDataV1>
+            <IsBreakpoint>{self._bool_text(step.breakpoint)}</IsBreakpoint>
+            <IsDisabledForExecution>{self._bool_text(step.disabled)}</IsDisabledForExecution>
+            <GroupLineNumber>0</GroupLineNumber>
+            <LineNumber>{step.line_number or 0}</LineNumber>
+          </ScriptStatementBaseDataV1>
+        </Data>
+      </WorklistStatementBaseDataV1>
+    </Data>
+  </WorklistImportStatementDataV2>
+</Object>'''
+
+    def _render_load_worklist(self, step: LoadWorklistStep, protocol: Protocol) -> str:
+        liha_config = self.config.get("liha_device", {})
+        device_alias = step.device_alias or liha_config.get("alias", "Instrument=1/Device=LIHA:1")
+        liquid_class = step.liquid_class or protocol.liquid_class or self.config["liquid_class"]["name"]
+        selected_tips = self._int_objects_xml(step.selected_tips, indent="      ")
+        return f'''<Object Type="Tecan.Core.Worklist.Data.LoadWorklistStatementDataV4">
+  <LoadWorklistStatementDataV4>
+    <HandleMissingLabwareOption>
+      <HandleMissingLabwareOptionEnum>{self._xml_escape(step.handle_missing_labware)}</HandleMissingLabwareOptionEnum>
+    </HandleMissingLabwareOption>
+    <SkipInitialWash>{self._bool_text(step.skip_initial_wash)}</SkipInitialWash>
+    <SelectedTips>
+{selected_tips}
+    </SelectedTips>
+    <WashParametersList>
+      <Object Type="Tecan.Core.CommandFactory.LiHa.WashParameters">
+        <WashParameters>
+          <WasteName />
+          <CleanerName />
+          <LiquidClassName />
+          <Volumes />
+          <LabwareName />
+          <WasteVolume>3</WasteVolume>
+          <CleanerVolume>4</CleanerVolume>
+          <IsLiquidClassNameByExpressionEnabled>false</IsLiquidClassNameByExpressionEnabled>
+        </WashParameters>
+      </Object>
+    </WashParametersList>
+    <GetDiTiParameters Type="Tecan.Core.CommandFactory.LiHa.GetDitiParameters">
+      <GetDitiParameters>
+        <AirgapSpeed>{step.airgap_speed}</AirgapSpeed>
+        <AirgapVolume>{step.airgap_volume}</AirgapVolume>
+        <DitiType>{self._xml_escape(step.diti_type)}</DitiType>
+        <IsDynamicDiTiHandling>{str(bool(step.dynamic_diti_handling)).lower()}</IsDynamicDiTiHandling>
+        <DynamicDiTiTable>{self._xml_escape(step.dynamic_diti_table)}</DynamicDiTiTable>
+      </GetDitiParameters>
+    </GetDiTiParameters>
+    <DropDiTiParameters Type="Tecan.Core.CommandFactory.LiHa.DropDitiParameters">
+      <DropDitiParameters>
+        <SkipIfNothingMounted>true</SkipIfNothingMounted>
+        <LabwareName>"{self._xml_escape(step.waste_labware)}"</LabwareName>
+      </DropDitiParameters>
+    </DropDiTiParameters>
+    <DecontaminationParameters>
+      <DecontaminationParameters>
+        <DecontWaitDurationAfterAspiration />
+        <DecontLiquidClass />
+        <DecontLiquidClassNameByExpression />
+        <DecontSource />
+        <DecontVolume />
+        <IsDecontLiquidClassNameByExpressionEnabled>false</IsDecontLiquidClassNameByExpressionEnabled>
+        <UseDecontaminationWash>false</UseDecontaminationWash>
+      </DecontaminationParameters>
+    </DecontaminationParameters>
+    <EmptyTipsParameters Type="Tecan.Core.CommandFactory.LiHa.EmptyTipsParameters">
+      <EmptyTipsParameters>
+        <EmptyTipsLiquidClassNameBySelection>{self._xml_escape(step.empty_tips_liquid_class)}</EmptyTipsLiquidClassNameBySelection>
+        <EmptyTipsLiquidClassNameByExpression />
+        <IsEmptyTipsLiquidClassNameByExpressionEnabled>false</IsEmptyTipsLiquidClassNameByExpressionEnabled>
+        <SelectedTipsIndexes />
+        <LabwareName>"{self._xml_escape(step.waste_labware)}"</LabwareName>
+        <SelectedWellIndexes />
+        <WellOffset>0</WellOffset>
+        <OffsetX>0</OffsetX>
+        <OffsetY>0</OffsetY>
+      </EmptyTipsParameters>
+    </EmptyTipsParameters>
+    <UseLegacyGwlFileFormat>{self._bool_text(step.use_legacy_gwl_file_format)}</UseLegacyGwlFileFormat>
+    <WorklistPath>"{self._xml_escape(step.gwl_path)}"</WorklistPath>
+    <IgnoreFilenameUntilRun>{self._bool_text(step.ignore_filename_until_run)}</IgnoreFilenameUntilRun>
+    <LiquidClassName>{self._xml_escape(liquid_class)}</LiquidClassName>
+    <IsLiquidClassNameByExpressionEnabled>False</IsLiquidClassNameByExpressionEnabled>
+    <SelectedPipettingDevice Type="Tecan.Core.Instrument.DeviceAlias.DeviceAlias">
+      <DeviceAlias>{self._xml_escape(device_alias)}</DeviceAlias>
+    </SelectedPipettingDevice>
+    <Data Type="Tecan.Core.Worklist.Data.WorklistStatementBaseDataV1">
+      <WorklistStatementBaseDataV1>
+        <Data Type="Tecan.Core.Scripting.Helpers.ScriptStatementBaseDataV1">
+          <ScriptStatementBaseDataV1>
+            <IsBreakpoint>{self._bool_text(step.breakpoint)}</IsBreakpoint>
+            <IsDisabledForExecution>{self._bool_text(step.disabled)}</IsDisabledForExecution>
+            <GroupLineNumber>0</GroupLineNumber>
+            <LineNumber>{step.line_number or 0}</LineNumber>
+          </ScriptStatementBaseDataV1>
+        </Data>
+      </WorklistStatementBaseDataV1>
+    </Data>
+  </LoadWorklistStatementDataV4>
+</Object>'''
+
+    def _render_execute_worklist(self, step: ExecuteWorklistStep) -> str:
+        return f'''<Object Type="Tecan.Core.Worklist.Data.ExecuteWorklistStatementDataV1">
+  <ExecuteWorklistStatementDataV1>
+    <DeleteGwlScripts>{self._bool_text(step.delete_gwl_scripts)}</DeleteGwlScripts>
+    <Data Type="Tecan.Core.Worklist.Data.WorklistStatementBaseDataV1">
+      <WorklistStatementBaseDataV1>
+        <Data Type="Tecan.Core.Scripting.Helpers.ScriptStatementBaseDataV1">
+          <ScriptStatementBaseDataV1>
+            <IsBreakpoint>{self._bool_text(step.breakpoint)}</IsBreakpoint>
+            <IsDisabledForExecution>{self._bool_text(step.disabled)}</IsDisabledForExecution>
+            <GroupLineNumber>0</GroupLineNumber>
+            <LineNumber>{step.line_number or 0}</LineNumber>
+          </ScriptStatementBaseDataV1>
+        </Data>
+      </WorklistStatementBaseDataV1>
+    </Data>
+  </ExecuteWorklistStatementDataV1>
+</Object>'''
+
+    def _post_process_liquid_class_xml(self, xml: str, liquid_class: str) -> str:
+        """Render liquid-class variables using FluentControl expression syntax."""
+        liquid_class = (liquid_class or "").strip()
+        if not liquid_class:
+            return xml
+
+        is_expression = self._is_liquid_class_expression(liquid_class)
+        selection = "" if is_expression else self._xml_escape(liquid_class)
+        expression = self._xml_escape(liquid_class) if is_expression else ""
+        fallback_name = self._xml_escape(
+            self._variable_values.get(liquid_class, liquid_class)
+            if is_expression
+            else liquid_class
+        )
+        mode = "SingleByExpression" if is_expression else "SingleByName"
+        enabled = "True" if is_expression else "False"
+
+        replacements = {
+            "IsLiquidClassNameByExpressionEnabled": enabled,
+            "LiquidClassNameBySelection": selection,
+            "LiquidClassNameByExpression": expression,
+            "LiquidClassName": fallback_name,
+        }
+        for tag_name, value in replacements.items():
+            xml = self._replace_xml_tag(xml, tag_name, value)
+        xml = re.sub(
+            r"(<LiquidClassSelectionMode>\s*<LiquidClassSelectionMode>).*?(</LiquidClassSelectionMode>\s*</LiquidClassSelectionMode>)",
+            lambda m: f"{m.group(1)}{mode}{m.group(2)}",
+            xml,
+            count=1,
+            flags=re.DOTALL,
+        )
+        return xml
+
+    def _is_liquid_class_expression(self, value: str) -> bool:
+        value = (value or "").strip()
+        if not value:
+            return False
+        if value in getattr(self, "_protocol_variables", set()):
+            return True
+        if not _is_valid_variable_name(value):
+            return any(ch in value for ch in "+-*/()")
+        return False
+
+    def _replace_xml_tag(self, xml: str, tag_name: str, value: str) -> str:
+        if re.search(fr"<{tag_name}\s*/>", xml):
+            return re.sub(
+                fr"<{tag_name}\s*/>",
+                f"<{tag_name}>{value}</{tag_name}>",
+                xml,
+                count=1,
+            )
+        return re.sub(
+            fr"<{tag_name}>.*?</{tag_name}>",
+            lambda _: f"<{tag_name}>{value}</{tag_name}>",
+            xml,
+            count=1,
+            flags=re.DOTALL,
+        )
+
     def _step_type_to_command_id(self, step_type: str) -> str:
         """Convert snake_case step_type to PascalCase command ID."""
         # snake_case to PascalCase: mca384_pick_up_tips -> Mca384PickUpTips
@@ -745,6 +991,26 @@ class Renderer:
             lines.append(f'        <string>{escaped}</string>')
             lines.append('      </Object>')
         return "\n".join(lines)
+
+    def _int_objects_xml(self, values: list[int], *, indent: str = "") -> str:
+        lines = []
+        for value in values:
+            lines.append(f'{indent}<Object Type="System.Int32">')
+            lines.append(f'{indent}  <int>{int(value)}</int>')
+            lines.append(f'{indent}</Object>')
+        return "\n".join(lines)
+
+    def _file_references_xml(self, paths: list[str]) -> str:
+        if not paths:
+            return ""
+        unique = []
+        for path in paths:
+            if path and path not in unique:
+                unique.append(path)
+        return "\n".join(
+            f'    <FileReference>\n      <File>{self._xml_escape(path)}</File>\n    </FileReference>'
+            for path in unique
+        )
 
     def _variable_mappings_xml(self, mappings: list[VariableMapping]) -> str:
         if not mappings:
@@ -804,14 +1070,10 @@ class Renderer:
             if m:
                 return f"({m.group(1)})*8"
 
-            # If still references undefined placeholder 'col', strip that term conservatively.
-            if "col" in expr:
-                expr = expr.replace("(col-1)*8", "0")
-                expr = re.sub(r"\bcol\b", "0", expr)
-                expr = re.sub(r"\s+", "", expr)
-                expr = re.sub(r"\+\s*0\b", "", expr)
-                expr = re.sub(r"\b0\+", "", expr)
-                expr = expr or "0"
+            # FC accepts arithmetic expressions here; keep loop-variable formulas intact.
+            if re.search(r"[A-Za-z_][A-Za-z0-9_]*", expr) and re.search(r"[+\-*/()]", expr):
+                return expr
+
             # Last guard: if expression is still a plain identifier, convert only known loop-ish
             # symbols and otherwise fall back to zero to avoid FC parse failures.
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", expr):
@@ -1546,7 +1808,7 @@ class Renderer:
         if cls._KNOWN_LABWARE_NAMES is not None:
             return cls._KNOWN_LABWARE_NAMES
         try:
-            from ..database import get_database
+            from ..catalog.database import get_database
             db = get_database()
             all_lw = db.get_all_labware()
             cls._KNOWN_LABWARE_NAMES = {lw["name"] for lw in all_lw}
@@ -1609,8 +1871,14 @@ class Renderer:
             if family == "mca":
                 if "mca" not in low:
                     return value
-                # Collect valid MCA96 Box candidates from known labware
-                candidates = [n for n in known if "mca96" in n.lower() and "box" in n.lower()]
+                # Collect valid MCA96 Box candidates from known labware. Sort by
+                # length so the canonical short name (e.g. "MCA96, 200ul, Box")
+                # is preferred over longer variants ("MCA96, 200ul Wide, Box",
+                # "MCA96, 200ul Wide Filtered, Box", etc.).
+                candidates = sorted(
+                    (n for n in known if "mca96" in n.lower() and "box" in n.lower()),
+                    key=lambda n: (len(n), n),
+                )
                 # If already a valid MCA96 Box type, no correction needed
                 if value in candidates:
                     return value
@@ -1629,7 +1897,13 @@ class Renderer:
             if family == "fca":
                 if "fca" not in low or "sbs" in low:
                     return value
-                candidates = [n for n in known if "fca" in n.lower() and "sbs" in n.lower()]
+                # Sort candidates by length so the canonical short name (e.g.
+                # "FCA, 1000ul SBS") is preferred over longer filtered/wide
+                # variants.
+                candidates = sorted(
+                    (n for n in known if "fca" in n.lower() and "sbs" in n.lower()),
+                    key=lambda n: (len(n), n),
+                )
                 preferred_tokens = ["1000ul", "200ul", "50ul", "10ul"]
                 matched_token = next((tok for tok in preferred_tokens if tok in low), "")
                 for tok in preferred_tokens:
@@ -1713,6 +1987,49 @@ class Renderer:
         if corrections:
             for old, new in corrections:
                 print(f"  [labware-fix] '{old}' -> '{new}'")
+
+    def _validate_catalog_names_known(self, protocol: Protocol) -> None:
+        known = self._get_known_labware_set()
+        if not known:
+            return
+        variable_names = {str(v) for v in (protocol.variables or []) if isinstance(v, str)}
+        default_var_values = getattr(protocol, "variable_defaults", {}) or {}
+
+        def _iter_steps_recursive(steps):
+            for st in steps or []:
+                yield st
+                if self._step_type_name(st) == "loop":
+                    yield from _iter_steps_recursive(getattr(st, "steps", []) or [])
+
+        def _resolve(value: str) -> str:
+            if value in variable_names:
+                resolved = default_var_values.get(value)
+                if isinstance(resolved, str):
+                    return resolved
+            return value
+
+        def _suggestions(name: str) -> str:
+            matches = difflib.get_close_matches(name, known, n=3, cutoff=0.6)
+            return ", ".join(f"'{m}'" for m in matches) if matches else ""
+
+        for group in protocol.groups:
+            for step in _iter_steps_recursive(group.steps):
+                if self._step_type_name(step) != "add_labware":
+                    continue
+                raw = step.labware_type
+                if not isinstance(raw, str) or not raw.strip():
+                    continue
+                resolved = _resolve(raw.strip())
+                if resolved in known:
+                    continue
+                if any(ch in resolved for ch in "()+-*/="):
+                    continue
+                suggestions = _suggestions(resolved)
+                label = getattr(step, "label", None) or "?"
+                hint = f" Did you mean {suggestions}?" if suggestions else ""
+                raise RenderError(
+                    f"Unknown labware catalog {resolved!r} for placement {label!r}.{hint}"
+                )
 
     def _normalize_for_magnet_cover_site(self, protocol: Protocol) -> None:
         """Best-effort normalization to reduce common FluentControl validation failures.

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -23,7 +24,23 @@ from typing import Any, Optional
 # ── Entry point ────────────────────────────────────────────────────
 
 
+def _force_utf8_streams() -> None:
+    """Model-authored text routinely contains →, µ, — etc. On Windows the
+    console defaults to cp1252 and `print()` raises UnicodeEncodeError,
+    crashing the chat loop at the approval gate. Reconfigure stdout/stderr
+    to UTF-8 with replacement so output never crashes the process.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass
+
+
 def main(argv: Optional[list[str]] = None) -> int:
+    _force_utf8_streams()
     parser = argparse.ArgumentParser(prog="fluentvibe", description=__doc__.split("\n", 1)[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -65,7 +82,38 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_author.add_argument("--workspace-guid", default=None)
     p_author.add_argument("--json", dest="as_json", action="store_true",
                           help="emit a JSON summary of the authoring result")
+    p_author.add_argument("--model-trace", action="store_true",
+                          help="write model request traces under <output-dir>/model_traces")
+    p_author.add_argument("--model-trace-live", action="store_true",
+                          help="also print compact model trace events to stderr")
+    p_author.add_argument("--lab-scope", choices=["off", "cheatsheet", "enforce", "skills"],
+                          default=None,
+                          help="narrowed-scope experiment: inject curated lab "
+                               "cheatsheet (cheatsheet), restrict labware tools "
+                               "to the whitelist (enforce), or inject an "
+                               "LM-selected subset of granular skill files "
+                               "(skills); default off = baseline "
+                               "(env FLUENTVIBE_LAB_SCOPE)")
     p_author.set_defaults(func=_cmd_author)
+
+    p_lookup_eval = sub.add_parser(
+        "lookup-eval",
+        help="evaluate SQL-backed lookup behavior through the authoring tool loop",
+    )
+    p_lookup_eval.add_argument("--output", type=Path, default=Path("build") / "lookup_eval.json")
+    p_lookup_eval.add_argument("--live", action="store_true",
+                               help="use the configured OpenAI-compatible model instead of scripted responses")
+    p_lookup_eval.add_argument("--model", default=None)
+    p_lookup_eval.add_argument("--endpoint", default=None)
+    p_lookup_eval.set_defaults(func=_cmd_lookup_eval)
+
+    p_render_trace = sub.add_parser(
+        "render-trace",
+        help="render a model trace JSONL file into a readable Markdown summary",
+    )
+    p_render_trace.add_argument("input", type=Path)
+    p_render_trace.add_argument("--output", "-o", type=Path, default=None)
+    p_render_trace.set_defaults(func=_cmd_render_trace)
 
     p_chat = sub.add_parser("chat", help="start an interactive protocol-authoring chat")
     p_chat.add_argument("--output-dir", type=Path, default=Path("build") / "chat_authoring")
@@ -89,6 +137,18 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--model", default=None,
         help="LM Studio model name (default: DEFAULT_LM_STUDIO_MODEL from lm_client.py)",
     )
+    p_chat.add_argument("--model-trace", action="store_true",
+                        help="write model request traces under <output-dir>/model_traces")
+    p_chat.add_argument("--model-trace-live", action="store_true",
+                        help="also print compact model trace events to stderr")
+    p_chat.add_argument("--lab-scope", choices=["off", "cheatsheet", "enforce", "skills"],
+                        default=None,
+                        help="narrowed-scope experiment: inject curated lab "
+                             "cheatsheet (cheatsheet), restrict labware tools "
+                             "to the whitelist (enforce), or inject an "
+                             "LM-selected subset of granular skill files "
+                             "(skills); default off = baseline "
+                             "(env FLUENTVIBE_LAB_SCOPE)")
     p_chat.set_defaults(func=_cmd_chat)
 
     p_deploy = sub.add_parser(
@@ -246,12 +306,25 @@ def _cmd_author(args) -> int:
     from .authoring import PromptAuthoringService
 
     prompt = " ".join(args.prompt).strip()
-    result = PromptAuthoringService().author(
-        prompt,
+    kwargs: dict[str, Any] = dict(
         output_dir=args.output_dir,
         retry_budget=args.retry_budget,
         workspace_name=args.workspace,
         workspace_guid=args.workspace_guid,
+    )
+    trace_config = _trace_config_for_cli(args.output_dir, args)
+    if trace_config is not None:
+        kwargs["trace_config"] = trace_config
+        print(f"Model trace: {trace_config.output_dir / 'model_traces'}", file=sys.stderr)
+    if args.lab_scope is not None:
+        kwargs["lab_scope"] = args.lab_scope
+    from .authoring.lab_scope import resolve_lab_scope_mode
+    _scope_mode = resolve_lab_scope_mode(args.lab_scope)
+    if _scope_mode != "off":
+        print(f"Lab scope: {_scope_mode}", file=sys.stderr)
+    result = PromptAuthoringService().author(
+        prompt,
+        **kwargs,
     )
     if args.as_json:
         print(json.dumps(result.to_dict(), indent=2))
@@ -283,8 +356,44 @@ def _cmd_author(args) -> int:
     return 1
 
 
+def _cmd_lookup_eval(args) -> int:
+    from .authoring.lookup_eval import run_lookup_eval, write_lookup_eval_report
+    from .authoring.lm_client import (
+        DEFAULT_LM_STUDIO_ENDPOINT,
+        DEFAULT_LM_STUDIO_MODEL,
+        make_chat_client,
+    )
+
+    client = None
+    if args.live:
+        client = make_chat_client(
+            model=args.model or DEFAULT_LM_STUDIO_MODEL,
+            endpoint=args.endpoint or DEFAULT_LM_STUDIO_ENDPOINT,
+        )
+    report = run_lookup_eval(output_dir=args.output.parent, live_client=client)
+    path = write_lookup_eval_report(report, args.output)
+    summary = report["summary"]
+    print(f"Wrote {path}")
+    print(
+        "Lookup eval: "
+        f"{summary['tool_call_count']} tool call(s), "
+        f"cache hit rate {summary['cache_hit_rate']:.2f}, "
+        f"tool p50/p95 {summary['tool_ms_p50']:.1f}/{summary['tool_ms_p95']:.1f} ms"
+    )
+    return 0
+
+
+def _cmd_render_trace(args) -> int:
+    from .authoring.trace import render_model_trace_file
+
+    path = render_model_trace_file(args.input, args.output)
+    print(f"Rendered {path}")
+    return 0
+
+
 def _cmd_chat(args) -> int:
     from .authoring import PromptAuthoringSession
+    trace_config = _trace_config_for_cli(args.output_dir, args)
 
     def new_session() -> PromptAuthoringSession:
         kwargs: dict[str, Any] = dict(
@@ -295,11 +404,21 @@ def _cmd_chat(args) -> int:
         )
         if args.model:
             kwargs["model"] = args.model
+        if trace_config is not None:
+            kwargs["trace_config"] = trace_config
+        if args.lab_scope is not None:
+            kwargs["lab_scope"] = args.lab_scope
         return PromptAuthoringSession(**kwargs)
 
     session = new_session()
     printed_tool_calls = 0
     print("fluentvibe authoring chat")
+    if trace_config is not None:
+        print(f"Model trace: {trace_config.output_dir / 'model_traces'}")
+    from .authoring.lab_scope import resolve_lab_scope_mode
+    _scope_mode = resolve_lab_scope_mode(args.lab_scope)
+    if _scope_mode != "off":
+        print(f"Lab scope: {_scope_mode}")
     print("Type a protocol request, /help for commands, or /exit to quit.")
     if args.fc_gate:
         print("FC gate: enabled — successful authoring will be FC-shell-validated and deployed.")
@@ -380,6 +499,32 @@ def _run_fc_gate(session, xscr_path: Path, *, datastore_dir: Optional[Path],
     print(f"  ObjectName: {deploy.object_name}")
     print(f"  Checksum:   {deploy.checksum}")
     return 0
+
+
+def _trace_config_for_cli(output_dir: Path, args) -> Any | None:
+    enabled = bool(
+        getattr(args, "model_trace", False)
+        or getattr(args, "model_trace_live", False)
+        or _truthy_env("FLUENTVIBE_MODEL_TRACE")
+        or _truthy_env("FLUENTVIBE_MODEL_TRACE_LIVE")
+    )
+    if not enabled:
+        return None
+    from .authoring.trace import ModelTraceConfig
+
+    live = bool(
+        getattr(args, "model_trace_live", False)
+        or _truthy_env("FLUENTVIBE_MODEL_TRACE_LIVE")
+    )
+    return ModelTraceConfig.from_env(
+        output_dir=output_dir,
+        enabled=True,
+        live=live,
+    )
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _cmd_deploy(args) -> int:

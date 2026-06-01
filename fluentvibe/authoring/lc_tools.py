@@ -90,18 +90,35 @@ def _field_with_description(description: str | None, *, default: Any):
 
 # ── Public API ────────────────────────────────────────────────────────
 
-def make_lc_tools(registry: AuthoringToolRegistry) -> list[Any]:
-    """Wrap every registry method as a `StructuredTool`.
+def make_lc_tools(
+    registry: AuthoringToolRegistry,
+    *,
+    allowed: "set[str] | tuple[str, ...] | None" = None,
+    denied: "set[str] | tuple[str, ...] | None" = None,
+) -> list[Any]:
+    """Wrap registry methods as `StructuredTool`s.
 
-    Returns a list of `langchain_core.tools.StructuredTool` ready to bind to a
-    chat model via `llm.bind_tools(make_lc_tools(registry))`.
+    Args:
+        registry: the AuthoringToolRegistry whose dispatch table backs the
+            wrapped tools.
+        allowed: when set, only tools with a matching name are returned.
+            Used by category-agent prefetch to give each subagent a focused
+            toolset (e.g. only `search_labware` + `get_labware`).
+        denied: when set, tools with a matching name are withheld. Used by
+            the narrowed-scope `enforce` mode to remove catalog search.
     """
     from langchain_core.tools import StructuredTool
 
+    allowed_set = set(allowed) if allowed is not None else None
+    denied_set = set(denied) if denied is not None else None
     tools: list[Any] = []
     fn_map = registry.functions()
     for tool_def in tool_definitions():
         name = tool_def["function"]["name"]
+        if allowed_set is not None and name not in allowed_set:
+            continue
+        if denied_set is not None and name in denied_set:
+            continue
         description = tool_def["function"]["description"]
         registry_fn = fn_map.get(name)
         if registry_fn is None:

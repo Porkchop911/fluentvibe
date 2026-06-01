@@ -6,6 +6,8 @@ import ast
 import json
 import re
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -13,16 +15,27 @@ from typing import Any, Callable
 from ..catalog import (
     find_components,
     find_components_by_metadata,
+    find_grip_modes,
+    find_legal_stacks,
+    find_sites_for,
+    find_workspaces_using,
     get_database,
+    liquid_classes_for_head,
     load_xlqc,
     load_xcmp,
     open_index,
     retrieve_dsl_recipes,
     resolve_by_name,
     resolve_liquid_class_by_name,
+    CatalogSchemaOutOfDate,
 )
 from ..catalog.inference import component_taxonomy
-from .grounding import GroundingError, load_grounding_bundle
+from ..reagent import ROLES as _REAGENT_ROLES
+from .grounding import (
+    GroundingError,
+    load_current_worktable_snapshot,
+    load_grounding_bundle,
+)
 from .models import (
     FailureCategory,
     FunctionalGroupPlan,
@@ -30,6 +43,7 @@ from .models import (
     ProtocolWorkflowPlan,
     VariableBinding,
 )
+from .lab_scope import LabScope
 from .repair_policy import resolve_repair_policy
 from .validator import AuthoringValidator
 from .fluentcontrol_shell import (
@@ -130,6 +144,25 @@ _ROLE_PREFERENCES: dict[str, list[tuple[str, int]]] = {
     "tip_waste": [("Nest61mm_Pos", 5)],
     "liquid_waste": [("Nest61mm_Pos", 5), ("WS_100ml_1", 1)],
     "waste": [("Nest61mm_Pos", 5)],
+}
+
+# Enforce-mode deterministic role → (labware family, layout role) resolution.
+# `family` keys index generation.yaml grounding_defaults.labware; `layout`
+# keys index grounding_defaults.layout. First matching rule wins. Used only
+# by `_autoground_object_draft_enforce` (lab_scope.enforces) — off/cheatsheet
+# never reach this table, keeping the baseline byte-identical.
+_ENFORCE_FAMILY_PYCLASS: dict[str, str] = {
+    "plate_96": "Plate96",
+    "plate_384": "Plate384",
+    "magnet_plate_96": "MagnetRack",
+    "waste_reservoir": "Waste",
+    "reservoir_standard": "Trough25mL",
+    "reservoir_ethanol": "Trough100mL",
+    "fca_tipbox_small": "FCA200Box",
+    "fca_tipbox_large": "FCA1000Box",
+    "mca96_tipbox_small": "MCA100Box",
+    "mca96_tipbox_medium": "MCA200Box",
+    "mca96_tipbox_large": "MCA500Box",
 }
 
 # Categories that should NOT share a slot unless stacking is explicit.
@@ -657,14 +690,17 @@ _API_LOOKUPS: dict[str, dict[str, Any]] = {
     "worktable": {
         "object": "Worktable",
         "methods": [
-            {"name": "from_workspace", "signature": "Worktable.from_workspace(name, *, workspace_guid, auto_place=False, protocol_name=None, comment=None)", "examples": ["wt = Worktable.from_workspace('WORKSPACE_NAME_FROM_TOOLS', workspace_guid='WORKSPACE_GUID_FROM_TOOLS', auto_place=False)"]},
+            {"name": "from_workspace", "signature": "Worktable.from_workspace(name, *, workspace_guid, auto_place=False, protocol_name=None, comment=None)", "examples": ["wt = Worktable.from_workspace('SAT_Fluent_780_Rev3', workspace_guid='291ba293-6361-4f8f-aa8d-7c2643d3f096', auto_place=False)"]},
             {"name": "place", "signature": "wt.place(labware, location, position)", "examples": ["plate = wt.place(Plate96('DestPlate', catalog='96_ABgene_SuperPlate_Thermo_AB2800'), 'Nest61mm_Pos', 2)"]},
             {"name": "group", "signature": "wt.group(name)", "examples": ["wt.group('Transfer')"]},
+            {"name": "loop", "signature": "with wt.loop(times, *, name='Loop', loop_variable=None): ...", "examples": ["# native FluentControl loop — do NOT unroll with a Python for-loop", "with wt.loop(times=12, name='Dispense columns', loop_variable='col'):", "    head.aspirate(trough, 'BEAD_VOLUME_UL', liquid_class='LIQUID_CLASS_BEADS')", "    head.dispense(plate, 'BEAD_VOLUME_UL', liquid_class='LIQUID_CLASS_BEADS', well_offset='(col-1)*8')"]},
             {"name": "declare_variable", "signature": "wt.declare_variable(name, default)", "examples": ["wt.declare_variable('RunId', 'demo')"]},
             {"name": "set_sim_value", "signature": "wt.set_sim_value(name, value)", "examples": ["wt.set_sim_value('RunId', 'demo')"]},
             {"name": "set_variable", "signature": "wt.set_variable(name, value)", "examples": ["wt.set_variable('RunId', 'demo')"]},
             {"name": "wait", "signature": "wt.wait(duration_seconds)", "examples": ["wt.wait(30)"]},
             {"name": "add_comment", "signature": "wt.add_comment(text)", "examples": ["wt.add_comment('Incubate at room temperature')"]},
+            {"name": "worklist", "signature": "wt.worklist(source_path, *, gwl_path=None, liquid_class=None, diti_type='TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 50ul SBS', selected_tips=range(8), execute=True)", "examples": ["wt.group('Worklist')", "wt.worklist(r'C:\\ProgramData\\Tecan\\VisionX\\Worklists\\TEMP_Tier6.gwl', liquid_class='Water Free Single')", "# CSV sources are also accepted; fluentvibe emits Convert CSV to GWL before loading."]},
+            {"name": "execute_worklist", "signature": "wt.execute_worklist(delete_gwl_scripts=False)", "examples": ["wt.worklist('a.gwl', execute=False)", "wt.worklist('b.gwl', execute=False)", "wt.execute_worklist()"]},
         ],
         "attributes": ["liha", "mca96", "gripper"],
         "forbidden_common_mistakes": ["wt.pick_up(...)", "wt.aspirate(...)", "wt.dispense(...)"],
@@ -678,25 +714,33 @@ _API_LOOKUPS: dict[str, dict[str, Any]] = {
     },
     "wt.liha": {
         "object": "wt.liha",
+        "note": "wt.liha is the only fixed-channel pipetting head exposed by fluentvibe. Use it for FCA-style operations (trough-to-plate dispenses, single-channel or per-column transfers, individual well aspirate/dispense). Use wt.mca96 only for true 96-channel plate-to-plate moves. PASS DECLARED VARIABLES BY NAME (a string) for volume and liquid_class — `'BEAD_VOLUME_UL'`, not the Python value — or the rendered protocol bakes in a literal and the FC variable is dead. To cover all 12 columns, wrap a single aspirate/dispense in `with wt.loop(times=12, loop_variable='col')` and address columns with `well_offset='(col-1)*8'`; NEVER unroll with a Python `for` loop.",
         "methods": [
             {"name": "get_tips", "signature": "get_tips(labware=None)", "examples": ["head = wt.liha", "head.get_tips(tips)"]},
-            {"name": "aspirate", "signature": "aspirate(labware, volume, *, liquid_class=None, well_offset=None)", "examples": ["head.aspirate(source, 20.0, liquid_class='Water Free Single')"]},
-            {"name": "dispense", "signature": "dispense(labware, volume, *, liquid_class=None, well_offset=None)", "examples": ["head.dispense(dest, 20.0, liquid_class='Water Free Single', well_offset=col * 8)"]},
-            {"name": "mix", "signature": "mix(labware, volume, *, cycles=10, liquid_class=None, well_offset=None)", "examples": ["head.mix(plate, 30.0, cycles=10, liquid_class='Water Mix')"]},
-            {"name": "empty_tips", "signature": "empty_tips(labware, volume=0, *, liquid_class=None)", "examples": ["head.empty_tips(waste, 20.0)"]},
+            {"name": "aspirate", "signature": "aspirate(labware, volume, *, liquid_class=None, well_offset=None)", "examples": ["head.aspirate(source, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER')"]},
+            {"name": "dispense", "signature": "dispense(labware, volume, *, liquid_class=None, well_offset=None)", "examples": ["with wt.loop(times=12, loop_variable='col'):", "    head.dispense(dest, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', well_offset='(col-1)*8')"]},
+            {"name": "mix", "signature": "mix(labware, volume, *, cycles=10, liquid_class=None, well_offset=None)", "examples": ["head.mix(plate, 'MIX_VOLUME_UL', cycles=10, liquid_class='LIQUID_CLASS_MIX')"]},
+            {"name": "empty_tips", "signature": "empty_tips(labware, volume=0, *, liquid_class=None)", "examples": ["head.empty_tips(waste, 'SUPERNATANT_VOLUME_UL')"]},
             {"name": "drop_tips", "signature": "drop_tips(labware=None)", "examples": ["head.drop_tips()", "head.drop_tips(tips)"]},
         ],
         "forbidden_common_mistakes": ["pick_up", "return_tips", "mount_adapter", "drop_adapter"],
     },
+    "wt.fca": {
+        "object": "wt.fca",
+        "note": "fluentvibe does NOT expose wt.fca as a runtime head. FCA-style fixed-channel pipetting (single-channel, per-column, trough-to-plate dispenses) is authored through wt.liha. Call lookup_api('wt.liha') for the full method surface. Use wt.mca96 only for true 96-channel plate-to-plate operations.",
+        "aliased_to": "wt.liha",
+        "forbidden_common_mistakes": ["wt.fca.aspirate", "wt.fca.dispense", "wt.fca.pick_up"],
+    },
     "wt.mca96": {
         "object": "wt.mca96",
+        "note": "True 96-channel head: one aspirate/dispense/mix touches all 96 wells at once — no per-column loop. PASS DECLARED VARIABLES BY NAME (a string) for the volume and liquid_class (e.g. 'SUPERNATANT_ASPIRATE_UL', 'LIQUID_CLASS_SUPERNATANT'); passing the Python value bakes a literal into the protocol and leaves the FC variable unused.",
         "methods": [
             {"name": "mount_adapter", "signature": "mount_adapter(adapter=None)", "examples": ["head = wt.mca96", "head.mount_adapter()"]},
             {"name": "pick_up", "signature": "pick_up(tip_box)", "examples": ["head.pick_up(tips)"]},
-            {"name": "aspirate", "signature": "aspirate(target, volume_ul, *, liquid_class)", "examples": ["head.aspirate(source, 20.0, liquid_class='Water Free Single')"]},
-            {"name": "dispense", "signature": "dispense(target, volume_ul, *, liquid_class)", "examples": ["head.dispense(dest, 20.0, liquid_class='Water Free Single')"]},
-            {"name": "mix", "signature": "mix(target, volume_ul, *, cycles=10, liquid_class)", "examples": ["head.mix(plate, 20.0, cycles=10, liquid_class='Water Mix')"]},
-            {"name": "empty_tips", "signature": "empty_tips(target, volume_ul, *, liquid_class='Empty Tip')", "examples": ["head.empty_tips(waste, 20.0)"]},
+            {"name": "aspirate", "signature": "aspirate(target, volume_ul, *, liquid_class)", "examples": ["head.aspirate(source, 'SUPERNATANT_ASPIRATE_UL', liquid_class='LIQUID_CLASS_SUPERNATANT')"]},
+            {"name": "dispense", "signature": "dispense(target, volume_ul, *, liquid_class)", "examples": ["head.dispense(dest, 'TRANSFER_VOLUME_UL', liquid_class='LIQUID_CLASS_ELUATE')"]},
+            {"name": "mix", "signature": "mix(target, volume_ul, *, cycles=10, liquid_class)", "examples": ["head.mix(plate, 'MIX_VOLUME_UL', cycles=10, liquid_class='LIQUID_CLASS_BEADS')"]},
+            {"name": "empty_tips", "signature": "empty_tips(target, volume_ul, *, liquid_class='Empty Tip')", "examples": ["head.empty_tips(waste, 'SUPERNATANT_ASPIRATE_UL')"]},
             {"name": "return_tips", "signature": "return_tips(tip_box=None)", "examples": ["head.return_tips(tips)"]},
             {"name": "drop_adapter", "signature": "drop_adapter(adapter=None)", "examples": ["head.drop_adapter()"]},
         ],
@@ -844,9 +888,26 @@ def tool_definitions() -> list[dict[str, Any]]:
             "component_subtype": {"type": "string", "description": "Optional normalized component subtype such as runner, nest, microplate, or trough."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         }, required=("query",)),
-        _tool("get_labware", "Return exact installed labware metadata and suggested fluentvibe Python class.", {
+        _tool("get_labware", "Return exact installed labware metadata and suggested fluentvibe Python class. "
+              "Includes a compact compatibility block (sites that accept this footprint, grip modes, "
+              "stack candidates, workspaces using this labware) when the catalog index is current.", {
             "name": {"type": "string"},
         }),
+        _tool("lookup_compatibility",
+              "Compatibility query against the catalog index. Returns ALL "
+              "(workspace, site) entries whose footprint matches the named "
+              "labware, gripper-mode whitelist, legal stack candidates, and "
+              "workspaces that already use this component. Prefer this over "
+              "chained search_labware/get_labware when you want to know "
+              "where a given labware can sit, what can grip it, what stacks "
+              "with it, or which workspaces reference it.", {
+            "name": {"type": "string", "description": "Exact catalog component name."},
+            "kind": {
+                "type": "string",
+                "enum": ["sites", "grip_modes", "stacks", "workspaces", "all"],
+                "description": "Which slice of compatibility to return; defaults to 'all'.",
+            },
+        }, required=("name",)),
         _tool("lookup_liquid_class", "Resolve an installed liquid class by exact name.", {
             "name": {"type": "string"},
             "device_type": {"type": "string", "description": "Optional legacy device type filter."},
@@ -904,6 +965,31 @@ def tool_definitions() -> list[dict[str, Any]]:
                 },
             },
         }, required=("resources",)),
+        _tool("ground_in_parallel",
+              "Fan out grounding across multiple focused subagents in parallel. "
+              "Use AFTER clarifications and intent are resolved, when you know "
+              "which labware/liquid-class domains the protocol needs. Each named "
+              "category spawns a focused LM subagent that grounds its domain; "
+              "results are cached so subsequent search_labware / get_labware / "
+              "lookup_workspace / lookup_rules / lookup_liquid_class calls return "
+              "instantly. Pick only the categories your protocol actually needs — "
+              "typical: 3–5.", {
+            "categories": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Category names to ground. Available: workspace, rules, "
+                    "plates, pcr_plates, deep_well_plates, troughs, mca_tips, "
+                    "fca_tips, magnets, tube_racks, waste, adapters, "
+                    "filter_plates, liquid_classes."
+                ),
+            },
+            "extra_prompt_terms": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional extra context appended to each subagent's user prompt.",
+            },
+        }, required=("categories",)),
         _tool("simulate_python_draft", "Import build_worktable() and run strict simulation on a Python draft.", {
             "source": {"type": "string"},
             "strict": {"type": "boolean"},
@@ -944,6 +1030,33 @@ def _tool(
     }
 
 
+# Tools that are pure read-only catalog/heuristic lookups: no registry-state
+# mutation, no early-return semantics, safe to execute concurrently. Only
+# `repair_lock.observe_tool_result` results from `simulate_python_draft` /
+# `compile_and_simulate` mutate lock state — neither tool is in this set.
+PARALLEL_SAFE_TOOLS: frozenset[str] = frozenset({
+    "lookup_api",
+    "lookup_workspace",
+    "list_valid_positions",
+    "search_labware",
+    "get_labware",
+    "lookup_liquid_class",
+    "lookup_rules",
+    "plan_protocol_resources",
+    "suggest_deck_layout",
+    "lookup_compatibility",
+})
+
+
+def _freeze_arguments(payload: Any) -> Any:
+    """Recursively convert dict/list payloads into hashable keys for caching."""
+    if isinstance(payload, dict):
+        return tuple(sorted((k, _freeze_arguments(v)) for k, v in payload.items()))
+    if isinstance(payload, (list, tuple)):
+        return tuple(_freeze_arguments(v) for v in payload)
+    return payload
+
+
 class AuthoringToolRegistry:
     def __init__(
         self,
@@ -957,8 +1070,12 @@ class AuthoringToolRegistry:
         self.workspace_name = workspace_name
         self.workspace_guid = workspace_guid
         self.current_prompt = current_prompt
+        self.original_prompt = current_prompt or ""
+        self.latest_user_text = current_prompt or ""
+        self.user_history_text = current_prompt or ""
         self.validator = AuthoringValidator()
         self.calls: list[dict[str, Any]] = []
+        self.model_turns: list[dict[str, Any]] = []
         self._compile_attempt = 0
         self.current_intent: IntentSpec = IntentSpec()
         self.workflow_plan: ProtocolWorkflowPlan | None = None
@@ -966,21 +1083,259 @@ class AuthoringToolRegistry:
         self.object_draft_approved: bool = False
         self.functional_group_plan_approved: bool = False
         self.pending_approval_kind: str | None = None
+        self._grounding_cache: dict[tuple[str, Any], dict[str, Any]] = {}
+        self._lock = threading.RLock()
+        # Set by session/service after the registry is constructed so
+        # `ground_in_parallel` has an LM client to fan subagents out with.
+        # If left None, the tool returns a structured "not configured"
+        # error instead of crashing.
+        self._subagent_client: Any | None = None
+        self._subagent_pool_size: int = 8
+        self._subagent_timeout_s: float = 240.0
+        self._grounding_runs: set[str] = set()
+        # Narrowed-scope experiment. Inert default (mode "off" ⇒ baseline);
+        # session/service overwrite this when --lab-scope/env is set.
+        self.lab_scope: LabScope = LabScope()
+        if workspace_name is None and workspace_guid is None:
+            self._bind_current_worktable_snapshot()
+
+    def __deepcopy__(self, memo: dict) -> "AuthoringToolRegistry":
+        # threading.RLock is not deepcopy-safe. Rebuild lock + cache; deepcopy
+        # the rest. Tests rely on deepcopy(registry) to clone state for
+        # parity checks against bound LangChain tools.
+        import copy as _copy
+
+        clone = self.__class__.__new__(self.__class__)
+        memo[id(self)] = clone
+        for key, value in self.__dict__.items():
+            if key == "_lock":
+                continue
+            if key == "_grounding_cache":
+                # Cache is process-local optimization; safe to start fresh.
+                clone.__dict__[key] = {}
+                continue
+            clone.__dict__[key] = _copy.deepcopy(value, memo)
+        clone._lock = threading.RLock()
+        return clone
 
     def dispatch(self, name: str, arguments: str | dict[str, Any] | None) -> dict[str, Any]:
         payload = self._parse_arguments(arguments)
+        t0 = time.monotonic()
+        result = self._dispatch_pure(name, payload)
+        elapsed_ms = (time.monotonic() - t0) * 1000.0
+        with self._lock:
+            self.calls.append(self._call_entry(
+                name,
+                payload,
+                result,
+                elapsed_ms=elapsed_ms,
+                dispatch_source="live",
+            ))
+        return result
+
+    def _dispatch_pure(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Execute a tool without appending to `self.calls`.
+
+        Used by the parallel tool-dispatch path so concurrent workers do not
+        race on the call log. Callers that want the call recorded must follow
+        up with `_record_call(name, payload, result)` on the main thread.
+        """
         fn = self.functions().get(name)
         if fn is None:
-            result = {"ok": False, "category": "unknown_tool", "message": f"Unknown tool {name!r}."}
-        else:
-            try:
-                result = fn(**payload)
-            except TypeError as exc:
-                result = {"ok": False, "category": "bad_tool_arguments", "message": str(exc)}
-            except Exception as exc:
-                result = {"ok": False, "category": "tool_error", "message": str(exc)}
-        self.calls.append({"name": name, "arguments": payload, "result": _compact(result)})
+            return _compact({"ok": False, "category": "unknown_tool", "message": f"Unknown tool {name!r}."})
+        try:
+            result = fn(**payload)
+        except TypeError as exc:
+            result = {"ok": False, "category": "bad_tool_arguments", "message": str(exc)}
+        except Exception as exc:
+            result = {"ok": False, "category": "tool_error", "message": str(exc)}
         return _compact(result)
+
+    def _record_call(
+        self,
+        name: str,
+        payload: dict[str, Any],
+        result: dict[str, Any],
+        *,
+        elapsed_ms: float = 0.0,
+        dispatch_source: str = "live",
+    ) -> dict[str, Any]:
+        with self._lock:
+            self.calls.append(self._call_entry(
+                name,
+                payload,
+                result,
+                elapsed_ms=elapsed_ms,
+                dispatch_source=dispatch_source,
+            ))
+        return result
+
+    def _call_entry(
+        self,
+        name: str,
+        payload: dict[str, Any],
+        result: dict[str, Any],
+        *,
+        elapsed_ms: float,
+        dispatch_source: str,
+    ) -> dict[str, Any]:
+        category = result.get("category") or result.get("stage") or result.get("failure_category")
+        return {
+            "name": name,
+            "arguments": payload,
+            "result": result,
+            "ok": result.get("ok"),
+            "category": category,
+            "elapsed_ms": max(0.0, float(elapsed_ms)),
+            "dispatch_source": dispatch_source,
+            "result_summary": _result_size_summary(result),
+        }
+
+    def record_model_turn(
+        self,
+        *,
+        iteration: int,
+        elapsed_ms: float,
+        tool_calls: list[dict[str, Any]],
+    ) -> None:
+        with self._lock:
+            self.model_turns.append({
+                "iteration": iteration,
+                "elapsed_ms": max(0.0, float(elapsed_ms)),
+                "tool_calls": [
+                    {
+                        "name": str(call.get("name") or ""),
+                        "arguments": dict(call.get("args") or call.get("arguments") or {}),
+                        "id": call.get("id"),
+                    }
+                    for call in tool_calls
+                ],
+            })
+
+    def cache_lookup(self, name: str, arguments: dict[str, Any] | None) -> dict[str, Any] | None:
+        if name not in PARALLEL_SAFE_TOOLS:
+            return None
+        key = (name, _freeze_arguments(arguments or {}))
+        with self._lock:
+            return self._grounding_cache.get(key)
+
+    def cache_store(self, name: str, arguments: dict[str, Any] | None, result: dict[str, Any]) -> None:
+        if name not in PARALLEL_SAFE_TOOLS:
+            return
+        key = (name, _freeze_arguments(arguments or {}))
+        with self._lock:
+            self._grounding_cache.setdefault(key, result)
+
+    def _bind_current_worktable_snapshot(self) -> None:
+        snapshot = load_current_worktable_snapshot()
+        if snapshot is None:
+            return
+        workspace = snapshot.get("workspace") or {}
+        name = str(workspace.get("name") or "").strip()
+        guid = str(workspace.get("guid") or "").strip()
+        if not name or not guid:
+            return
+
+        self.workspace_name = name
+        self.workspace_guid = guid
+        try:
+            bundle = load_grounding_bundle(workspace_name=name, workspace_guid=guid)
+            valid_slots = bundle.valid_slots
+            default_layout = bundle.layout_defaults
+        except Exception:
+            valid_slots = frozenset(
+                (str(location), int(position))
+                for location, position in snapshot.get("valid_slots", ())
+            )
+            default_layout = {}
+        valid_positions = _slot_summary(valid_slots)
+        # Lean result, byte-identical to the live lookup_workspace tool
+        # (cache-hit == cache-miss). The full current_worktable snapshot
+        # (occupants / compatibility_by_occupant /
+        # accepts_by_occupied_carrier_site / positions, ~112 KB) was echoed
+        # to the model with zero authoring-decision value and dominated
+        # ~50% of per-turn context; it is not consumed anywhere. The model
+        # places by role from valid_positions + default_layout.
+        workspace_result = {
+            "ok": True,
+            "workspace": {
+                "name": name,
+                "guid": guid,
+            },
+            "valid_positions": valid_positions,
+            "default_layout": default_layout,
+        }
+        for args in (
+            {},
+            {"name_or_guid": ""},
+            {"name_or_guid": name},
+            {"name_or_guid": guid},
+        ):
+            self.cache_store("lookup_workspace", args, workspace_result)
+        for location, positions in valid_positions.items():
+            self.cache_store(
+                "list_valid_positions",
+                {"location": location},
+                {
+                    "ok": bool(positions),
+                    "location": location,
+                    "positions": list(positions),
+                },
+            )
+
+    def configure_subagent_client(
+        self,
+        client: Any,
+        *,
+        pool_size: int = 8,
+        timeout_s: float = 240.0,
+    ) -> None:
+        """Wire an LM client into the registry so `ground_in_parallel` can
+        fan out category subagents. Intended to be called once by
+        PromptAuthoringService/Session after constructing the registry.
+        """
+        self._subagent_client = client
+        self._subagent_pool_size = max(2, pool_size)
+        self._subagent_timeout_s = max(15.0, timeout_s)
+
+    def set_authoring_context(
+        self,
+        *,
+        original_prompt: str | None = None,
+        latest_user_text: str | None = None,
+        user_history_text: str | None = None,
+    ) -> None:
+        if original_prompt is not None:
+            self.original_prompt = original_prompt
+        if latest_user_text is not None:
+            self.latest_user_text = latest_user_text
+        if user_history_text is not None:
+            self.user_history_text = user_history_text
+        context_text = self.user_history_text or self.latest_user_text or self.original_prompt
+        self.current_prompt = context_text
+
+    def authoring_context(self):
+        from .grounding_coordinator import AuthoringContext
+
+        return AuthoringContext(
+            original_prompt=self.original_prompt or self.current_prompt or "",
+            latest_user_text=self.latest_user_text or "",
+            user_history_text=(
+                self.user_history_text
+                or self.latest_user_text
+                or self.original_prompt
+                or self.current_prompt
+                or ""
+            ),
+            workspace_name=self.workspace_name,
+            workspace_guid=self.workspace_guid,
+            intent=(
+                self.current_intent.to_dict()
+                if self.current_intent.is_specified()
+                else None
+            ),
+            pending_approval_kind=self.pending_approval_kind,
+        )
 
     def functions(self) -> dict[str, ToolFn]:
         return {
@@ -994,10 +1349,12 @@ class AuthoringToolRegistry:
             "list_valid_positions": self.list_valid_positions,
             "search_labware": self.search_labware,
             "get_labware": self.get_labware,
+            "lookup_compatibility": self.lookup_compatibility,
             "lookup_liquid_class": self.lookup_liquid_class,
             "lookup_rules": self.lookup_rules,
             "plan_protocol_resources": self.plan_protocol_resources,
             "suggest_deck_layout": self.suggest_deck_layout,
+            "ground_in_parallel": self.ground_in_parallel,
             "simulate_python_draft": self.simulate_python_draft,
             "compile_and_simulate": self.compile_and_simulate,
             "validate_fluentcontrol_shell": self.validate_fluentcontrol_shell,
@@ -1117,6 +1474,358 @@ class AuthoringToolRegistry:
             "next_checkpoint": "Draft Variables and Labware Placement together, then call simulate_python_draft.",
         }
 
+    def _enforce_catalog_for_role(
+        self, role_text: str
+    ) -> tuple[str | None, str | None, str | None]:
+        """Enforce-only deterministic role → (catalog, python_class, layout
+        role) resolution. `role_text` is the lowered "<role> <label>" of an
+        object-draft labware item. Returns the exact whitelist catalog name,
+        the correct fluentvibe python_class, and the grounding_defaults.layout
+        role key — any of which may be ``None`` when the role is
+        unrecognised (the model's own value is then kept). Catalog is
+        returned only when it is in `lab_scope.labware`.
+        """
+        text = (role_text or "").lower()
+
+        def has(*words: str) -> bool:
+            return any(w in text for w in words)
+
+        family: str | None = None
+        layout_role: str | None = None
+        is_plate = "plate" in text
+        if has("magnet"):
+            family, layout_role = "magnet_plate_96", "magnet_plate"
+        elif has("waste", "trash") and not is_plate:
+            family, layout_role = "waste_reservoir", "waste"
+        elif has("tip", "tips", "diti"):
+            if has("mca"):
+                if "500" in text:
+                    family = "mca96_tipbox_large"
+                elif "200" in text:
+                    family = "mca96_tipbox_medium"
+                else:
+                    family = "mca96_tipbox_small"
+                layout_role = "mca_tips"
+            else:  # fca / liha fixed-channel tips
+                family = "fca_tipbox_small" if "200" in text else "fca_tipbox_large"
+                layout_role = "fca_tips"
+        elif not is_plate and has("ethanol", "etoh", "wash"):
+            family, layout_role = "reservoir_ethanol", "reservoir_start"
+        elif not is_plate and has(
+            "reservoir", "trough", "reagent", "bead", "buffer", "elution buffer", "water"
+        ):
+            family, layout_role = "reservoir_standard", "reservoir_start"
+        elif is_plate or has("sample", "source", "destination", "elution", "final", "eluate"):
+            if "384" in text:
+                family = "plate_384"
+            else:
+                family = "plate_96"
+            if has("elution", "final", "dest", "output", "clean", "eluate", "target"):
+                layout_role = "final_plate"
+            else:
+                layout_role = "sample_plate"
+
+        if family is None:
+            return None, None, None
+
+        try:
+            bundle = load_grounding_bundle(
+                workspace_name=self.workspace_name,
+                workspace_guid=self.workspace_guid,
+            )
+        except Exception:
+            return None, None, layout_role
+        catalog = bundle.labware_defaults.get(family)
+        if not catalog or catalog not in set(self.lab_scope.labware):
+            return None, None, layout_role
+
+        python_class = _ENFORCE_FAMILY_PYCLASS.get(family)
+        row = resolve_by_name(catalog)
+        if row is not None and python_class is not None:
+            semantic = _semantic_category(row.name, row.category)
+            if not _catalog_class_compatible(python_class, row.category, row.name):
+                python_class = _python_class_for(row.name, str(semantic))
+        return catalog, python_class, layout_role
+
+    def _enforce_complete_labware_payloads(
+        self, labware: list[dict[str, Any]] | None
+    ) -> None:
+        """Enforce-only. Fill/repair each object-draft labware item's
+        catalog_name, python_class and deck slot from the curated whitelist +
+        grounding defaults, so the first `present_object_draft` carries a
+        payload `_validate_object_draft` accepts instead of the model
+        rediscovering deterministic values by trial. Only fills blanks and
+        corrects values validation would reject; never overwrites a valid
+        model-supplied value. Best-effort; mutates items in place.
+        """
+        if not self.lab_scope.enforces:
+            return
+        import sys as _sys
+
+        try:
+            bundle = load_grounding_bundle(
+                workspace_name=self.workspace_name,
+                workspace_guid=self.workspace_guid,
+            )
+        except Exception:
+            bundle = None
+
+        for item in labware or ():
+            if not isinstance(item, dict):
+                continue
+            label = _object_label(item)
+            role = str(item.get("role") or item.get("category") or "").strip()
+            cur_catalog = _object_catalog_name(item)
+            cur_class = _object_python_class(item)
+
+            resolved_catalog, resolved_class, layout_role = self._enforce_catalog_for_role(
+                f"{role} {label}"
+            )
+
+            catalog = cur_catalog
+            if not catalog and resolved_catalog:
+                catalog = resolved_catalog
+                item["catalog_name"] = catalog
+                item.pop("catalog", None)
+
+            # python_class: fill when missing, or correct when the supplied
+            # one would be rejected by _catalog_class_compatible.
+            target_class = cur_class
+            row = resolve_by_name(catalog) if catalog else None
+            if row is not None:
+                semantic = _semantic_category(row.name, row.category)
+                needs_class = not cur_class or not _catalog_class_compatible(
+                    cur_class, row.category, row.name
+                )
+                if needs_class:
+                    target_class = resolved_class or _python_class_for(
+                        row.name, str(semantic)
+                    )
+                    if target_class:
+                        item["python_class"] = target_class
+            elif not cur_class and resolved_class:
+                target_class = resolved_class
+                item["python_class"] = target_class
+
+            # location/site: snap to the grounding default for this role only
+            # when the model left it blank (suggest_deck_layout may already
+            # have set it above).
+            if not item.get("location") and bundle is not None and layout_role:
+                cfg = bundle.layout_defaults.get(layout_role)
+                if isinstance(cfg, dict) and cfg.get("location"):
+                    item["location"] = str(cfg["location"])
+                    if not item.get("site") and not item.get("position"):
+                        site = cfg.get("site")
+                        item["site"] = site
+                        item["position"] = site
+
+            if catalog != cur_catalog or target_class != cur_class:
+                print(
+                    f"[autoground] payload: {label or '?'} "
+                    f"python_class={item.get('python_class')} "
+                    f"catalog={item.get('catalog_name')} "
+                    f"@ {item.get('location')}/{item.get('site')}",
+                    file=_sys.stderr,
+                    flush=True,
+                )
+
+    def _enforce_object_draft_volumes(self, variables: list[dict[str, Any]] | None) -> None:
+        """Enforce-only. Derive dependent bead-cleanup volumes from their
+        primitive inputs so the two assay-logic errors the simulator cannot
+        catch (supernatant aspirate, eluate transfer) are fixed at authoring
+        time instead of being left to the model's guess:
+
+            SUPERNATANT_ASPIRATE_UL = SAMPLE_VOLUME_UL + BEAD_VOLUME_UL
+                                      - RETAIN_VOLUME_UL
+            TRANSFER_VOLUME_UL / ELUATE_*_UL = ELUTION_VOLUME_UL
+                                      - RETAIN_VOLUME_UL
+
+        Conservative: only overrides when every required primitive is present
+        and numeric; otherwise keeps the model's value. Best-effort, never
+        raises, mutates items in place.
+        """
+        if not self.lab_scope.enforces:
+            return
+        import sys as _sys
+
+        try:
+            items = [v for v in (variables or ()) if isinstance(v, dict)]
+
+            def _vname(v: dict[str, Any]) -> str:
+                return str(
+                    v.get("name") or v.get("variable") or v.get("variable_name") or ""
+                ).strip().upper()
+
+            def _vnum(v: dict[str, Any]) -> float | None:
+                for key in ("default_value", "default", "value"):
+                    if key in v and v[key] is not None:
+                        try:
+                            return float(v[key])
+                        except (TypeError, ValueError):
+                            return None
+                return None
+
+            by_name = {_vname(v): v for v in items if _vname(v)}
+
+            def num(name: str) -> float | None:
+                v = by_name.get(name)
+                return _vnum(v) if v is not None else None
+
+            # The lab cheatsheet's canonical AMPure workflow names the
+            # input/target quantity TARGET_VOLUME_UL; accept it as a synonym
+            # for SAMPLE_VOLUME_UL (same physical quantity by the lab's own
+            # naming — not an inferred value).
+            sample = num("SAMPLE_VOLUME_UL")
+            if sample is None:
+                sample = num("TARGET_VOLUME_UL")
+            beads = num("BEAD_VOLUME_UL")
+            retain = num("RETAIN_VOLUME_UL")
+            elution = num("ELUTION_VOLUME_UL")
+
+            def _apply(item: dict[str, Any], derived: float) -> None:
+                old = _vnum(item)
+                wrote = False
+                for key in ("default_value", "default", "value"):
+                    if key in item:
+                        item[key] = derived
+                        wrote = True
+                if not wrote:
+                    item["default_value"] = derived
+                if "sim_value" in item:
+                    item["sim_value"] = derived
+                print(
+                    f"[autoground] volume: {_vname(item)} {old}→{derived}",
+                    file=_sys.stderr,
+                    flush=True,
+                )
+
+            for item in items:
+                name = _vname(item)
+                if name == "SUPERNATANT_ASPIRATE_UL":
+                    if None not in (sample, beads, retain):
+                        _apply(item, float(sample) + float(beads) - float(retain))
+                    else:
+                        print(
+                            f"[autoground] volume: {name} kept (inputs incomplete)",
+                            file=_sys.stderr,
+                            flush=True,
+                        )
+                elif name == "TRANSFER_VOLUME_UL" or (
+                    name.startswith("ELUATE") and name.endswith("_UL")
+                ):
+                    if None not in (elution, retain):
+                        _apply(item, float(elution) - float(retain))
+                    else:
+                        print(
+                            f"[autoground] volume: {name} kept (inputs incomplete)",
+                            file=_sys.stderr,
+                            flush=True,
+                        )
+        except Exception as exc:  # volume derivation is best-effort only
+            print(f"[autoground] volume: skipped: {exc!r}", file=_sys.stderr, flush=True)
+
+    def _autoground_object_draft_enforce(self, labware: list[dict[str, Any]] | None) -> None:
+        """Bet 1 — enforce only. The object-draft gate requires prior
+        successful `lookup_workspace` and (for >1 deck object)
+        `suggest_deck_layout` calls. In enforce mode both are fully
+        deterministic (fixed workspace + curated labware), yet the model
+        rediscovers them by trial-and-error — ~16 failed `present_object_draft`
+        turns in the trace. Satisfy them server-side so the first present
+        succeeds. No-op unless `lab_scope.enforces`, so off/cheatsheet/
+        baseline are byte-identical. Never raises into the caller.
+        """
+        if not self.lab_scope.enforces:
+            return
+        import sys as _sys
+
+        try:
+            if not (
+                self._has_successful_call("lookup_workspace")
+                or self._has_successful_call("list_valid_positions")
+            ):
+                ws = self.lookup_workspace()
+                if isinstance(ws, dict) and ws.get("ok"):
+                    self._record_call("lookup_workspace", {}, ws, dispatch_source="autoground")
+                    print("[autoground] lookup_workspace (enforce)", file=_sys.stderr, flush=True)
+
+            items = [dict(x) for x in (labware or ()) if isinstance(x, dict)]
+            if len(items) > 1 and not self._has_successful_call("suggest_deck_layout"):
+                resources = [
+                    {
+                        "label": _object_label(it, default=f"labware[{i}]"),
+                        "catalog_name": _object_catalog_name(it) or None,
+                        "role": str(it.get("role") or it.get("category") or "").strip() or None,
+                    }
+                    for i, it in enumerate(items)
+                ]
+                layout = self.suggest_deck_layout(resources)
+                if isinstance(layout, dict) and layout.get("ok"):
+                    self._record_call(
+                        "suggest_deck_layout",
+                        {"resources": resources},
+                        layout,
+                        dispatch_source="autoground",
+                    )
+                    by_label = {
+                        str(p.get("label")): p
+                        for p in layout.get("placements", [])
+                        if isinstance(p, dict)
+                    }
+                    for src in labware or ():
+                        if not isinstance(src, dict):
+                            continue
+                        placement = by_label.get(_object_label(src))
+                        if placement is None:
+                            continue
+                        src.setdefault("location", placement.get("location"))
+                        if not src.get("site") and not src.get("position"):
+                            src["site"] = placement.get("position")
+                            src["position"] = placement.get("position")
+                    print(
+                        f"[autoground] suggest_deck_layout (enforce): "
+                        f"{len(by_label)} placement(s)",
+                        file=_sys.stderr,
+                        flush=True,
+                    )
+
+            self._enforce_complete_labware_payloads(labware)
+        except Exception as exc:  # autogrounding is best-effort only
+            print(f"[autoground] skipped: {exc!r}", file=_sys.stderr, flush=True)
+
+    def _autoground_reagent_roles_enforce(self, reagents: list[dict[str, Any]] | None) -> None:
+        """Bet 1 — enforce only. Coerce an invalid reagent ``role`` to a valid
+        one in place rather than rejecting the draft.
+
+        The model reliably tags ethanol/buffers with ``role="wash"``, which is
+        not in ``Reagent.ROLES``. Rejecting it at the object-draft gate just
+        makes the model resubmit the same draft until the gate-loop exhausts
+        (observed: present_object_draft looping every turn). The special roles
+        the simulator cares about (``bead_carrier``/``analyte``/``eluent``) are
+        the ones the model gets right; anything else is ordinary liquid, so
+        coercing an unknown role to ``plain`` is safe and unambiguous. No-op
+        unless ``lab_scope.enforces``; never raises into the caller.
+        """
+        if not self.lab_scope.enforces:
+            return
+        import sys as _sys
+
+        try:
+            for item in reagents or ():
+                if not isinstance(item, dict):
+                    continue
+                role = str(item.get("role") or "").strip()
+                if not role or role in _REAGENT_ROLES:
+                    continue
+                item["role"] = "plain"
+                print(
+                    f"[autoground] reagent role: {role!r} -> 'plain' "
+                    f"({item.get('name')!r})",
+                    file=_sys.stderr,
+                    flush=True,
+                )
+        except Exception as exc:  # autogrounding is best-effort only
+            print(f"[autoground] reagent role skipped: {exc!r}", file=_sys.stderr, flush=True)
+
     def present_object_draft(
         self,
         protocol_name: str,
@@ -1127,6 +1836,8 @@ class AuthoringToolRegistry:
         reagents: list[dict[str, Any]] | None = None,
         liquid_classes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        self._autoground_object_draft_enforce(labware)
+        self._autoground_reagent_roles_enforce(reagents)
         if not any(call["name"] in {"lookup_workspace", "list_valid_positions"} for call in self.calls):
             return {
                 "ok": False,
@@ -1148,6 +1859,7 @@ class AuthoringToolRegistry:
                 "category": "object_draft_invalid",
                 "message": "present_object_draft requires at least one planned labware object.",
             }
+        self._enforce_object_draft_volumes(object_draft["variables"])
         validation_error = self._validate_object_draft(object_draft)
         if validation_error is not None:
             self.object_draft = object_draft
@@ -1316,6 +2028,25 @@ class AuthoringToolRegistry:
                     "fix": f"Call lookup_liquid_class(name={name!r}) successfully before presenting this draft.",
                 })
 
+        # The object-draft reagent ``role`` is display metadata and is not
+        # necessarily the Python ``Reagent.role`` enum (off/cheatsheet have
+        # always passed free-text role labels like "source liquid" through
+        # untouched). Only validate it under enforce, where role vocabulary is
+        # curated; gating here keeps off/cheatsheet byte-identical to baseline.
+        for index, item in enumerate(object_draft["reagents"] if self.lab_scope.enforces else []):
+            role = str(item.get("role") or "").strip()
+            if role and role not in _REAGENT_ROLES:
+                errors.append({
+                    "field": f"reagents[{index}].role",
+                    "name": item.get("name"),
+                    "received": role,
+                    "message": f"Reagent role {role!r} is not one of {_REAGENT_ROLES}.",
+                    "fix": "Use 'plain' for buffers/ethanol/sample, 'bead_carrier' "
+                           "for bead suspensions, 'analyte' for the captured "
+                           "species, 'eluent' for release buffer.",
+                    "valid_roles": list(_REAGENT_ROLES),
+                })
+
         if len(object_draft["labware"]) > 1 and not self._has_successful_call("suggest_deck_layout"):
             errors.append({
                 "field": "labware",
@@ -1383,6 +2114,10 @@ class AuthoringToolRegistry:
             labware = result.get("labware") or {}
             if result.get("ok") is True and isinstance(labware, dict) and labware.get("name"):
                 names.add(str(labware["name"]))
+        # enforce mode: the curated whitelist replaces get_labware as the
+        # grounding source (the search tools are removed from the model).
+        if self.lab_scope.enforces:
+            names |= set(self.lab_scope.labware)
         return names
 
     def _confirmed_liquid_class_names(self) -> set[str]:
@@ -1394,6 +2129,8 @@ class AuthoringToolRegistry:
             liquid_class = result.get("liquid_class") or {}
             if result.get("ok") is True and isinstance(liquid_class, dict) and liquid_class.get("name"):
                 names.add(str(liquid_class["name"]))
+        if self.lab_scope.enforces:
+            names |= set(self.lab_scope.liquid_classes)
         return names
 
     def _has_successful_call(self, name: str) -> bool:
@@ -1532,6 +2269,20 @@ class AuthoringToolRegistry:
         rows = find_components_by_metadata(query, component_kind=kind, component_subtype=subtype) if kind or subtype else find_components(query)
         if category:
             rows = [row for row in rows if _semantic_category(row.name, row.category) == category]
+        # Narrowed-scope Lever B: when enforcing, restrict matches to the
+        # curated whitelist. No-op (byte-identical) unless mode == "enforce".
+        if self.lab_scope.enforces:
+            scoped = [row for row in rows if self.lab_scope.allows_labware(row.name)]
+            return {
+                "ok": True,
+                "lab_scope": "enforce",
+                "matches": [_catalog_entry(row) for row in scoped[:limit]],
+                "note": (
+                    "Results restricted to this lab's curated labware. If "
+                    "nothing here fits the request, say so explicitly rather "
+                    "than substituting an off-list component."
+                ),
+            }
         return {"ok": True, "matches": [_catalog_entry(row) for row in rows[:limit]]}
 
     def get_labware(self, name: str) -> dict[str, Any]:
@@ -1540,6 +2291,8 @@ class AuthoringToolRegistry:
             return {"ok": False, "category": FailureCategory.MISSING_CATALOG_ITEM.value, "message": f"Catalog labware {name!r} is not installed."}
         metadata = _catalog_entry(row)
         metadata["python_class"] = _python_class_for(row.name, str(metadata["category"]))
+        if row.footprint:
+            metadata["footprint"] = row.footprint
         try:
             component = load_xcmp(row.file_path)
             if not metadata.get("functional_group"):
@@ -1566,11 +2319,72 @@ class AuthoringToolRegistry:
                 }
         except Exception as exc:
             metadata["parse_warning"] = str(exc)
+        try:
+            metadata["compatibility"] = _compact_compatibility(name)
+        except CatalogSchemaOutOfDate as exc:
+            metadata["compatibility_warning"] = str(exc)
+        except Exception:
+            # Compatibility is best-effort enrichment; never fail the
+            # whole get_labware response over a join error.
+            pass
         return {"ok": True, "labware": metadata}
+
+    def lookup_compatibility(
+        self,
+        name: str,
+        kind: str = "all",
+    ) -> dict[str, Any]:
+        """Compatibility queries against the catalog index.
+
+        ``kind`` ∈ {"sites", "grip_modes", "stacks", "workspaces", "all"}.
+        Read-only, PARALLEL_SAFE — answers are derived from the indexed
+        compatibility tables and don't touch any registry state.
+        """
+        valid_kinds = {"sites", "grip_modes", "stacks", "workspaces", "all"}
+        kind_norm = (kind or "all").lower().strip()
+        if kind_norm not in valid_kinds:
+            return {
+                "ok": False,
+                "category": "invalid_argument",
+                "message": (
+                    f"kind={kind!r} is not one of {sorted(valid_kinds)}"
+                ),
+            }
+
+        row = resolve_by_name(name)
+        if row is None:
+            return {
+                "ok": False,
+                "category": FailureCategory.MISSING_CATALOG_ITEM.value,
+                "message": f"Catalog labware {name!r} is not installed.",
+            }
+
+        try:
+            payload = _full_compatibility(name, kind_norm)
+        except CatalogSchemaOutOfDate as exc:
+            return {
+                "ok": False,
+                "category": "catalog_schema_out_of_date",
+                "message": str(exc),
+            }
+        return {"ok": True, "name": row.name, **payload}
 
     def lookup_liquid_class(self, name: str, device_type: str | None = None) -> dict[str, Any]:
         if not name.strip():
             name = "Water Free Single"
+        # Narrowed-scope Lever B: reject off-whitelist liquid classes before
+        # resolving. No-op unless mode == "enforce".
+        if self.lab_scope.enforces and not self.lab_scope.allows_liquid_class(name):
+            return {
+                "ok": False,
+                "lab_scope": "enforce",
+                "category": FailureCategory.LIQUID_CLASS_RESOLUTION_FAILURE.value,
+                "message": (
+                    f"Liquid class {name!r} is outside this lab's curated "
+                    f"scope. Allowed: {sorted(self.lab_scope.liquid_classes)}."
+                ),
+                "default": "Water Free Single",
+            }
         row = resolve_liquid_class_by_name(name)
         if row is not None:
             supported_heads = _liquid_class_supported_heads(row)
@@ -1628,15 +2442,164 @@ class AuthoringToolRegistry:
             workspace_guid=self.workspace_guid,
         )
 
+    def _log_ground_in_parallel(self, msg: str) -> None:
+        import sys
+        print(f"[ground_in_parallel] {msg}", file=sys.stderr, flush=True)
+
+    def ground_in_parallel(
+        self,
+        categories: list[str],
+        extra_prompt_terms: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Fan out grounding across N category subagents in parallel.
+
+        Use AFTER clarifications are resolved and you know which domains
+        the protocol needs grounded. Each named category spawns a focused
+        LM subagent with a restricted toolset that grounds its domain;
+        results are cached so subsequent search_labware / get_labware /
+        lookup_workspace / lookup_rules / lookup_liquid_class calls return
+        instantly.
+
+        Args:
+            categories: list of category names. Available:
+                workspace, rules, plates, pcr_plates, deep_well_plates,
+                troughs, mca_tips, fca_tips, magnets, tube_racks, waste,
+                adapters, filter_plates, liquid_classes.
+            extra_prompt_terms: optional extra context to append to the
+                user prompt seen by each subagent (e.g. "20 uL transfer").
+
+        Returns:
+            Summary dict with `ok`, `categories_run`, `cache_writes`, and
+            per-category results.
+        """
+        self._log_ground_in_parallel(f"called with categories={list(categories or [])!r}")
+
+        if self._subagent_client is None:
+            self._log_ground_in_parallel("ABORT — no LM client wired (subagent_unavailable)")
+            return {
+                "ok": False,
+                "category": "subagent_unavailable",
+                "message": (
+                    "ground_in_parallel requires a configured LM client. "
+                    "This usually means the tool was invoked outside an "
+                    "authoring session (e.g. in tests without service wiring)."
+                ),
+            }
+
+        from .category_agents import DEFAULT_CATEGORIES
+        from .grounding_coordinator import AuthoringContext, GroundingCoordinator
+
+        requested = {str(c).strip() for c in (categories or []) if str(c).strip()}
+        if not requested:
+            self._log_ground_in_parallel("ABORT — empty `categories` list")
+            return {
+                "ok": False,
+                "category": "bad_tool_arguments",
+                "message": "ground_in_parallel requires a non-empty `categories` list.",
+            }
+
+        by_name = {c.name: c for c in DEFAULT_CATEGORIES}
+        unknown = sorted(requested - by_name.keys())
+        selected = [by_name[n] for n in requested if n in by_name]
+        if unknown:
+            self._log_ground_in_parallel(
+                f"unknown categories ignored: {unknown!r}"
+            )
+        if not selected:
+            self._log_ground_in_parallel(
+                f"ABORT — no recognised categories. Valid: {sorted(by_name.keys())!r}"
+            )
+            return {
+                "ok": False,
+                "category": "bad_tool_arguments",
+                "message": (
+                    "ground_in_parallel: none of the requested category names "
+                    f"are recognised. Got {sorted(requested)!r}; valid: "
+                    f"{sorted(by_name.keys())!r}."
+                ),
+            }
+        self._log_ground_in_parallel(
+            f"firing {len(selected)} subagent(s) in parallel: "
+            f"{[c.name for c in selected]!r}"
+        )
+
+        context = self.authoring_context()
+        if extra_prompt_terms:
+            extras = " ".join(str(t).strip() for t in extra_prompt_terms if str(t).strip())
+            if extras:
+                context = AuthoringContext(
+                    original_prompt=context.original_prompt,
+                    latest_user_text=context.latest_user_text,
+                    user_history_text=f"{context.user_history_text}\n\nAdditional context: {extras}".strip(),
+                    workspace_name=context.workspace_name,
+                    workspace_guid=context.workspace_guid,
+                    intent=context.intent,
+                    pending_approval_kind=context.pending_approval_kind,
+                )
+
+        result = GroundingCoordinator(
+            registry=self,
+            client=self._subagent_client,
+            pool_size=self._subagent_pool_size,
+            timeout_s=self._subagent_timeout_s,
+        ).run(
+            context,
+            categories=[c.name for c in selected],
+            force=True,
+        )
+
+        ok_count = sum(1 for item in (result.get("per_category") or []) if item.get("ok"))
+        total_writes = int(result.get("cache_writes") or 0)
+        self._log_ground_in_parallel(
+            f"done: {ok_count}/{len(selected)} agents ok, "
+            f"{total_writes} cache writes"
+        )
+        result = dict(result)
+        result.setdefault(
+            "next_checkpoint",
+            (
+                "Grounded categories cached. Call search_labware / get_labware / "
+                "lookup_workspace / lookup_rules / lookup_liquid_class as needed; "
+                "their results will return instantly from cache."
+            ),
+        )
+        return result
+
     def plan_protocol_resources(self, phases: list[dict[str, Any]]) -> dict[str, Any]:
         return plan_protocol_resources(phases)
 
+    def _is_staged_subdraft(self, source: str) -> bool:
+        """True if `source` looks like a staged sub-draft that hasn't reached the terminal stage.
+
+        The staged authoring loop builds a draft up one functional group at a
+        time (see _workflow_next_group_message). Early checkpoints have only
+        Variables + Labware Placement and lack pipetting by design, so the
+        `_check_prompt_intent` gate (which requires aspirate+dispense whenever
+        the prompt mentions transfer) would reject them. Defer that gate until
+        the source carries every approved functional group; the terminal
+        `compile_and_simulate` path still enforces it via validator.validate.
+        """
+        plan = self.workflow_plan
+        if plan is None or not plan.groups:
+            return False
+        group_calls = re.findall(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source)
+        expected_terminal_groups = max(0, len(plan.groups) - 1)
+        return len(group_calls) < expected_terminal_groups
+
     def simulate_python_draft(self, source: str, strict: bool = True) -> dict[str, Any]:
+        volume_rewrites: list[dict[str, Any]] = []
+        if self.lab_scope.enforces and self.object_draft_approved and self.object_draft:
+            source, volume_rewrites = _autoground_pipetting_volume_literals(source, self.object_draft)
+            for rewrite in volume_rewrites:
+                print(
+                    f"[autoground] pipetting volume: {rewrite['value']!r} -> "
+                    f"{rewrite['variable']} (line {rewrite['line']})"
+                )
         with tempfile.TemporaryDirectory(prefix="fluentvibe-authoring-sim-") as tmp:
             path = Path(tmp) / "draft.py"
             path.write_text(source, encoding="utf-8")
             contract_error = self.validator._check_contract(source)
-            if contract_error is None:
+            if contract_error is None and not self._is_staged_subdraft(source):
                 contract_error = self.validator._check_prompt_intent(source, self.current_prompt)
             if contract_error is None and self.object_draft_approved and self.object_draft:
                 contract_error = _check_source_against_approved_objects(source, self.object_draft)
@@ -1663,12 +2626,19 @@ class AuthoringToolRegistry:
                     "repair_hint": policy.guidance if policy.guidance else None,
                 }
             report = getattr(wt, "simulation_report", None)
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "stage": "strict_simulation",
             "message": "Draft built and strict simulation passed.",
             "state_summary": _simulation_state_summary(report),
         }
+        if volume_rewrites:
+            # Surface the autogrounded source so the graph carries the
+            # variable-threaded version forward into compile_and_simulate,
+            # not the model's original hardcoded-literal draft.
+            result["source"] = source
+            result["autoground"] = {"pipetting_volumes": volume_rewrites}
+        return result
 
     def compile_and_simulate(self, source: str) -> dict[str, Any]:
         self._compile_attempt += 1
@@ -1767,6 +2737,56 @@ class AuthoringToolRegistry:
             return json.loads(arguments)
         except json.JSONDecodeError:
             return {"_raw": arguments}
+
+
+def _format_compat_site(site) -> dict[str, Any]:
+    return {
+        "workspace": site.workspace_name,
+        "carrier": site.component_name,
+        "site_index": site.site_index,
+        "footprint": site.footprint,
+        "grip_modes": list(site.grip_modes),
+        "base_location": site.base_location,
+    }
+
+
+def _compact_compatibility(name: str) -> dict[str, Any]:
+    """Top-N compatibility view used by `get_labware`. Best-effort."""
+    sites = find_sites_for(name)
+    grip_modes = find_grip_modes(name)
+    stacks = find_legal_stacks(name)
+    workspaces = find_workspaces_using(name)
+    return {
+        "fits_on_sites": [_format_compat_site(s) for s in sites[:8]],
+        "grip_modes": grip_modes,
+        "stacks_above": [r.name for r in stacks.get("above", [])[:4]],
+        "stacks_below": [r.name for r in stacks.get("below", [])[:4]],
+        "used_in_workspaces": [w.name for w in workspaces[:4]],
+    }
+
+
+def _full_compatibility(name: str, kind: str) -> dict[str, Any]:
+    """Untruncated compatibility view used by `lookup_compatibility`."""
+    out: dict[str, Any] = {}
+    if kind in ("sites", "all"):
+        out["sites"] = [_format_compat_site(s) for s in find_sites_for(name)]
+    if kind in ("grip_modes", "all"):
+        out["grip_modes"] = find_grip_modes(name)
+    if kind in ("stacks", "all"):
+        stacks = find_legal_stacks(name)
+        out["stacks"] = {
+            "above": [
+                {"name": r.name, "category": r.category, "footprint": r.footprint}
+                for r in stacks.get("above", [])
+            ],
+            "below": [
+                {"name": r.name, "category": r.category, "footprint": r.footprint}
+                for r in stacks.get("below", [])
+            ],
+        }
+    if kind in ("workspaces", "all"):
+        out["workspaces"] = [w.name for w in find_workspaces_using(name)]
+    return out
 
 
 def _catalog_entry(row) -> dict[str, Any]:
@@ -2060,6 +3080,83 @@ def _requires_resource_plan(object_draft: dict[str, Any]) -> bool:
     return multi_step and liquid_waste
 
 
+def _autoground_pipetting_volume_literals(
+    source: str, object_draft: dict[str, Any]
+) -> tuple[str, list[dict[str, Any]]]:
+    """Rewrite hardcoded pipetting volume literals to their approved variable.
+
+    The volume contract (`_check_source_against_approved_objects`) rejects a
+    draft that passes a numeric literal where an approved phase volume must
+    flow through its declared variable, but it never repairs it — the model
+    can resubmit the same literal until the no-progress guard fires. In
+    enforce mode we instead rewrite the literal to the variable, the same way
+    `_autoground_object_draft_enforce` corrects the object draft.
+
+    Only safe rewrites are applied: the literal's value must map to exactly
+    one approved variable (no ambiguous bind), and that variable must be
+    declared in the draft (no NameError). Anything ambiguous or undeclared is
+    left for the contract check to reject. Replacement is surgical span
+    editing so the model's formatting and comments survive.
+    """
+    resource_plan = object_draft.get("_resource_plan") or {}
+    value_to_vars: dict[float, set[str]] = {}
+    for required in resource_plan.get("required_variables", []):
+        if not isinstance(required, dict) or required.get("kind") not in {"volume", "split_volume"}:
+            continue
+        variable = str(required.get("variable") or "").strip()
+        value = required.get("value")
+        if not variable or not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        value_to_vars.setdefault(float(value), set()).add(variable)
+    unique = {value: next(iter(vars_)) for value, vars_ in value_to_vars.items() if len(vars_) == 1}
+    if not unique:
+        return source, []
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source, []
+
+    declared = set(_extract_numeric_variable_defaults(tree))
+    pipetting = {"aspirate", "dispense", "mix", "empty_tips"}
+    replacements: list[tuple[int, int, int, str, float]] = []  # lineno, col, end_col, var, value
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr not in pipetting:
+            continue
+        volume_node: ast.AST | None = node.args[1] if len(node.args) > 1 else None
+        if volume_node is None:
+            for keyword in node.keywords:
+                if keyword.arg in {"volume", "volume_ul"}:
+                    volume_node = keyword.value
+                    break
+        if volume_node is None or isinstance(volume_node, ast.Name):
+            continue
+        literal = _literal_arg(volume_node)
+        if not isinstance(literal, (int, float)) or isinstance(literal, bool):
+            continue
+        variable = unique.get(float(literal))
+        if not variable or variable not in declared:
+            continue
+        if volume_node.lineno != volume_node.end_lineno:
+            continue
+        replacements.append(
+            (volume_node.lineno, volume_node.col_offset, volume_node.end_col_offset, variable, float(literal))
+        )
+    if not replacements:
+        return source, []
+
+    lines = source.splitlines(keepends=True)
+    rewrites: list[dict[str, Any]] = []
+    # Apply bottom-up so earlier edits don't shift later spans.
+    for lineno, col, end_col, variable, value in sorted(replacements, reverse=True):
+        line = lines[lineno - 1]
+        lines[lineno - 1] = line[:col] + variable + line[end_col:]
+        rewrites.append({"variable": variable, "value": value, "line": lineno})
+    return "".join(lines), list(reversed(rewrites))
+
+
 def _check_source_against_approved_objects(source: str, object_draft: dict[str, Any]) -> str | None:
     try:
         tree = ast.parse(source)
@@ -2107,13 +3204,24 @@ def _check_source_against_approved_objects(source: str, object_draft: dict[str, 
     }
     if liquid_variables:
         liquid_class_args = _extract_liquid_class_arguments(tree)
+        # Accept ANY declared liquid-class variable, not only the specific
+        # name from the object draft. The model legitimately picks semantic
+        # names (LIQUID_CLASS_BEADS/ETHANOL/ELUTION) rather than echoing the
+        # one approved name; the real contract is "pass a variable, don't
+        # hardcode the class string literal".
+        any_variable_used = any(kind == "name" for kind, _ in liquid_class_args)
         for name, variable in liquid_variables.items():
             literal_used = any(kind == "literal" and value == name for kind, value in liquid_class_args)
-            variable_used = any(kind == "name" and value == variable for kind, value in liquid_class_args)
-            if literal_used or not variable_used:
+            # Defer the "must be used through variable" half until the
+            # staged source actually has pipetting calls — the group that
+            # uses the variable is not authored yet on the first staged
+            # draft (Variables + Labware Placement only). Hardcoded literals
+            # in a real pipetting call are still rejected.
+            if literal_used or (liquid_class_args and not any_variable_used):
                 return (
-                    f"Approved liquid class {name!r} must be used through variable "
-                    f"{variable!r}, not hardcoded in pipetting calls."
+                    f"Approved liquid class {name!r} must be passed via a "
+                    f"declared liquid-class variable, not hardcoded as a "
+                    f"string literal in pipetting calls."
                 )
     resource_plan = object_draft.get("_resource_plan") or {}
     volume_variables = [
@@ -2130,12 +3238,55 @@ def _check_source_against_approved_objects(source: str, object_draft: dict[str, 
                 continue
             literal_used = any(kind == "literal" and _float_arg(arg_value, default=-1.0) == _float_arg(value, default=-2.0) for kind, arg_value in volume_args)
             variable_used = any(kind == "name" and arg_value == variable for kind, arg_value in volume_args)
-            if literal_used or not variable_used:
+            # Defer the "must be used through variable" half until pipetting
+            # calls exist (see liquid-class note above). The first staged
+            # draft has no aspirate/dispense yet, so demanding variable use
+            # there is unsatisfiable.
+            if literal_used or (volume_args and not variable_used):
                 return (
                     f"Approved phase volume {value!r} must be used through variable "
                     f"{variable!r}, not hardcoded in pipetting calls."
                 )
+
+    sources_plan = [s for s in (resource_plan.get("sources") or []) if isinstance(s, dict)]
+    if sources_plan:
+        var_to_label = _extract_place_var_to_label(tree)
+        label_to_var = {label: var for var, label in var_to_label.items()}
+        aspirate_targets = _extract_aspirate_target_vars(tree)
+        fills = _extract_fill_all_calls(tree)
+        variable_defaults = _extract_numeric_variable_defaults(tree)
+        for source in sources_plan:
+            label = str(source.get("source_label") or "").strip()
+            if not label:
+                continue
+            python_class = (placements.get(label) or {}).get("python_class", "")
+            if python_class not in _SINGLE_WELL_CONTAINERS:
+                continue
+            required = _float_arg(source.get("required_volume_ul"), default=0.0)
+            if required <= 0:
+                continue
+            python_var = label_to_var.get(label)
+            if not python_var or python_var not in aspirate_targets:
+                continue
+            recommended = _float_arg(source.get("recommended_fill_volume_ul"), default=required)
+            covered = False
+            for kind, value in fills.get(python_var, []):
+                resolved = value if kind == "literal" else variable_defaults.get(value)
+                if resolved is not None and float(resolved) >= required:
+                    covered = True
+                    break
+            if not covered:
+                return (
+                    f"Source {label!r} is aspirated by the draft but no sufficient "
+                    f"{python_var}.fill_all(...) call covers it: "
+                    f"requires {required:.1f} uL across all phases. "
+                    f"Add `{python_var}.fill_all(<reagent>, {recommended:.1f})` "
+                    f"(includes dead-volume buffer) before the first aspirate."
+                )
     return None
+
+
+_SINGLE_WELL_CONTAINERS = frozenset({"Trough25mL", "Trough100mL", "Waste"})
 
 
 def _extract_wt_placements(tree: ast.AST) -> dict[str, dict[str, str]]:
@@ -2209,6 +3360,98 @@ def _extract_pipetting_volume_arguments(tree: ast.AST) -> list[tuple[str, Any]]:
             if isinstance(literal, (int, float)):
                 values.append(("literal", literal))
     return values
+
+
+def _extract_place_var_to_label(tree: ast.AST) -> dict[str, str]:
+    var_to_label: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name) or not isinstance(node.value, ast.Call):
+            continue
+        call = node.value
+        func = call.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "place"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "wt"
+        ):
+            continue
+        if not call.args or not isinstance(call.args[0], ast.Call):
+            continue
+        ctor = call.args[0]
+        if not ctor.args:
+            continue
+        label = _literal_arg(ctor.args[0])
+        if isinstance(label, str):
+            var_to_label[target.id] = label
+    return var_to_label
+
+
+def _extract_aspirate_target_vars(tree: ast.AST) -> set[str]:
+    targets: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr != "aspirate":
+            continue
+        if node.args and isinstance(node.args[0], ast.Name):
+            targets.add(node.args[0].id)
+    return targets
+
+
+def _extract_fill_all_calls(tree: ast.AST) -> dict[str, list[tuple[str, Any]]]:
+    fills: dict[str, list[tuple[str, Any]]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "fill_all"
+            and isinstance(func.value, ast.Name)
+        ):
+            continue
+        if len(node.args) < 2:
+            continue
+        volume_node = node.args[1]
+        if isinstance(volume_node, ast.Name):
+            fills.setdefault(func.value.id, []).append(("name", volume_node.id))
+        else:
+            literal = _literal_arg(volume_node)
+            if isinstance(literal, (int, float)):
+                fills.setdefault(func.value.id, []).append(("literal", float(literal)))
+    return fills
+
+
+def _extract_numeric_variable_defaults(tree: ast.AST) -> dict[str, float]:
+    defaults: dict[str, float] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            literal = _literal_arg(node.value)
+            if isinstance(literal, (int, float)) and not isinstance(literal, bool):
+                defaults[node.targets[0].id] = float(literal)
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and func.attr == "declare_variable"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "wt"
+        ):
+            continue
+        if len(node.args) < 2:
+            continue
+        name_lit = _literal_arg(node.args[0])
+        value_lit = _literal_arg(node.args[1])
+        if isinstance(name_lit, str) and isinstance(value_lit, (int, float)) and not isinstance(value_lit, bool):
+            defaults[name_lit] = float(value_lit)
+    return defaults
 
 
 def _literal_arg(node: ast.AST) -> Any:
@@ -2316,6 +3559,8 @@ def _normalize_api_lookup(value: str) -> str:
         "wt.gripper": "wt.gripper",
         "liha": "wt.liha",
         "wt.liha": "wt.liha",
+        "fca": "wt.fca",
+        "wt.fca": "wt.fca",
         "mca96": "wt.mca96",
         "mca96head": "wt.mca96",
         "wt.mca96": "wt.mca96",
@@ -2471,10 +3716,55 @@ def _python_build_failure(exc: Exception) -> dict[str, Any]:
 
 
 def _compact(value: dict[str, Any], *, max_text: int = 1200) -> dict[str, Any]:
-    text = json.dumps(value, default=str)
-    if len(text) <= max_text:
-        return value
-    compacted = dict(value)
-    compacted["_truncated"] = True
-    compacted["_summary"] = text[:max_text]
-    return compacted
+    # Previously appended a redundant `_summary` = first 1200 chars of the
+    # SAME serialized dict (plus `_truncated`), which only made large
+    # results bigger and was consumed nowhere. Pass results through
+    # unchanged; real economization happens at the result-construction
+    # sites (lean lookup_workspace, superseded draft echoes).
+    return value
+
+
+def _result_size_summary(value: dict[str, Any]) -> dict[str, Any]:
+    """Compact cardinalities useful for lookup eval reports."""
+    summary: dict[str, Any] = {}
+    for key in (
+        "matches",
+        "recipes",
+        "rules",
+        "modules",
+        "patterns",
+        "positions",
+        "sites",
+        "grip_modes",
+        "stacks",
+        "workspaces",
+    ):
+        item = value.get(key)
+        if isinstance(item, (list, tuple, dict, set)):
+            summary[f"{key}_count"] = len(item)
+    api = value.get("api")
+    if isinstance(api, dict):
+        methods = api.get("methods")
+        recipes = api.get("recipes")
+        if isinstance(methods, (list, tuple)):
+            summary["api_methods_count"] = len(methods)
+        if isinstance(recipes, (list, tuple)):
+            summary["api_recipes_count"] = len(recipes)
+    labware = value.get("labware")
+    if isinstance(labware, dict):
+        if labware.get("name"):
+            summary["labware_name"] = labware.get("name")
+        pipettable = labware.get("pipettable")
+        if isinstance(pipettable, dict) and pipettable.get("well_count") is not None:
+            summary["well_count"] = pipettable.get("well_count")
+    liquid = value.get("liquid_class")
+    if isinstance(liquid, dict) and liquid.get("name"):
+        summary["liquid_class_name"] = liquid.get("name")
+    workspace = value.get("workspace")
+    if isinstance(workspace, dict) and workspace.get("name"):
+        summary["workspace_name"] = workspace.get("name")
+    try:
+        summary["json_bytes"] = len(json.dumps(value, default=str))
+    except TypeError:
+        summary["json_bytes"] = 0
+    return summary

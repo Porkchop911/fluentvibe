@@ -2,9 +2,10 @@
 
 This doc covers the step *after* `fluentvibe compile`: you have a
 `.xscr` file on disk, now you need FluentControl to open it. The
-compile path itself is in [compile-path.md](compile-path.md). This document
-keeps the public review surface to the fluentvibe-facing workflow; local
-reverse-engineering notes are intentionally not included.
+compile path itself is in [compile-path.md](compile-path.md). The
+deeper, format-level reverse-engineering reference lives at
+`C:\Users\Niko\Documents\tecan-fluent-recon\notes\external-script-insertion.md`
+— this doc is the fluentvibe-flavoured pragmatic version.
 
 ## The short version
 
@@ -65,7 +66,7 @@ $newGuid = [guid]::NewGuid().ToString()
 "FILE_GUID=$newGuid"
 
 # 3. Verify the checksum is valid (sanity check — compile already does this).
-# If fluentcontrol_core is not installed, install or expose it in your own env.
+$env:PYTHONPATH = "D:\python\fluentcontrol_core"
 python -c "from fluentcontrol_core.checksum import inspect_checksum; import json; print(json.dumps(inspect_checksum('D:/staging/build.xscr'), indent=2))"
 
 # 4. Drop into the datastore under the new GUID.
@@ -126,7 +127,8 @@ Then launch FC and check the script tree.
 ## Path B — shell-patch (fast iteration)
 
 `fluentvibe.authoring.fluentcontrol_shell` keeps a long-lived UserSpecific
-"shell" script (configured by path/GUID in local settings) and rewrites
+"shell" script (default GUID
+`b010c60d-813d-40cf-848a-584d0432f789`, name `shell`) and rewrites
 *just the payload region* of that file in place. The shell GUID and
 `<ObjectName>` never change, so FC continues to see the same single
 entry — but its contents are now your latest compile output.
@@ -186,20 +188,20 @@ When *not* to use it:
 | Two entries with the same name in the tree | Cloned without renaming `<ObjectName>` | Edit `<ObjectName>`, re-checksum, re-copy |
 | Editor opens but shows red dot / InfoPad errors | Semantic context-check fail (separate problem) | Use `fluentcontrol_shell.run_shell_validation` to capture errors; iterate the source `.py` |
 
-## Demonstrated shape
+## Demonstrated example
 
-The clone path has this shape when copying an existing script under a new GUID
-and `<ObjectName>`:
+Recorded 2026-05-06 — cloned the local `husk` script under a new
+GUID + new `<ObjectName>`:
 
 | Field | Value |
 |---|---|
-| Source | `C:\ProgramData\...\UserSpecific\<source-guid>.xscr` |
-| Target filename | `C:\ProgramData\...\UserSpecific\<new-guid>.xscr` |
-| `<ObjectName>` | `<new-script-name>` |
-| Workspace ref | Existing workspace GUID/name kept |
-| New `<VxWorkspaceDelta><Identifier>` | Fresh GUID |
-| Final `<Checksum>` | Recomputed checksum |
-| Result | Loads in FC under the configured script group/name |
+| Source | `C:\ProgramData\...\UserSpecific\22a8f467-...e22b1b3.xscr` (`husk`) |
+| Target filename | `C:\ProgramData\...\UserSpecific\e90b5499-...d5e556670da5.xscr` |
+| `<ObjectName>` | `husk_copy` |
+| Workspace ref | `32293230-0b9c-4069-ab50-7d393b3ddcb6` / `SAT_Fluent_780_Rev4_Bender_v1` (kept) |
+| New `<VxWorkspaceDelta><Identifier>` | `abb23d25-07e8-4c10-b95d-7cf93478f813` |
+| Final `<Checksum>` | `0AA13B4A41ACD735534D9E2BFF5567C3` |
+| Result | Loads in FC under `Sandbox\Niko\husk_copy` |
 
 Same procedure works for any compiled fluentvibe output — the only
 difference when cloning a hand-authored source is that `fluentvibe
@@ -214,5 +216,7 @@ skip the recompute step unless you edit afterwards.
 - [cli.md](cli.md) — `fluentvibe compile` command surface
 - `fluentvibe/authoring/fluentcontrol_shell.py` — shell-patch + UI
   validation entry points
-- Local FluentControl notes and checksum helpers are intentionally not part of
-  the public review surface.
+- `C:\Users\Niko\Documents\tecan-fluent-recon\notes\external-script-insertion.md`
+  — deeper format reference and reverse-engineering context
+- `D:\python\fluentcontrol_core\fluentcontrol_core\checksum.py` —
+  the checksum tool wrapper

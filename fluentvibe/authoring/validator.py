@@ -159,16 +159,18 @@ class AuthoringValidator:
         )
 
     def _check_contract(self, source: str) -> str | None:
+        uses_worklist = ".worklist(" in source or ".load_worklist(" in source
         required_snippets = (
             "def build_worktable() -> Worktable:",
             "Worktable.from_workspace(",
             "workspace_guid=",
             "auto_place=False",
-            "wt.place(",
         )
         for snippet in required_snippets:
             if snippet not in source:
                 return f"Generated source is missing required contract snippet {snippet!r}."
+        if not uses_worklist and "wt.place(" not in source:
+            return "Generated source is missing required contract snippet 'wt.place('."
         forbidden_snippets = ("raw_xml_step(", "generic_step(")
         for snippet in forbidden_snippets:
             if snippet in source:
@@ -189,6 +191,8 @@ class AuthoringValidator:
             for token in ("transfer", "fill", "dispense", "aspirate", "pipette", "add ")
         )
         if not transfer_intent:
+            return None
+        if ".worklist(" in source or ".load_worklist(" in source:
             return None
         if ".aspirate(" not in source or ".dispense(" not in source:
             return (
@@ -272,6 +276,8 @@ def _check_intent_against_final_labware(
 
 
 def _check_staged_source_contract(source: str) -> str | None:
+    if ".worklist(" in source or ".load_worklist(" in source:
+        return None
     first_group_match = re.search(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source)
     if first_group_match is None:
         return "Generated source must start executable steps with wt.group('Labware Placement')."

@@ -52,7 +52,7 @@ fluentvibe separates the system into three layers, each with one clear job.
        ▼
 [ Protocol IR list ]                         ← list of pydantic Step objects
        │
-       ├── wt.compile(out)  ──▶  XML renderer  ──▶  .xscr (XML for FluentControl)
+       ├── wt.compile(out)  ──▶  vendored renderer  ──▶  .xscr (XML for FluentControl)
        │
        └── wt.simulate()    ──▶  Simulator (walks IR, builds twin, snapshots per step)
                                               │
@@ -70,10 +70,8 @@ Two key separations:
 
 2. **Authoring vs. compilation are decoupled.** `compile()` builds a
    `Protocol` IR object and hands it to the renderer; nothing about
-   authoring touches the XML. The renderer descends from the earlier
-   project-owned fluentdsl implementation and is maintained as package-local
-   code so byte-equal parity is achievable where both support the same
-   protocol.
+   authoring touches the XML. The renderer is the same vendored code that
+   powers fluentdsl, so byte-equal parity is achievable.
 
 ## Resolution flow — `Plate96('Source', catalog='96 Well Flat')`
 
@@ -134,7 +132,7 @@ fluentvibe/catalog/
    ├── indexer.py        ← walk install, infer category, write rows
    ├── inference.py      ← FunctionalGroup + name → category
    ├── xcmp.py           ← .xcmp / .xwsp / .xsit typed parser
-   ├── database.py       ← legacy recipe database and lookup helpers
+   ├── database.py       ← legacy fluentdsl tecan.db (kept, unused by v1.1)
    ├── fc_install.py     ← bridge to fluentcontrol_core (rewrite_checksum etc.)
    └── install_index.db  ← built artifact (one row per ObjectName)
 
@@ -157,10 +155,10 @@ fluentvibe/simulator/
    └── invariants.py     ← physical-invariant exception hierarchy
 
 fluentvibe/ir/
-   └── schema.py         ← Pydantic Protocol + Step types
+   └── schema.py         ← Pydantic Protocol + Step types (vendored from fluentdsl)
 
 fluentvibe/compiler/
-   └── renderer.py       ← Tecan XML renderer
+   └── renderer.py       ← Tecan XML renderer (vendored from fluentdsl)
 
 fluentvibe/_assets/
    ├── templates/*.xml          ← XML wrapping templates
@@ -168,17 +166,17 @@ fluentvibe/_assets/
    └── config/generation.yaml   ← renderer config
 ```
 
-## Implementation provenance
+## Vendored vs. native code
 
 The IR schema, XML renderer, FluentControl install bundle reader, and the
-templates / reference / config under `_assets/` descend from the earlier
-project-owned fluentdsl implementation. They are now maintained as
-package-local fluentvibe code.
+templates / reference / config under `_assets/` are **vendored** from the
+parent `fluentdsl` repo. Two import paths were rewritten in
+`compiler/renderer.py:24-25` and `catalog/database.py:23,2319`; otherwise
+the vendored files are byte-identical to fluentdsl's. Everything outside
+those listed paths is native to fluentvibe.
 
-Tecan/FluentControl-facing reference material is documented separately in
-`NOTICE.md` and `REVIEW_NOTES.md`, because command XML, catalog-derived data,
-workspace names, and generated `.xscr` samples need a more conservative
-provenance audit than ordinary Python source.
+This split makes it cheap to roll a new fluentdsl renderer release into
+fluentvibe — copy the file, keep the two import edits.
 
 See [docs/development.md](development.md) for repo layout, test strategy,
 and known gaps.

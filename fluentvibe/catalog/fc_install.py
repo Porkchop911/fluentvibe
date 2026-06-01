@@ -14,6 +14,7 @@ def _import_core():
         root = Path(__file__).resolve()
         candidates = [
             root.parents[2] / "fluentcontrol_core",
+            Path(r"D:\python\fluentcontrol_core"),
         ]
         for candidate in candidates:
             if not candidate.exists():

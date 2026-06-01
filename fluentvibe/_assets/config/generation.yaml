@@ -89,7 +89,7 @@ grounding_defaults:
     magnet_plate_96: "LV_Alpaqua_A000350"
     waste_reservoir: "300ml SBS"
     reservoir_standard: "25ml_short"
-    reservoir_ethanol: "25ml_short_EtOH"
+    reservoir_ethanol: "100ml"
     fca_tipbox_small: "FCA, 200ul SBS"
     fca_tipbox_large: "FCA, 1000ul SBS"
     mca96_tipbox_small: "MCA96, 100ul, Box"
@@ -98,7 +98,7 @@ grounding_defaults:
   # Platform-level reservoir type overrides by operation name.
   # Volatile solvents need compatible reservoir types.
   reservoir_labware_by_operation:
-    ADD_WASH: "25ml_short_EtOH"
+    ADD_WASH: "100ml"
   layout:
     sample_plate: { location: "Nest61mm_Pos", site: 1 }
     final_plate: { location: "Nest61mm_Pos", site: 2 }
@@ -107,3 +107,36 @@ grounding_defaults:
     waste: { location: "Nest61mm_Pos", site: 5 }
     fca_tips: { location: "Nest61mm_Pos", site: 6 }
     reservoir_start: { location: "WS_100ml_1", site: 1 }
+
+# Narrowed-scope experiment (luis/Stefan forum advice). Curated subset of
+# labware/liquid classes this lab actually uses, plus a pointer to the
+# tutorial-style cheatsheet injected into model context.
+#
+# Activated ONLY when FLUENTVIBE_LAB_SCOPE / --lab-scope is set to
+# `cheatsheet` (inject cheatsheet) or `enforce` (cheatsheet + restrict the
+# labware tools to `labware`/`liquid_classes` below). Default off ⇒ exact
+# 7fa6e88 baseline behavior. `enabled` here is the content-side master
+# switch; the runtime mode still gates whether anything is read.
+lab_scope:
+  enabled: true
+  cheatsheet: "lab_scope.md"
+  labware:
+    - "96_ABgene_SuperPlate_Thermo_AB2800"
+    - "384 Well LowVol LoBase"
+    - "LV_Alpaqua_A000350"
+    - "300ml SBS"
+    - "25ml_short"
+    - "100ml"
+    - "MCA96, 100ul, Box"
+    - "MCA96, 200ul, Box"
+    - "MCA96, 500ul, Box"
+    - "FCA, 200ul SBS"
+    - "FCA, 1000ul SBS"
+  liquid_classes:
+    - "Water Free Single"
+  # `skills` mode (--lab-scope skills): assemble context from a relevant subset
+  # of granular skill files instead of the lab_scope.md/_reference.md monolith.
+  # The labware/liquid_classes whitelist above is shared with this mode.
+  skills:
+    enabled: true
+    dir: "skills"   # relative to _assets/config

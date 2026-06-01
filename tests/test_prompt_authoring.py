@@ -6,6 +6,8 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage
 
 from fluentvibe.authoring import PromptAuthoringService, PromptAuthoringSession
 from fluentvibe.authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
@@ -169,6 +171,20 @@ def test_authoring_lookup_api_returns_supported_methods() -> None:
     assert {"get_tips", "aspirate", "dispense", "mix", "empty_tips", "drop_tips"}.issubset(method_names)
     assert "pick_up" not in method_names
     assert "pick_up" in liha["api"]["forbidden_common_mistakes"]
+
+    fca = tools.lookup_api("wt.fca")
+    assert fca["ok"] is True
+    assert fca["api"]["object"] == "wt.fca"
+    assert fca["api"]["aliased_to"] == "wt.liha"
+    assert "wt.liha" in fca["api"]["note"]
+    fca_alias = tools.lookup_api("fca")
+    assert fca_alias["ok"] is True
+    assert fca_alias["api"]["aliased_to"] == "wt.liha"
+
+    worktable = tools.lookup_api("worktable")
+    assert worktable["ok"] is True
+    worktable_methods = {method["name"] for method in worktable["api"]["methods"]}
+    assert {"worklist", "execute_worklist"}.issubset(worktable_methods)
 
 
 def test_authoring_simulator_tools_return_structured_success_and_failure() -> None:
@@ -469,7 +485,10 @@ def test_present_object_draft_rejects_missing_catalog_and_accepts_grounded_examp
             "label": "Magnet",
             "role": "magnet",
             "python_class": "MagnetRack",
-            "catalog_name": "24 Magnet Plate",
+            # 96-well magnet: must match the 96-well source/dest plate
+            # footprint. A 24-well magnet here is correctly rejected by
+            # _validate_object_draft's plate↔magnet layout consistency check.
+            "catalog_name": "LV_Alpaqua_A000350",
             "location": "Nest61mm_Pos",
             "position": 3,
         },
@@ -812,7 +831,9 @@ def test_simulate_python_draft_enforces_approved_liquid_class_variables() -> Non
 
     result = tools.simulate_python_draft(_valid_draft(), strict=True)
     assert result["ok"] is False
-    assert "must be used through variable" in result["message"]
+    # Hardcoded class string literal is still rejected; any declared
+    # liquid-class variable (not only the one approved name) is accepted.
+    assert "declared liquid-class variable" in result["message"]
 
     variable_draft = (
         _valid_draft()
@@ -871,6 +892,102 @@ def test_simulate_python_draft_enforces_approved_phase_volume_variables() -> Non
     assert result["ok"] is True
 
 
+def test_simulate_python_draft_enforces_trough_fill_volume() -> None:
+    tools = _ground_object_draft_tools("trough_fill_contract")
+    labware = [
+        {
+            "label": "SourceTrough",
+            "role": "source",
+            "python_class": "Trough100mL",
+            "catalog_name": "100ml Trough 156mm",
+            "location": "WS_100ml_1",
+            "position": 1,
+        },
+        {
+            "label": "DestPlate",
+            "role": "destination",
+            "python_class": "Plate96",
+            "catalog_name": "96_ABgene_SuperPlate_Thermo_AB2800",
+            "location": "Nest61mm_Pos",
+            "position": 2,
+        },
+        {
+            "label": "Tips",
+            "role": "fca_tips",
+            "python_class": "FCA1000Box",
+            "catalog_name": "FCA, 1000ul SBS",
+            "location": "Nest61mm_Pos",
+            "position": 6,
+        },
+    ]
+    tools.dispatch("suggest_deck_layout", {"resources": labware})
+    tools.dispatch("plan_protocol_resources", {"phases": [{
+        "phase": "dispense",
+        "source_label": "SourceTrough",
+        "destination_label": "DestPlate",
+        "volume_ul": 200.0,
+        "volume_variable": "WASH_VOLUME_UL",
+        "well_count": 96,
+        "repetitions": 2,
+        "tip_capacity_ul": 1000.0,
+    }]})
+    result = tools.dispatch("present_object_draft", {
+        "protocol_name": "Trough fill contract",
+        "summary": "Trough dispense workflow",
+        "workspace": {"name": "SAT_Fluent_780_Rev3"},
+        "variables": [{"name": "WASH_VOLUME_UL", "default": 200.0, "sim_value": 200.0}],
+        "liquid_classes": [{"name": "Water Free Single"}],
+        "labware": labware,
+    })
+    assert result["ok"] is True
+    tools.approve_pending("objects")
+
+    underfilled_draft = '''"""Trough fill validator fixture."""
+
+from fluentvibe import Worktable, Reagent, Plate96, Trough100mL, FCA1000Box
+
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(
+        "SAT_Fluent_780_Rev3",
+        workspace_guid="291ba293-6361-4f8f-aa8d-7c2643d3f096",
+        auto_place=False,
+        protocol_name="Trough Fill",
+        comment="Trough fill contract fixture",
+    )
+    wt.declare_variable("RunId", "test_run")
+    wt.set_sim_value("RunId", "test_run")
+    wt.declare_variable("WASH_VOLUME_UL", 200.0)
+    wt.set_sim_value("WASH_VOLUME_UL", 200.0)
+    WASH_VOLUME_UL = 200.0
+    water = Reagent("Water")
+    wt.group("Labware Placement")
+    source = wt.place(Trough100mL("SourceTrough", catalog="100ml Trough 156mm"), "WS_100ml_1", 1)
+    dest = wt.place(Plate96("DestPlate", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
+    tips = wt.place(FCA1000Box("Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
+    source.fill_all(water, 1000.0)
+
+    wt.group("Dispense")
+    head = wt.liha
+    head.get_tips(tips)
+    head.aspirate(source, WASH_VOLUME_UL, liquid_class="Water Free Single")
+    head.dispense(dest, WASH_VOLUME_UL, liquid_class="Water Free Single", well_offset=0)
+    head.drop_tips()
+    return wt
+'''
+    result = tools.simulate_python_draft(underfilled_draft, strict=True)
+    assert result["ok"] is False
+    assert "SourceTrough" in result["message"]
+    assert "fill_all" in result["message"]
+
+    sufficient_draft = underfilled_draft.replace(
+        "source.fill_all(water, 1000.0)",
+        "source.fill_all(water, 50000.0)",
+    )
+    result = tools.simulate_python_draft(sufficient_draft, strict=True)
+    assert result["ok"] is True
+
+
 def test_authoring_simulator_tools_return_structured_repair_facts() -> None:
     tools = AuthoringToolRegistry(output_dir=Path("build") / "test_prompt_authoring" / "structured_failures")
 
@@ -920,6 +1037,154 @@ def test_authoring_tools_reject_setup_only_transfer_draft() -> None:
     compile_bad = tools.compile_and_simulate(_setup_only_draft())
     assert compile_bad["ok"] is False
     assert compile_bad["failure_category"] == "python_build_failure"
+
+
+def test_worklist_prompt_intent_accepts_worklist_draft(tmp_path: Path) -> None:
+    gwl = tmp_path / "simple.gwl"
+    gwl.write_text(
+        "A;Smalltrough;;;A1;;5;;;;\n"
+        "D;96wellplate;;;A1;;5;;;;\n"
+        "W;\n",
+        encoding="utf-8",
+    )
+    tools = AuthoringToolRegistry(
+        output_dir=Path("build") / "test_prompt_authoring" / "worklist_intent",
+        current_prompt="Author a simple script that executes this GWL worklist.",
+    )
+
+    draft = f'''"""Simple worklist validator fixture."""
+
+from fluentvibe import Worktable
+
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(
+        "SAT_Fluent_780_Rev4",
+        workspace_guid="2baf8c89-406a-455a-9a91-6378fc41a0a5",
+        auto_place=False,
+        protocol_name="Simple Worklist",
+        comment="execute a small GWL worklist",
+    )
+    wt.group("Worklist")
+    wt.worklist(r"{gwl}", liquid_class="Water Free Single")
+    return wt
+'''
+
+    result = tools.compile_and_simulate(draft)
+    assert result["ok"] is True, result
+    assert result["compile_ok"] is True
+
+
+def test_prompt_generation_simple_worklist_script(tmp_path: Path) -> None:
+    gwl = tmp_path / "simple.gwl"
+    gwl.write_text(
+        "A;Smalltrough;;;A1;;5;;;;\n"
+        "D;96wellplate;;;A1;;5;;;;\n"
+        "W;\n",
+        encoding="utf-8",
+    )
+    generated = f'''```python
+"""Generated simple worklist protocol."""
+
+from fluentvibe import Worktable
+
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(
+        "SAT_Fluent_780_Rev4",
+        workspace_guid="2baf8c89-406a-455a-9a91-6378fc41a0a5",
+        auto_place=False,
+        protocol_name="Simple Worklist",
+        comment="execute a small GWL worklist",
+    )
+    wt.group("Worklist")
+    wt.worklist(r"{gwl}", liquid_class="Water Free Single")
+    return wt
+```'''
+    service = PromptAuthoringService(client=FakeMessagesListChatModel(
+        responses=[AIMessage(content=generated)]
+    ))
+
+    result = service.author(
+        f"Author a very simple worklist script using {gwl}.",
+        output_dir=tmp_path / "authoring",
+        retry_budget=1,
+        lab_scope="enforce",
+    )
+
+    assert result.status == AuthoringStatus.SUCCESS, result.failure_message
+    assert result.generated_code is not None
+    assert ".worklist(" in result.generated_code
+    assert ".aspirate(" not in result.generated_code
+    assert ".dispense(" not in result.generated_code
+    assert result.validation is not None
+    assert result.validation.compile_ok is True
+
+
+def test_simulate_python_draft_defers_intent_check_for_staged_subdraft() -> None:
+    """Staged early-stage drafts must not be rejected by the prompt-intent gate.
+
+    The staged authoring loop instructs the model to submit a Variables +
+    Labware Placement-only first checkpoint. That checkpoint has no
+    aspirate/dispense by design, but the prompt mentions a transfer.
+    `simulate_python_draft` should pass it through; the terminal
+    `compile_and_simulate` still enforces the intent gate via
+    `validator.validate`.
+    """
+    tools = AuthoringToolRegistry(
+        output_dir=Path("build") / "test_prompt_authoring" / "staged_intent_defer",
+        current_prompt="Transfer 20 uL from a trough to every well of a 96 well plate.",
+    )
+
+    plan = tools.declare_protocol_workflow(
+        protocol_name="Staged Transfer",
+        summary="staged transfer",
+        variables=[{"name": "RunId", "default": "test", "sim_value": "test"}],
+        labware=[
+            {"label": "SourcePlate"},
+            {"label": "DestPlate"},
+            {"label": "Tips"},
+        ],
+        groups=[
+            {"name": "Variables", "objective": "declare variables"},
+            {"name": "Labware Placement", "objective": "place labware"},
+            {"name": "Fill Reagents", "objective": "fill sources"},
+            {"name": "Transfer", "objective": "move liquid"},
+        ],
+    )
+    assert plan["ok"] is True
+    assert tools.workflow_plan is not None
+
+    early_staged_draft = '''"""Staged early-stage draft."""
+
+from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
+
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(
+        "SAT_Fluent_780_Rev3",
+        workspace_guid="291ba293-6361-4f8f-aa8d-7c2643d3f096",
+        auto_place=False,
+        protocol_name="Staged Transfer",
+        comment="early staged checkpoint",
+    )
+    wt.declare_variable("RunId", "test_run")
+    wt.set_sim_value("RunId", "test_run")
+    water = Reagent("Water")
+    wt.group("Labware Placement")
+    source = wt.place(Plate96("SourcePlate", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
+    dest = wt.place(Plate96("DestPlate", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
+    tips = wt.place(MCA100Box("Tips", catalog="MCA96, 100ul, Box"), "Nest61mm_Pos", 4)
+    source.fill_all(water, 80.0)
+    return wt
+'''
+
+    sim_staged = tools.simulate_python_draft(early_staged_draft, strict=True)
+    assert sim_staged["ok"] is True, sim_staged
+
+    compile_terminal = tools.compile_and_simulate(early_staged_draft)
+    assert compile_terminal["ok"] is False
+    assert compile_terminal["failure_category"] == "python_build_failure"
 
 
 def test_ask_user_returns_needs_user_sentinel() -> None:
@@ -1152,3 +1417,29 @@ def test_live_lm_manual_protocol_uses_tools_and_simulator() -> None:
     assert "simulate_python_draft" in names
     assert "compile_and_simulate" in names
     assert result.status.value == "success"
+
+
+@pytest.mark.live_lm
+def test_live_lm_simple_worklist_script_generation() -> None:
+    assert _lm_studio_available(), f"LM Studio model {DEFAULT_LM_STUDIO_MODEL!r} is not reachable at {DEFAULT_LM_STUDIO_ENDPOINT}"
+    gwl_path = Path(r"C:\ProgramData\Tecan\VisionX\Worklists\TEMP_Tier6.gwl")
+    if not gwl_path.exists():
+        pytest.skip("local FluentControl worklist example is not installed")
+
+    result = PromptAuthoringService().author(
+        "Author a very simple FluentControl worklist script for workspace SAT_Fluent_780_Rev4 "
+        "with workspace GUID 2baf8c89-406a-455a-9a91-6378fc41a0a5. Use auto_place=False. "
+        f"Use the existing GWL file {gwl_path} with Water Free Single liquid class and "
+        "FCA, 50ul SBS DiTis. Use the fluentvibe worklist DSL: wt.group('Worklist') and "
+        "wt.worklist(...). Do not write individual aspirate or dispense commands.",
+        output_dir=Path("build") / "test_prompt_authoring" / "live_simple_worklist",
+        retry_budget=8,
+    )
+
+    assert result.status.value == "success", result.failure_message
+    assert result.generated_code is not None
+    assert ".worklist(" in result.generated_code
+    assert ".aspirate(" not in result.generated_code
+    assert ".dispense(" not in result.generated_code
+    assert result.validation is not None
+    assert result.validation.compile_ok is True

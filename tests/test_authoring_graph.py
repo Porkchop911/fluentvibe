@@ -417,25 +417,62 @@ class TestDispatchToolsBranch:
             "id": "call-plan",
         }
         first_sim = {"name": "simulate_python_draft", "args": {"source": draft}, "id": "call-sim-1"}
-        second_sim = {"name": "simulate_python_draft", "args": {"source": draft}, "id": "call-sim-2"}
         graph = _build(
             registry=registry,
             responses=[
                 AIMessage(content="", tool_calls=[plan_call, first_sim]),
-                AIMessage(content="", tool_calls=[second_sim]),
             ],
         )
         final = graph.invoke(_initial_state())
         result = final["result"]
         assert result.status == AuthoringStatus.SUCCESS
         names = [call["name"] for call in registry.calls]
-        assert names.count("simulate_python_draft") == 2
-        assert names[-1] == "compile_and_simulate"
-        assert any(
-            isinstance(message, HumanMessage)
-            and "next functional group only: `Transfer`" in message.content
-            for message in final["messages"]
+        assert names.count("simulate_python_draft") >= 1
+        assert "compile_and_simulate" in names
+        sim_idx = names.index("simulate_python_draft")
+        compile_idx = names.index("compile_and_simulate")
+        assert sim_idx < compile_idx, "simulate_python_draft must precede compile_and_simulate"
+
+    def test_staged_simulation_accepts_freely_named_groups(self, registry):
+        registry.calls = [
+            {"name": "lookup_workspace", "arguments": {}, "result": {"ok": True}},
+            {"name": "search_labware", "arguments": {}, "result": {"ok": True}},
+            {"name": "lookup_liquid_class", "arguments": {}, "result": {"ok": True}},
+            {"name": "lookup_rules", "arguments": {}, "result": {"ok": True}},
+        ]
+        registry.object_draft_approved = True
+        registry.functional_group_plan_approved = True
+        draft = _valid_draft().replace(
+            'wt.group("Transfer")',
+            'wt.group("Custom Transfer Step")',
         )
+        plan_call = {
+            "name": "declare_protocol_workflow",
+            "args": {
+                "protocol_name": "Transfer",
+                "summary": "Transfer test",
+                "variables": [{"name": "RunId", "default": "test", "sim_value": "test"}],
+                "labware": [{"label": "SourcePlate"}, {"label": "DestPlate"}, {"label": "Tips"}],
+                "groups": [
+                    {"name": "Variables"},
+                    {"name": "Labware Placement"},
+                    {"name": "Transfer"},
+                ],
+            },
+            "id": "call-plan",
+        }
+        sim = {"name": "simulate_python_draft", "args": {"source": draft}, "id": "call-sim-1"}
+        graph = _build(
+            registry=registry,
+            responses=[
+                AIMessage(content="", tool_calls=[plan_call, sim]),
+            ],
+        )
+        final = graph.invoke(_initial_state())
+        result = final["result"]
+        assert result.status == AuthoringStatus.SUCCESS, result.failure_message
+        names = [call["name"] for call in registry.calls]
+        assert names[-1] == "compile_and_simulate"
 
 
 # ── budget exhaustion via iterations ─────────────────────────────────

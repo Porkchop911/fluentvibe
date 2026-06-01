@@ -18,8 +18,8 @@ that FluentControl can load. It's intentionally narrow:
 
 ## IR — `fluentvibe/ir/schema.py`
 
-The IR is a tree of Pydantic models that descends from the earlier
-project-owned fluentdsl implementation. The outer shape:
+The IR is a tree of Pydantic models, vendored from fluentdsl. The outer
+shape:
 
 ```python
 class Protocol(BaseModel):
@@ -89,9 +89,9 @@ Notes:
 
 ## Renderer — `fluentvibe/compiler/renderer.py`
 
-The package-local renderer descends from the earlier project-owned fluentdsl
-implementation. Asset paths point inside the package
-(`renderer.py:134-138`, `renderer.py:177`).
+A vendored copy of fluentdsl's renderer. Two import paths were rewritten
+(`renderer.py:24-25`); asset paths point inside the package
+(`renderer.py:134-138`, `renderer.py:177`); otherwise unchanged.
 
 ### Entry point
 
@@ -205,9 +205,8 @@ that one GUID.
 
 The parity test (`tests/test_simple_transfer_parity.py:57`) normalizes
 that GUID before byte-comparing two outputs. The test confirms that
-identical IR renders to identical XML modulo the random GUID, between
-fluentvibe and the earlier fluentdsl implementation running on the same
-protocol.
+identical IR → identical XML modulo the random GUID, between fluentvibe and
+the upstream fluentdsl renderer running on the same protocol.
 
 ## Generated XML — annotated outline
 

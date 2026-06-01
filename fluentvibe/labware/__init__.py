@@ -12,7 +12,7 @@ v1.1 hierarchy (10 behavioral families):
 """
 
 from .base import (
-    ExternalLabware, Labware, Layer, Well,
+    ExternalLabware, Labware, Layer, Well, BeadPhase,
     CatalogIndexMissing,
 )
 from .plates import Plate, Plate96, Plate96Deep, Plate384
@@ -24,7 +24,7 @@ from .tuberack import TubeRack
 from .deckitems import WashStation, WasteChute, Hotel, FixedDeck
 
 __all__ = [
-    "Labware", "ExternalLabware", "Layer", "Well", "CatalogIndexMissing",
+    "Labware", "ExternalLabware", "Layer", "Well", "BeadPhase", "CatalogIndexMissing",
     "Plate", "Plate96", "Plate96Deep", "Plate384",
     "Trough", "Trough25mL", "Trough100mL", "Waste",
     "TipBox", "MCA100Box", "MCA200Box", "MCA500Box", "FCA50Box", "FCA200Box", "FCA1000Box",

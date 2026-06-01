@@ -1,0 +1,202 @@
+# Work packages: one per Opentrons protocol type.
+#
+# Each entry is a self-contained unit of work an agent can execute on its own by
+# following SOP.md. Source dirs are under D:\Opentron_protocols.
+#
+# Fields:
+#   id                 short package id
+#   target             skill path under fluentvibe/_assets/config/skills/
+#   mode               create | enhance
+#   axis               api | deck | family  (MUST equal the target's folder)
+#   scope              now            -> authorable within current capabilities
+#                      needs-extension -> liquid-handling skeleton only until the
+#                                         named capability-roadmap phase lands
+#   sources            2-4 representative protocol dirs (read whole)
+#   extract            the patterns/variables to pull into the skill
+#   whitelist_additions  approved catalog names to resolve+add, or []
+#   capability_notes   how to handle features fluentvibe can't do
+#   acceptance_prompt  the prompt to drive the end-to-end validation run
+#   expects_skill      the skill name the pre-pass should select for that prompt
+#   priority           1 (highest) .. 3
+
+packages:
+  - id: bead-cleanup
+    target: family/family-bead-cleanup-ampure.md
+    mode: enhance
+    axis: family
+    scope: now
+    sources:
+      - D:\Opentron_protocols\ampure-xp-48x
+      - D:\Opentron_protocols\spri-beads-dna-extraction
+    extract: [bead-ratio -> derived bead volume, resuspension mix technique,
+              ethanol wash volume + count as variables, air-dry wait]
+    whitelist_additions: []          # deep-well 2ml is a candidate; not required for the skill
+    capability_notes: "heater-shaker incubation -> wt.wait; magnet via gripper + roles"
+    acceptance_prompt: "AMPure XP cleanup of a 96-well plate, 1.8x beads, two ethanol washes, elute 25 uL"
+    expects_skill: family-bead-cleanup-ampure
+    priority: 1                       # DONE (worked example)
+
+  - id: protein-assay
+    target: family/family-protein-assay.md
+    mode: create
+    axis: family
+    scope: now
+    sources:
+      - D:\Opentron_protocols\bca_protein_assay
+      - D:\Opentron_protocols\bradford_protein_assay
+    extract: [working-reagent add (200 uL/well), sample plating in replicate,
+              optional 2-fold standard-curve dilution, mix, 37C incubation wait]
+    whitelist_additions: []
+    capability_notes: "37C heater-shaker/temp incubation -> wt.wait; plate read -> add_comment (off-deck)"
+    acceptance_prompt: "BCA protein assay: standard curve plus sample plating, add working reagent, mix, incubate"
+    expects_skill: family-protein-assay
+    priority: 1                       # DONE (worked example)
+
+  - id: reagent-distribution
+    target: family/family-reagent-distribution.md
+    mode: create
+    axis: family
+    scope: now
+    sources:
+      - D:\Opentron_protocols\broth_dispense
+      - D:\Opentron_protocols\lb-distribution-for-sterile-transfer
+    extract: [bulk reservoir->plate fill, fixed per-well volume, tip-reuse vs
+              fresh-tip column, variable plate/column count]
+    whitelist_additions: []
+    capability_notes: "manual inoculation pause -> add_comment; incubation off-deck"
+    acceptance_prompt: "Distribute 200 uL of broth from a trough into every well of a 96-well plate"
+    expects_skill: family-reagent-distribution
+    priority: 1                       # DONE (worked example)
+
+  - id: serial-dilution
+    target: family/family-serial-dilution.md
+    mode: enhance
+    axis: family
+    scope: now
+    sources:
+      - D:\Opentron_protocols\customizable_serial_dilution_flex
+    extract: [dilution factor + number of points as variables, diluent prefill,
+              total-volume conservation, blank column]
+    whitelist_additions: []
+    capability_notes: "all liquid-handling; no modules"
+    acceptance_prompt: "Customizable serial dilution, 3-fold, 8 points, across a 96-well plate"
+    expects_skill: family-serial-dilution
+    priority: 2
+
+  - id: normalization
+    target: family/family-normalize-to-target.md
+    mode: enhance
+    axis: family
+    scope: now                      # worklists deliver per-well volumes (api-worklists)
+    sources:
+      - D:\Opentron_protocols\bca_normalization_from_csv
+      - D:\Opentron_protocols\dna-normalization-flex-pipettes
+    extract: [CSV-driven per-well buffer volume, target concentration model]
+    whitelist_additions: []
+    capability_notes: "per-well buffer volumes -> wt.worklist(csv) (api-worklists); simulator validates but does not walk worklist volumes"
+    acceptance_prompt: "Normalize a 96-well plate to a target by adding buffer per well"
+    expects_skill: family-normalize-to-target
+    priority: 2
+
+  - id: cherrypicking
+    target: family/family-cherrypicking.md
+    mode: create
+    axis: family
+    scope: now                      # worklists deliver CSV pick lists (api-worklists)
+    sources:
+      - D:\Opentron_protocols\cherrypicking
+      - D:\Opentron_protocols\cherrypicking_custom_csv
+    extract: [CSV source/dest/volume rows, dynamic labware, tip-reuse strategy]
+    whitelist_additions: []
+    capability_notes: "CSV source/dest/volume pick list -> wt.worklist(csv) (api-worklists); per-record volume is native"
+    acceptance_prompt: "Cherrypick samples between two 96-well plates from a pick list"
+    expects_skill: family-cherrypicking
+    priority: 3
+
+  - id: pcr-setup
+    target: family/family-pcr-setup.md
+    mode: create
+    axis: family
+    scope: needs-extension          # P4 thermocycler; liquid-handling skeleton now
+    sources:
+      - D:\Opentron_protocols\bms-pcr
+      - D:\Opentron_protocols\pcr-prep
+    extract: [water + DNA + mastermix plating from CSV, mastermix from cold tube,
+              thermocycler program]
+    whitelist_additions: ["PCR full-skirt 96 plate", "cold tube rack"]   # resolve catalog names
+    capability_notes: "thermocycler -> wt.add_comment + off-deck; reagent cooling not modelled"
+    acceptance_prompt: "PCR setup: dispense water, DNA, and mastermix into a 96-well PCR plate"
+    expects_skill: family-pcr-setup
+    priority: 3
+
+  - id: ngs-library-prep
+    target: family/family-ngs-library-prep.md
+    mode: create
+    axis: family
+    scope: needs-extension          # P3/P4 modules; multi-part with bead cleanup
+    sources:
+      - D:\Opentron_protocols\illumina-nextera-xt-library-prep-part1
+      - D:\Opentron_protocols\illumina-dna-prep-48x
+    extract: [tagmentation/amplification plating, multi-part structure, bead size-selection]
+    whitelist_additions: ["PCR full-skirt 96 plate"]
+    capability_notes: "reuses bead-cleanup + magnetization skills; thermocycler/HS via waits/comments"
+    acceptance_prompt: "Illumina Nextera XT library prep part 1: tagment and amplify in a 96-well plate"
+    expects_skill: family-ngs-library-prep
+    priority: 3
+
+  - id: cell-seeding
+    target: family/family-cell-seeding.md
+    mode: create
+    axis: family
+    scope: needs-extension          # air-gap/gentle handling; 6/12/24-well plates
+    sources:
+      - D:\Opentron_protocols\cell_seeding_up_to_4
+    extract: [cell-suspension mixing, fixed volume per well, multi-plate-type, air gap]
+    whitelist_additions: ["6/12/24-well culture plate", "15/50 mL tube rack"]
+    capability_notes: "air-gap not exposed; low-volume plate types need whitelist + catalog names"
+    acceptance_prompt: "Seed cells from a stock tube into the wells of a culture plate"
+    expects_skill: family-cell-seeding
+    priority: 3
+
+  - id: elisa
+    target: family/family-elisa.md
+    mode: create
+    axis: family
+    scope: needs-extension          # P2 incubation/wash cycles
+    sources:
+      - D:\Opentron_protocols\invitrogen_elisa_targetcapture
+      - D:\Opentron_protocols\invitrogen_elisa_signaldevelopment
+    extract: [coat/capture/wash/develop steps, repeated wash cycles, long incubations]
+    whitelist_additions: []
+    capability_notes: "multi-hour incubations -> wt.wait; wash cycles via wt.loop"
+    acceptance_prompt: "ELISA wash and signal development on a 96-well plate"
+    expects_skill: family-elisa
+    priority: 3
+
+  - id: purification
+    target: family/family-purification.md
+    mode: create
+    axis: family
+    scope: needs-extension          # resin/column labware
+    sources:
+      - D:\Opentron_protocols\c18_peptide_purification
+    extract: [load/wash/elute over a resin or filter, sequential buffers]
+    whitelist_additions: ["filter/resin plate"]
+    capability_notes: "resin/column labware needs whitelist + catalog names"
+    acceptance_prompt: "C18 peptide purification: load, wash, elute over a filter plate"
+    expects_skill: family-purification
+    priority: 3
+
+  - id: pooling
+    target: family/family-pooling.md
+    mode: create
+    axis: family
+    scope: now                      # worklists deliver volume-equalized pooling (api-worklists)
+    sources:
+      - D:\Opentron_protocols\seqwell-expressplex-pooling
+    extract: [pool from many wells into few, optional volume equalization]
+    whitelist_additions: []
+    capability_notes: "volume-equalized (per-well) pooling -> wt.worklist(csv) (api-worklists); fixed-volume pooling via scalar loop"
+    acceptance_prompt: "Pool equal volumes from all columns of a 96-well plate into a single tube"
+    expects_skill: family-pooling
+    priority: 3

@@ -14,13 +14,23 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .catalog import DEFAULT_INDEX_PATH, open_index
+from .catalog import DEFAULT_INDEX_PATH, INDEX_SCHEMA_VERSION, open_index
 from .inference import component_taxonomy, infer_category
-from .xcmp import load_xcmp, load_xwsp
+from .xcmp import load_xcmp, load_xwsp, site_footprint
+
+
+# FluentControl appends a positional suffix like "[001]" to placed labware
+# names. Strip it so workspace_components rows join cleanly to components.name.
+_POSITION_SUFFIX = re.compile(r"\[\d+\]\s*$")
+
+
+def _canonical_catalog_name(label: str) -> str:
+    return _POSITION_SUFFIX.sub("", label).strip()
 
 
 DEFAULT_INSTALL_PATH = Path(r"C:\ProgramData\Tecan\VisionX\Database")
@@ -59,6 +69,7 @@ def build_index(
 
     counts: dict[str, int] = {
         "components": 0, "workspaces": 0, "sites": 0, "liquid_classes": 0,
+        "component_sites": 0, "workspace_components": 0, "liquid_class_heads": 0,
     }
     per_category: dict[str, int] = {}
 
@@ -68,11 +79,14 @@ def build_index(
         # Drop and rebuild — idempotent, simpler than upserts.
         conn.executescript(
             "DELETE FROM components; DELETE FROM workspaces; DELETE FROM sites; "
-            "DELETE FROM liquid_classes; DELETE FROM install;"
+            "DELETE FROM liquid_classes; DELETE FROM install; "
+            "DELETE FROM component_sites; DELETE FROM workspace_components; "
+            "DELETE FROM liquid_class_heads;"
         )
 
         # ── Components ────────────────────────────────────────────
         component_rows: list[tuple] = []
+        component_site_rows: list[tuple] = []
         for path in components_dir.glob("*.xcmp"):
             try:
                 comp = load_xcmp(path)
@@ -86,6 +100,8 @@ def build_index(
             site_count = comp.arrangement.site_count if comp.arrangement else None
             functional_group, component_kind, component_subtype = component_taxonomy(comp.functional_group)
 
+            grip_modes_serialized = _serialize_grip_modes(comp)
+
             component_rows.append((
                 comp.guid,
                 comp.name,
@@ -97,28 +113,68 @@ def build_index(
                 functional_group,
                 component_kind,
                 component_subtype,
+                comp.footprint,
+                int(comp.is_lid),
+                comp.renderer,
+                grip_modes_serialized,
             ))
+
+            if comp.arrangement is not None and comp.arrangement.site_count > 0:
+                # XcmpArrangement keys are 0-based; FC convention is 1-based.
+                for zero in range(comp.arrangement.site_count):
+                    one_based = zero + 1
+                    modes = comp.arrangement.allowed_grip_modes.get(zero, ())
+                    component_site_rows.append((
+                        comp.guid,
+                        one_based,
+                        site_footprint(comp, zero),
+                        json.dumps(list(modes)) if modes else None,
+                    ))
 
         if component_rows:
             conn.executemany(
                 """INSERT OR REPLACE INTO components
                    (guid, name, category, file_path, grid_x, grid_y,
                     dim_x_mm, dim_y_mm, dim_z_mm, site_count,
-                    functional_group, component_kind, component_subtype)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    functional_group, component_kind, component_subtype,
+                    footprint, is_lid, renderer, allowed_grip_modes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 component_rows,
             )
             counts["components"] = len(component_rows)
 
+        if component_site_rows:
+            conn.executemany(
+                """INSERT OR REPLACE INTO component_sites
+                   (component_guid, site_index, footprint, grip_modes)
+                   VALUES (?, ?, ?, ?)""",
+                component_site_rows,
+            )
+            counts["component_sites"] = len(component_site_rows)
+
         # ── Workspaces ────────────────────────────────────────────
         if workspaces_dir.exists():
             workspace_rows: list[tuple] = []
+            workspace_component_rows: list[tuple] = []
             for path in sorted(workspaces_dir.glob("*.xwsp")):
                 try:
                     ws = load_xwsp(path)
                 except Exception:
                     continue
                 workspace_rows.append((ws.guid, ws.name, str(ws.file_path)))
+                for occ in ws.occupants:
+                    if not occ.catalog_name:
+                        continue
+                    canonical = _canonical_catalog_name(occ.catalog_name)
+                    if not canonical:
+                        continue
+                    site_path_str = "/".join(str(s) for s in occ.site_path)
+                    workspace_component_rows.append((
+                        ws.guid,
+                        canonical,
+                        site_path_str,
+                        occ.base_location_identifier,
+                    ))
             if workspace_rows:
                 conn.executemany(
                     "INSERT OR REPLACE INTO workspaces (guid, name, file_path) VALUES (?, ?, ?)",
@@ -133,6 +189,14 @@ def build_index(
                         "Check workspace GUID extraction for collisions."
                     )
                 counts["workspaces"] = workspace_count
+            if workspace_component_rows:
+                conn.executemany(
+                    """INSERT OR REPLACE INTO workspace_components
+                       (workspace_guid, component_name, site_path, base_location)
+                       VALUES (?, ?, ?, ?)""",
+                    workspace_component_rows,
+                )
+                counts["workspace_components"] = len(workspace_component_rows)
 
         # ── Sites (lightweight: just guid + path) ─────────────────
         if sites_dir.exists():
@@ -151,6 +215,7 @@ def build_index(
             from .xlqc import load_xlqc
 
             liquid_class_rows: list[tuple] = []
+            liquid_class_head_rows: list[tuple] = []
             for path in liquid_classes_dir.glob("*.xlqc"):
                 try:
                     lc = load_xlqc(path)
@@ -163,6 +228,11 @@ def build_index(
                     json.dumps(list(lc.supported_heads)),
                     str(lc.file_path),
                 ))
+                seen_heads: set[str] = set()
+                for head in lc.supported_heads:
+                    if head and head not in seen_heads:
+                        liquid_class_head_rows.append((lc.guid, head))
+                        seen_heads.add(head)
             if liquid_class_rows:
                 conn.executemany(
                     "INSERT OR REPLACE INTO liquid_classes "
@@ -170,16 +240,42 @@ def build_index(
                     liquid_class_rows,
                 )
                 counts["liquid_classes"] = len(liquid_class_rows)
+            if liquid_class_head_rows:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO liquid_class_heads "
+                    "(liquid_class_guid, head) VALUES (?, ?)",
+                    liquid_class_head_rows,
+                )
+                counts["liquid_class_heads"] = len(liquid_class_head_rows)
 
-        # ── Install fingerprint ──────────────────────────────────
+        # ── Install fingerprint + schema version ─────────────────
         conn.execute(
-            "INSERT INTO install (install_path, fingerprint, built_at) VALUES (?, ?, ?)",
-            (str(install), fingerprint, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            """INSERT INTO install
+               (install_path, fingerprint, built_at, schema_version)
+               VALUES (?, ?, ?, ?)""",
+            (
+                str(install),
+                fingerprint,
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                INDEX_SCHEMA_VERSION,
+            ),
         )
         conn.commit()
 
     counts.update(per_category)
     return counts
+
+
+def _serialize_grip_modes(comp) -> Optional[str]:
+    """JSON-serialize a component's allowed grip modes keyed by 1-based site idx."""
+    if comp.arrangement is None or not comp.arrangement.allowed_grip_modes:
+        return None
+    out: dict[str, list[str]] = {}
+    for zero, modes in comp.arrangement.allowed_grip_modes.items():
+        if not modes:
+            continue
+        out[str(zero + 1)] = list(modes)
+    return json.dumps(out) if out else None
 
 
 def _component_grid(comp) -> tuple[Optional[int], Optional[int]]:
