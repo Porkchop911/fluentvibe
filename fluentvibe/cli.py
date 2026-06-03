@@ -151,6 +151,14 @@ def main(argv: Optional[list[str]] = None) -> int:
                              "(env FLUENTVIBE_LAB_SCOPE)")
     p_chat.set_defaults(func=_cmd_chat)
 
+    p_workspace_app = sub.add_parser(
+        "workspace-app",
+        help="start the local workspace setup helper web UI",
+    )
+    p_workspace_app.add_argument("--host", default="127.0.0.1")
+    p_workspace_app.add_argument("--port", type=int, default=8765)
+    p_workspace_app.set_defaults(func=_cmd_workspace_app)
+
     p_deploy = sub.add_parser(
         "deploy",
         help="copy a compiled .xscr into the FluentControl UserSpecific datastore",
@@ -498,6 +506,13 @@ def _run_fc_gate(session, xscr_path: Path, *, datastore_dir: Optional[Path],
     print(f"FC gate: deployed to {deploy.deployed_path}")
     print(f"  ObjectName: {deploy.object_name}")
     print(f"  Checksum:   {deploy.checksum}")
+    return 0
+
+
+def _cmd_workspace_app(args) -> int:
+    from .workspace_app import serve_workspace_app
+
+    serve_workspace_app(host=args.host, port=args.port)
     return 0
 
 

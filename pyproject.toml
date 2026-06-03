@@ -36,6 +36,7 @@ fluentvibe = [
   "_assets/reference/*.txt",
   "_assets/config/*.yaml",
   "catalog/*.db",
+  "workspace_app/static/*.html",
 ]
 
 [tool.setuptools.packages.find]

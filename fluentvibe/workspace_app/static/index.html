@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fluentvibe Workspace Setup</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --panel: #fff;
+      --line: #d8dee6;
+      --text: #1f2933;
+      --muted: #697586;
+      --accent: #1667c7;
+      --accent-soft: #e8f1ff;
+      --bad: #b42318;
+      --deck: #e7ebef;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    h1 { font-size: 18px; margin: 0; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
+      gap: 16px;
+      padding: 16px;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    h2 { font-size: 15px; margin: 0 0 12px; }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 4px;
+    }
+    input, select, button {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font: inherit;
+      background: #fff;
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #b7d4f8;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .muted { color: var(--muted); }
+    .error { color: var(--bad); white-space: pre-wrap; }
+    .status { margin-top: 12px; min-height: 20px; }
+    .chooser {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      align-items: end;
+    }
+    .common-list { display: grid; gap: 8px; margin-top: 12px; }
+    .common-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfcfd;
+      display: grid;
+      gap: 8px;
+    }
+    .common-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .common-title { font-weight: 700; overflow-wrap: anywhere; }
+    .common-meta { font-size: 12px; color: var(--muted); }
+    .mini {
+      width: auto;
+      min-height: 28px;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+    .pref-grid {
+      display: grid;
+      grid-template-columns: 1fr 90px;
+      gap: 8px;
+    }
+    .deck-wrap {
+      display: grid;
+      gap: 12px;
+    }
+    .deck-map {
+      position: relative;
+      min-height: 640px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--deck);
+      overflow: auto;
+      padding: 0;
+    }
+    .deck-canvas {
+      position: relative;
+      min-width: 100%;
+      min-height: 620px;
+      background:
+        linear-gradient(to bottom, rgba(255,255,255,.45), rgba(255,255,255,.18)),
+        var(--deck);
+    }
+    .deck-label {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255,255,255,.78);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      z-index: 4;
+    }
+    .deck-frame {
+      position: absolute;
+      border: 2px solid #8c98a6;
+      background: rgba(255,255,255,.22);
+      box-shadow: inset 0 -18px 0 rgba(255,255,255,.44);
+    }
+    .grid-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: rgba(91, 105, 121, .26);
+      z-index: 1;
+    }
+    .grid-label {
+      position: absolute;
+      bottom: 2px;
+      transform: translateX(-50%);
+      color: #718096;
+      font-size: 10px;
+      z-index: 2;
+    }
+    .segment-band {
+      position: absolute;
+      border: 1px dashed rgba(91, 105, 121, .35);
+      background: rgba(255,255,255,.16);
+      z-index: 1;
+    }
+    .segment-label {
+      position: absolute;
+      left: 4px;
+      top: 3px;
+      color: #5f6f82;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .carrier {
+      min-height: 170px;
+      border: 2px solid #aeb8c3;
+      border-radius: 8px;
+      background: rgba(255,255,255,.58);
+      padding: 8px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 8px;
+    }
+    .carrier-title {
+      font-weight: 800;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .carrier-meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .carrier-sites {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+      gap: 6px;
+      align-content: start;
+    }
+    .slot {
+      position: absolute;
+      min-width: 46px;
+      min-height: 34px;
+      border: 1px solid #b9c2cc;
+      border-radius: 5px;
+      padding: 4px 5px;
+      background: rgba(255,255,255,.94);
+      box-shadow: 0 1px 2px rgba(31,41,51,.08);
+      font-size: 10px;
+      overflow: hidden;
+      z-index: 3;
+    }
+    .slot.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 2px rgba(22,103,199,.16);
+    }
+    .slot .pos { font-weight: 800; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .slot .small { color: var(--muted); overflow-wrap: anywhere; }
+    .slot.compact .small.coords { display: none; }
+    .badge {
+      display: inline-block;
+      margin-top: 5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #dcecff;
+      color: #114c91;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .location h3 { margin: 0 0 8px; font-size: 13px; }
+    .slots-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+    }
+    @media (max-width: 950px) {
+      main { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .deck-map { min-height: 460px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>fluentvibe Workspace Setup</h1>
+    <div class="muted" id="workspaceSummary">Select a workspace to begin.</div>
+  </header>
+  <main>
+    <div>
+      <section>
+        <h2>Workspace</h2>
+        <label for="profileName">Profile name</label>
+        <input id="profileName" value="sat_780_default">
+        <label for="configurationSelect">Instrument configuration</label>
+        <select id="configurationSelect"></select>
+        <div class="common-meta" id="configurationSummary"></div>
+        <label for="workspaceSelect">Workspace deck layout</label>
+        <select id="workspaceSelect"></select>
+        <div class="actions">
+          <button id="loadWorkspace">Load</button>
+          <button id="suggestCommon" class="secondary" disabled>Use defaults</button>
+        </div>
+      </section>
+
+      <section style="margin-top: 16px;">
+        <h2>Commonly Used Labware</h2>
+        <div class="chooser">
+          <div>
+            <label for="categorySelect">Category</label>
+            <select id="categorySelect"></select>
+          </div>
+          <div>
+            <label for="labwareSearch">Search</label>
+            <input id="labwareSearch" placeholder="96, MCA, trough...">
+          </div>
+        </div>
+        <label for="labwareSelect">Available labware</label>
+        <select id="labwareSelect"></select>
+        <button id="addLabware" class="secondary" style="margin-top: 8px;" disabled>Add to common list</button>
+        <div class="common-list" id="commonList"></div>
+        <label for="liquidClass">Default liquid class</label>
+        <select id="liquidClass"></select>
+        <button id="saveProfile" style="margin-top: 12px;" disabled>Save profile</button>
+        <div class="status" id="status"></div>
+      </section>
+    </div>
+
+    <section>
+      <h2>Worktable Layout</h2>
+      <div class="deck-wrap">
+        <div class="deck-map" id="deckMap">
+          <div class="deck-label">Workspace XY coordinates from FluentControl data</div>
+        </div>
+        <div id="slotGroups"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      workspace: null,
+      configuration: null,
+      positions: [],
+      deckCoordinates: [],
+      deckFrame: {},
+      workspaceSource: null,
+      deckBlocks: [],
+      commonLabware: [],
+      categories: [],
+      labwareOptions: [],
+      liquidClasses: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.message || 'Request failed');
+      return data;
+    }
+
+    function setStatus(text, error=false) {
+      $('status').className = error ? 'status error' : 'status muted';
+      $('status').textContent = text || '';
+    }
+
+    async function init() {
+      try {
+        const [configs, workspaces, liquidClasses] = await Promise.all([
+          api('/api/configurations'),
+          api('/api/workspaces'),
+          api('/api/liquid-classes')
+        ]);
+        $('configurationSelect').innerHTML = configs.configurations.map(c =>
+          `<option value="${escapeHtml(c.guid)}"${c.guid === configs.preferred_guid ? ' selected' : ''}>${escapeHtml(c.name)} (${escapeHtml(c.serial_number || 'template')})</option>`
+        ).join('');
+        $('workspaceSelect').innerHTML = workspaces.workspaces.map(w =>
+          `<option value="${escapeHtml(w.guid)}">${escapeHtml(w.name)}</option>`
+        ).join('');
+        state.liquidClasses = liquidClasses.liquid_classes;
+        $('liquidClass').innerHTML = state.liquidClasses.map(l =>
+          `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`
+        ).join('');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    async function loadWorkspace() {
+      setStatus('Loading workspace...');
+      try {
+        const configGuid = $('configurationSelect').value;
+        const guid = $('workspaceSelect').value;
+        const [config, data] = await Promise.all([
+          api(`/api/configuration?guid=${encodeURIComponent(configGuid)}`),
+          api(`/api/workspace?guid=${encodeURIComponent(guid)}`)
+        ]);
+        state.configuration = config.configuration;
+        state.workspace = data.workspace;
+        state.positions = data.positions || [];
+        state.deckCoordinates = data.deck_coordinates || state.positions;
+        state.deckFrame = data.deck_frame || {};
+        state.workspaceSource = data.workspace_source || null;
+        state.deckBlocks = data.deck_blocks || [];
+        state.categories = data.common_labware_categories || [];
+        state.commonLabware = data.default_common_labware || [];
+        $('categorySelect').innerHTML = state.categories.map(c =>
+          `<option value="${escapeHtml(c.name)}">${escapeHtml(c.label)}</option>`
+        ).join('');
+        $('workspaceSummary').textContent = `${data.workspace.name} / ${data.workspace.guid}`;
+        $('configurationSummary').textContent = `${config.configuration.name}: ${config.configuration.device_count} configured device entries`;
+        if (data.liquid_class) $('liquidClass').value = data.liquid_class;
+        await refreshLabwareOptions();
+        renderCommonLabware();
+        renderDeck();
+        $('suggestCommon').disabled = false;
+        $('addLabware').disabled = false;
+        $('saveProfile').disabled = false;
+        setStatus('Workspace loaded.');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    async function useDefaults() {
+      if (!state.workspace) return;
+      setStatus('Loading default common labware...');
+      try {
+        const data = await api(`/api/suggest-roles?guid=${encodeURIComponent(state.workspace.guid)}`);
+        state.commonLabware = data.common_labware || [];
+        renderCommonLabware();
+        renderDeck();
+        setStatus('Default common labware loaded.');
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    async function refreshLabwareOptions() {
+      const category = $('categorySelect').value;
+      const query = $('labwareSearch').value;
+      const data = await api(`/api/labware?category=${encodeURIComponent(category)}&query=${encodeURIComponent(query)}&limit=200`);
+      state.labwareOptions = data.matches || [];
+      $('labwareSelect').innerHTML = state.labwareOptions.map(item =>
+        `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)} (${escapeHtml(item.category || '')})</option>`
+      ).join('');
+    }
+
+    function addSelectedLabware() {
+      const catalogName = $('labwareSelect').value;
+      if (!catalogName) return;
+      if (state.commonLabware.some(item => item.catalog_name === catalogName)) {
+        setStatus(`${catalogName} is already in the common list.`);
+        return;
+      }
+      const source = state.labwareOptions.find(item => item.name === catalogName) || {};
+      state.commonLabware.push({
+        label: source.name || catalogName,
+        catalog_name: source.name || catalogName,
+        category: source.category || null,
+        python_class: source.python_class || null,
+        preferred_location: null,
+        preferred_position: null
+      });
+      renderCommonLabware();
+      setStatus('Added labware.');
+    }
+
+    function renderCommonLabware() {
+      const grouped = groupPositions();
+      const locations = Object.keys(grouped);
+      $('commonList').innerHTML = state.commonLabware.map((item, index) => {
+        const location = item.preferred_location || '';
+        const locationOptions = [''].concat(locations).map(loc =>
+          `<option value="${escapeHtml(loc)}"${loc === location ? ' selected' : ''}>${escapeHtml(loc || 'No preferred slot')}</option>`
+        ).join('');
+        const positionOptions = [''].concat(positionsFor(location)).map(pos =>
+          `<option value="${pos}"${String(item.preferred_position ?? '') === String(pos) ? ' selected' : ''}>${pos || ''}</option>`
+        ).join('');
+        return `<div class="common-item">
+          <div class="common-head">
+            <div>
+              <div class="common-title">${escapeHtml(item.catalog_name)}</div>
+              <div class="common-meta">${escapeHtml(item.category || '')}${item.python_class ? ` / ${escapeHtml(item.python_class)}` : ''}</div>
+            </div>
+            <button class="mini secondary" data-remove="${index}">Remove</button>
+          </div>
+          <div class="pref-grid">
+            <select data-index="${index}" data-field="preferred_location">${locationOptions}</select>
+            <select data-index="${index}" data-field="preferred_position">${positionOptions}</select>
+          </div>
+        </div>`;
+      }).join('');
+      $('commonList').querySelectorAll('button[data-remove]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.commonLabware.splice(Number(btn.dataset.remove), 1);
+          renderCommonLabware();
+          renderDeck();
+        });
+      });
+      $('commonList').querySelectorAll('select').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const item = state.commonLabware[Number(sel.dataset.index)];
+          const field = sel.dataset.field;
+          if (field === 'preferred_position') {
+            item[field] = sel.value ? Number(sel.value) : null;
+          } else {
+            item[field] = sel.value || null;
+            item.preferred_position = null;
+            renderCommonLabware();
+          }
+          renderDeck();
+        });
+      });
+    }
+
+    function renderDeck() {
+      const selected = new Map();
+      for (const item of state.commonLabware) {
+        if (item.preferred_location && item.preferred_position) {
+          selected.set(`${item.preferred_location}:${item.preferred_position}`, item.catalog_name);
+        }
+      }
+      const geometry = deckGeometry();
+      const frame = state.deckFrame || {};
+      const canvasWidth = Math.ceil((geometry.maxX - geometry.minX) * geometry.scale + geometry.pad * 2);
+      const canvasHeight = Math.ceil((geometry.maxY - geometry.minY) * geometry.scale + geometry.pad * 2);
+      const frameBox = rectStyle({
+        x: frameOriginX(frame),
+        y: 0,
+        width: Number(frame.width_mm || geometry.maxX),
+        height: Number(frame.depth_mm || geometry.maxY)
+      }, geometry);
+      const grid = renderGrid(geometry);
+      const segments = renderSegments(geometry);
+      const slots = state.deckCoordinates.map(row => {
+          const key = `${row.location}:${row.position}`;
+          const selectedName = selected.get(key);
+          const width = Number(row.width_mm || defaultWidth(row));
+          const depth = Number(row.depth_mm || defaultDepth(row));
+          const style = rectStyle({ x: Number(row.x_mm || 0), y: Number(row.y_mm || 0), width, height: depth }, geometry);
+          const compact = width * geometry.scale < 84 || depth * geometry.scale < 52;
+          return `<div class="slot ${selectedName ? 'selected' : ''} ${compact ? 'compact' : ''}" style="${style}">
+            <div class="pos">${escapeHtml(row.location)} ${row.position}</div>
+            <div class="small coords">x ${escapeHtml(row.x_mm ?? '')} / y ${escapeHtml(row.y_mm ?? '')} mm</div>
+            <div class="small">${escapeHtml(row.occupied_by || 'empty')}</div>
+            ${selectedName ? `<span class="badge">${escapeHtml(selectedName)}</span>` : ''}
+          </div>`;
+        }).join('');
+      $('deckMap').innerHTML = `<div class="deck-canvas" style="width:${canvasWidth}px;height:${canvasHeight}px">
+        <div class="deck-label">Scaled worktable geometry from FluentControl templates</div>
+        <div class="deck-frame" style="${frameBox}"></div>
+        ${grid}
+        ${segments}
+        ${slots}
+      </div>`;
+
+      const groups = groupPositions();
+      $('slotGroups').innerHTML = Object.entries(groups).map(([location, rows]) => `
+        <div class="location">
+          <h3>${escapeHtml(location)}</h3>
+          <div class="slots-list">
+            ${rows.map(row => `<div class="common-meta">${row.position}: ${escapeHtml(row.occupied_by || 'empty')} (${escapeHtml(row.site_path || '')})</div>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function deckGeometry() {
+      const frame = state.deckFrame || {};
+      const rows = state.deckCoordinates.filter(row => row.x_mm != null && row.y_mm != null);
+      const xs = [frameOriginX(frame), Number(frame.width_mm || 0)].filter(Number.isFinite);
+      const ys = [0, Number(frame.depth_mm || 0)].filter(Number.isFinite);
+      for (const row of rows) {
+        const width = Number(row.width_mm || defaultWidth(row));
+        const depth = Number(row.depth_mm || defaultDepth(row));
+        xs.push(Number(row.x_mm), Number(row.x_mm) + width);
+        ys.push(Number(row.y_mm), Number(row.y_mm) + depth);
+      }
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const scale = Math.max(0.72, Math.min(1.1, 1420 / Math.max(1, maxX - minX)));
+      return { minX, maxX, minY, maxY, scale, pad: 38 };
+    }
+
+    function rectStyle(rect, geometry) {
+      const left = geometry.pad + (rect.x - geometry.minX) * geometry.scale;
+      const top = geometry.pad + (geometry.maxY - (rect.y + rect.height)) * geometry.scale;
+      const width = Math.max(28, rect.width * geometry.scale);
+      const height = Math.max(26, rect.height * geometry.scale);
+      return `left:${left.toFixed(1)}px;top:${top.toFixed(1)}px;width:${width.toFixed(1)}px;height:${height.toFixed(1)}px`;
+    }
+
+    function renderGrid(geometry) {
+      const frame = state.deckFrame || {};
+      const spacing = Number(frame.grid_spacing_mm || 25);
+      const origin = Number(frame.front_grid_origin_x_mm || 0);
+      const labels = [];
+      const lines = [];
+      const start = Math.ceil((geometry.minX - origin) / spacing) * spacing + origin;
+      for (let x = start; x <= geometry.maxX; x += spacing) {
+        const left = geometry.pad + (x - geometry.minX) * geometry.scale;
+        const gridNo = Math.round((x - origin) / spacing);
+        lines.push(`<div class="grid-line" style="left:${left.toFixed(1)}px"></div>`);
+        if (gridNo >= 0 && gridNo % 2 === 0) {
+          labels.push(`<div class="grid-label" style="left:${left.toFixed(1)}px">${gridNo}</div>`);
+        }
+      }
+      return lines.join('') + labels.join('');
+    }
+
+    function renderSegments(geometry) {
+      const grouped = {};
+      for (const row of state.deckCoordinates) {
+        if (row.x_mm == null || row.y_mm == null) continue;
+        const top = String(row.site_path || '').split('/')[0] || row.location;
+        const width = Number(row.width_mm || defaultWidth(row));
+        const depth = Number(row.depth_mm || defaultDepth(row));
+        const item = grouped[top] || { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, label: top };
+        item.minX = Math.min(item.minX, Number(row.x_mm));
+        item.maxX = Math.max(item.maxX, Number(row.x_mm) + width);
+        item.minY = Math.min(item.minY, Number(row.y_mm));
+        item.maxY = Math.max(item.maxY, Number(row.y_mm) + depth);
+        grouped[top] = item;
+      }
+      return Object.values(grouped).map(seg => {
+        if (!Number.isFinite(seg.minX)) return '';
+        const style = rectStyle({ x: seg.minX, y: seg.minY, width: seg.maxX - seg.minX, height: seg.maxY - seg.minY }, geometry);
+        return `<div class="segment-band" style="${style}"><span class="segment-label">grid ${escapeHtml(seg.label)}</span></div>`;
+      }).join('');
+    }
+
+    function frameOriginX(frame) {
+      return Number(frame.width_mm) ? 0 : 0;
+    }
+
+    function defaultWidth(row) {
+      if (String(row.location || '').startsWith('WS_')) return 36;
+      if (String(row.location || '').includes('MCA384')) return 149;
+      return 96;
+    }
+
+    function defaultDepth(row) {
+      if (String(row.location || '').startsWith('WS_')) return 42;
+      if (String(row.location || '').includes('MCA384')) return 120;
+      return 70;
+    }
+
+    function groupPositions() {
+      const out = {};
+      for (const row of state.positions) {
+        out[row.location] = out[row.location] || [];
+        out[row.location].push(row);
+      }
+      return out;
+    }
+
+    function positionsFor(location) {
+      return (groupPositions()[location] || []).map(row => row.position);
+    }
+
+    async function saveProfile() {
+      if (!state.workspace) return;
+      setStatus('Saving profile...');
+      try {
+        const data = await api('/api/save-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile_name: $('profileName').value,
+            configuration: state.configuration ? { guid: state.configuration.guid, name: state.configuration.name } : null,
+            workspace: { name: state.workspace.name, guid: state.workspace.guid },
+            workspace_source: state.workspaceSource,
+            common_labware: state.commonLabware,
+            liquid_class: $('liquidClass').value
+          })
+        });
+        setStatus(`Saved profile: ${data.paths.root}`);
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+    let searchTimer = null;
+    $('loadWorkspace').addEventListener('click', loadWorkspace);
+    $('suggestCommon').addEventListener('click', useDefaults);
+    $('addLabware').addEventListener('click', addSelectedLabware);
+    $('saveProfile').addEventListener('click', saveProfile);
+    $('categorySelect').addEventListener('change', () => refreshLabwareOptions().catch(err => setStatus(err.message, true)));
+    $('labwareSearch').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => refreshLabwareOptions().catch(err => setStatus(err.message, true)), 180);
+    });
+    init();
+  </script>
+</body>
+</html>
