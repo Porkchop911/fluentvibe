@@ -56,6 +56,7 @@ class ProfilePaths:
     profile_json: Path
     current_worktable: Path
     generation_yaml: Path
+    deck_skill: Path
     readme: Path
 
     def to_dict(self) -> dict[str, str]:
@@ -64,6 +65,7 @@ class ProfilePaths:
             "profile_json": str(self.profile_json),
             "current_worktable": str(self.current_worktable),
             "generation_yaml": str(self.generation_yaml),
+            "deck_skill": str(self.deck_skill),
             "readme": str(self.readme),
         }
 
@@ -256,11 +258,13 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
     )
     liquid_class = str(payload.get("liquid_class") or "Water Free Single")
     root = (base_dir or Path("build") / "workspaces") / profile_name
+    deck_skill_name = f"deck-{profile_name}"
     paths = ProfilePaths(
         root=root,
         profile_json=root / "workspace_profile.json",
         current_worktable=root / "current_worktable.py",
         generation_yaml=root / "generation.profile.yaml",
+        deck_skill=root / f"{deck_skill_name}.md",
         readme=root / "README.md",
     )
     root.mkdir(parents=True, exist_ok=True)
@@ -292,6 +296,10 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
     )
     paths.generation_yaml.write_text(
         yaml.safe_dump(_generation_profile(profile), sort_keys=False),
+        encoding="utf-8",
+    )
+    paths.deck_skill.write_text(
+        _profile_deck_skill(deck_skill_name, profile, slots),
         encoding="utf-8",
     )
     paths.readme.write_text(_profile_readme(profile, paths), encoding="utf-8")
@@ -404,6 +412,79 @@ def _generation_profile(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _profile_deck_skill(
+    skill_name: str,
+    profile: dict[str, Any],
+    slots: list[tuple[str, int]],
+) -> str:
+    """Render a ``--lab-scope skills`` deck skill from a saved profile.
+
+    Mirrors the shape of the shipped ``deck-sat-780.md`` (frontmatter +
+    workspace binding + valid-position table + role→slot layout) but every
+    fact is driven by this workspace's profile, so authoring can target this
+    deck instead of the hardcoded default. Drop it into the active skills dir
+    (or point ``generation.yaml``'s ``lab_scope.skills.dir`` at it) to make it
+    the deck the LM pre-pass loads.
+    """
+    workspace = profile.get("workspace") or {}
+    name = str(workspace.get("name") or "")
+    guid = str(workspace.get("guid") or "")
+    base_name = workspace.get("base_worktable_name") or "?"
+    base_guid = workspace.get("base_worktable_guid") or "?"
+
+    positions_by_location: dict[str, list[int]] = {}
+    for location, position in slots:
+        positions_by_location.setdefault(str(location), []).append(int(position))
+
+    position_rows = "\n".join(
+        f"| `{location}` | {', '.join(str(p) for p in sorted(set(positions)))} |"
+        for location, positions in sorted(positions_by_location.items())
+    )
+
+    layout_rows = "\n".join(
+        f"| {item.get('label') or item.get('catalog_name')} "
+        f"| `{item['preferred_location']}` | {item['preferred_position']} |"
+        for item in profile.get("common_labware") or []
+        if item.get("preferred_location") and item.get("preferred_position") is not None
+    )
+    layout_section = (
+        "\n## Default layout (role → slot)\n\n"
+        "| Role | Location | Site |\n|---|---|---|\n" + layout_rows + "\n"
+        if layout_rows
+        else ""
+    )
+    liquid_class = str((profile.get("liquid_class") or {}).get("name") or "Water Free Single")
+
+    description = (
+        f"The {name} deck profile ({base_name}) — workspace GUID, valid deck "
+        f"positions, and the role-to-slot layout captured by the "
+        f"{profile.get('profile_name')} workspace profile. Emitted by the "
+        f"workspace setup app; swap this in to target this deck."
+    )
+
+    return (
+        "---\n"
+        f"name: {skill_name}\n"
+        "axis: deck\n"
+        f"description: {description}\n"
+        "always_on: true\n"
+        "---\n"
+        "## Deck / workspace\n\n"
+        f"- Workspace: `{name}`\n"
+        f"- Workspace GUID: `{guid}`\n"
+        f"- Base deck: `{base_name}` (`{base_guid}`)\n"
+        f"- Always: `Worktable.from_workspace(\"{name}\", "
+        f"workspace_guid=\"{guid}\", auto_place=False, ...)`\n\n"
+        "## Valid deck positions\n\n"
+        "| Location | Valid positions |\n|---|---|\n"
+        f"{position_rows}\n"
+        f"{layout_section}\n"
+        "## Notes\n\n"
+        "- Use ONLY the exact location keys above; do not invent location names.\n"
+        f"- Default liquid class for this profile: `{liquid_class}`.\n"
+    )
+
+
 def _profile_readme(profile: dict[str, Any], paths: ProfilePaths) -> str:
     source = profile.get("workspace_source") or {}
     source_lines = ""
@@ -422,7 +503,12 @@ def _profile_readme(profile: dict[str, Any], paths: ProfilePaths) -> str:
         "python -m fluentvibe.cli chat --lab-scope skills\n"
         "```\n\n"
         f"Workspace: {profile['workspace']['name']} / {profile['workspace']['guid']}\n"
-        f"{source_lines}"
+        f"{source_lines}\n"
+        f"Deck skill: `{paths.deck_skill.name}` — the `--lab-scope skills` deck\n"
+        "profile for this workspace. The current-worktable snapshot only grounds\n"
+        "placement; the deck the LM binds to comes from the active deck skill, so\n"
+        "drop this file into the active skills dir (replacing the default deck\n"
+        "skill) to author against this workspace instead of the shipped default.\n"
     )
 
 

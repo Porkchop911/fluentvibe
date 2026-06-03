@@ -91,6 +91,21 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     assert snapshot is not None
     assert snapshot["workspace"]["guid"] == detail["workspace"]["guid"]
 
+    # The profile also emits a --lab-scope skills deck skill, driven by this
+    # workspace, so authoring can target this deck instead of the shipped one.
+    from fluentvibe.authoring.lab_skills import _parse_skill
+
+    deck_path = Path(paths["deck_skill"])
+    assert deck_path.exists()
+    skill = _parse_skill(deck_path)
+    assert skill is not None
+    assert skill.axis == "deck"
+    assert skill.always_on is True
+    body = deck_path.read_text(encoding="utf-8")
+    # binds to THIS workspace, not a hardcoded default
+    assert detail["workspace"]["guid"] in body
+    assert detail["workspace"]["name"] in body
+
 
 def test_save_profile_rejects_invalid_slot(tmp_path: Path) -> None:
     if not index_exists():
