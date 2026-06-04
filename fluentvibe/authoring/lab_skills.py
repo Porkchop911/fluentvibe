@@ -100,6 +100,28 @@ def _order_names(names: set[str], catalog: tuple[Skill, ...]) -> list[str]:
     return [s.name for s in catalog if s.name in names]
 
 
+def apply_profile_deck(
+    catalog: tuple[Skill, ...], deck_skill_path: Path
+) -> tuple[Skill, ...]:
+    """Return ``catalog`` with its deck skill(s) replaced by a profile's deck.
+
+    Drops every shipped ``axis == "deck"`` skill and splices in the profile's
+    deck skill (parsed from ``deck_skill_path``), so a saved workspace profile
+    becomes the authoritative deck for ``--lab-scope skills`` authoring. The
+    profile deck carries the ``from_workspace`` binding for its own workspace;
+    the always-on api skills are deck-agnostic, so no other rewriting is needed.
+
+    Returns ``catalog`` unchanged if the deck skill is missing or malformed
+    (degrade rather than drop context).
+    """
+    deck = _parse_skill(deck_skill_path)
+    if deck is None:
+        return catalog
+    kept = tuple(s for s in catalog if s.axis != "deck")
+    rebuilt = kept + (deck,)
+    return tuple(sorted(rebuilt, key=lambda s: (_AXIS_ORDER[s.axis], s.name)))
+
+
 _SELECTION_SYSTEM = (
     "You select which curated lab skills are relevant to a protocol request. "
     "You are given a list of optional skills (name, axis, description) and the "

@@ -6,8 +6,13 @@ always_on: true
 ---
 ## `Worktable`
 
+Take the exact workspace **name + GUID** and the valid deck positions from the
+**deck skill** (the `Worktable.from_workspace(...)` line under "Deck /
+workspace"). Do not hardcode a workspace from this example — copy the deck
+skill's line verbatim. The shape is:
+
 ```python
-wt = Worktable.from_workspace('SAT_Fluent_780_Rev3', workspace_guid='291ba293-6361-4f8f-aa8d-7c2643d3f096', auto_place=False)
+wt = Worktable.from_workspace(DECK_WORKSPACE_NAME, workspace_guid=DECK_WORKSPACE_GUID, auto_place=False)
 plate = wt.place(Plate96('DestPlate', catalog='96_ABgene_SuperPlate_Thermo_AB2800'), 'Nest61mm_Pos', 2)
 wt.group('Transfer')
 # native FluentControl loop — do NOT unroll with a Python for-loop

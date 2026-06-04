@@ -23,12 +23,20 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .grounding import load_generation_config
+
+if TYPE_CHECKING:
+    from .profile import ResolvedProfile
 
 _VALID_MODES = ("off", "cheatsheet", "enforce", "skills")
 _ENV_VAR = "FLUENTVIBE_LAB_SCOPE"
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "_assets" / "config"
+
+# Sentinel: distinguishes "caller passed profile=None (opt out of env default)"
+# from "caller didn't specify, resolve from FLUENTVIBE_PROFILE_DIR".
+_UNSET: "ResolvedProfile | None" = object()  # type: ignore[assignment]
 
 
 _DEFAULT_MODE = "skills"
@@ -167,16 +175,31 @@ def context_header(enforces: bool) -> str:
 _OFF = LabScope()
 
 
-def load_lab_scope(cli_value: str | None = None) -> LabScope:
+def load_lab_scope(
+    cli_value: str | None = None,
+    *,
+    profile: "ResolvedProfile | None" = _UNSET,
+) -> LabScope:
     """Build the active :class:`LabScope` for this run.
 
     Returns the inert singleton when mode is ``off`` or the ``lab_scope``
     config block is absent/disabled, so callers can unconditionally consult
     the result without branching on configuration.
+
+    When a workspace-app ``profile`` is active (passed explicitly, or resolved
+    from ``FLUENTVIBE_PROFILE_DIR`` by default), ``skills`` mode swaps the
+    profile's deck skill in for the shipped deck and sources the labware/liquid
+    whitelist from the profile — so a saved profile fully drives authoring.
+    Pass ``profile=None`` to opt out of the env default.
     """
     mode = resolve_lab_scope_mode(cli_value)
     if mode == "off":
         return _OFF
+
+    if profile is _UNSET:
+        from .profile import profile_from_env  # lazy: avoids import cycle
+
+        profile = profile_from_env()
 
     block = (load_generation_config() or {}).get("lab_scope") or {}
     if not block.get("enabled", False):
@@ -188,6 +211,10 @@ def load_lab_scope(cli_value: str | None = None) -> LabScope:
     liquid_classes = frozenset(
         str(x).strip() for x in (block.get("liquid_classes") or []) if str(x).strip()
     )
+    if profile is not None and profile.labware:
+        labware = profile.labware
+    if profile is not None and profile.liquid_classes:
+        liquid_classes = profile.liquid_classes
 
     # ``skills`` mode assembles context at runtime from a selected subset of
     # granular skill files instead of injecting the monolith. It reuses the
@@ -203,6 +230,10 @@ def load_lab_scope(cli_value: str | None = None) -> LabScope:
         catalog = discover_skills(skills_dir)
         if not catalog:
             return _OFF
+        if profile is not None and profile.deck_skill is not None:
+            from .lab_skills import apply_profile_deck
+
+            catalog = apply_profile_deck(catalog, profile.deck_skill)
         return LabScope(
             mode=mode,
             cheatsheet_text=None,

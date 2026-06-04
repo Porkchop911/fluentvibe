@@ -8,6 +8,7 @@ call to the graph.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ from .service import (
     _intent_axis_message,
     _missing_intent_axes,
 )
+from .grounding import CURRENT_WORKTABLE_ENV
 from .lab_scope import load_lab_scope
 from .tools import AuthoringToolRegistry
 from .trace import ModelTraceConfig, ModelTraceRecorder
@@ -55,10 +57,27 @@ class PromptAuthoringSession:
         concurrency: AuthoringConcurrencyConfig | None = None,
         trace_config: ModelTraceConfig | None = None,
         lab_scope: str | None = None,
+        profile_dir: Path | str | None = None,
     ) -> None:
         self.output_dir = output_dir
         self.retry_budget = retry_budget
-        self._lab_scope = load_lab_scope(lab_scope)
+        # A workspace-app profile (explicit, or FLUENTVIBE_PROFILE_DIR by
+        # default) drives the deck skill + whitelist and the grounding snapshot.
+        _profile = None
+        if profile_dir is not None:
+            from .profile import resolve_profile
+
+            _profile = resolve_profile(profile_dir)
+            os.environ.setdefault(
+                CURRENT_WORKTABLE_ENV, str(_profile.current_worktable)
+            )
+            workspace_name = workspace_name or _profile.workspace_name
+            workspace_guid = workspace_guid or _profile.workspace_guid
+        self._lab_scope = (
+            load_lab_scope(lab_scope, profile=_profile)
+            if _profile is not None
+            else load_lab_scope(lab_scope)
+        )
         self._trace = ModelTraceRecorder(
             trace_config
             if trace_config is not None

@@ -1,36 +1,24 @@
 """Run a live skills-mode authoring generation against a workspace_app profile.
 
-Unlike ``run_ampure_authoring_live.py`` (which targets the shipped default
-780 deck), this points the whole skills scope at a profile produced by the
-workspace setup app:
-
-- grounding uses the profile's ``current_worktable.py`` snapshot (via env),
-- the active **deck skill** is the profile's emitted ``deck-<name>.md`` (swapped
-  in for the shipped always-on deck skill), and
-- the labware / liquid-class whitelist comes from the profile's
-  ``generation.profile.yaml`` ``lab_scope`` block.
-
-This is the "activation" the workspace app does not yet wire automatically; it
-mutates nothing on disk. Opt-in live harness — needs the LM Studio endpoint up.
+Thin live harness over the product path: it constructs a
+``PromptAuthoringSession(profile_dir=...)``, which wires the profile's workspace
+identity, grounding snapshot (``current_worktable.py``), deck skill, and
+labware/liquid whitelist — exactly what ``fluentvibe chat/author --profile``
+does. Opt-in: needs the LM Studio endpoint up.
 """
 
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
-import os
-import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
+import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fluentvibe.authoring import PromptAuthoringSession
-from fluentvibe.authoring.grounding import CURRENT_WORKTABLE_ENV
-from fluentvibe.authoring.lab_skills import _parse_skill
 
 DEFAULT_PROMPT = Path(r"C:\Users\Niko\Desktop\ampure protocol.txt")
 DEFAULT_ANSWERS = (
@@ -40,47 +28,6 @@ DEFAULT_ANSWERS = (
     "ABgene plate acceptable; use exact catalog 96_ABgene_SuperPlate_Thermo_AB2800 for source and destination plates.",
     "Use sensible installed reservoirs and waste resources.",
 )
-
-
-def _profile_deck_skill_path(profile_dir: Path) -> Path:
-    decks = sorted(profile_dir.glob("deck-*.md"))
-    if not decks:
-        raise SystemExit(f"no deck-*.md emitted in {profile_dir}; re-save the profile")
-    return decks[0]
-
-
-# The shipped always-on api skills (core-worktable-api, labware-and-liquid-
-# classes) hardcode the default 780 workspace in their examples; rewrite those
-# references so the whole injected context binds to the profile's deck.
-_DEFAULT_WS_NAME = "SAT_Fluent_780_Rev3"
-_DEFAULT_WS_GUID = "291ba293-6361-4f8f-aa8d-7c2643d3f096"
-
-
-def _retarget_scope(scope, profile_dir: Path, ws_name: str, ws_guid: str):
-    """Return a LabScope whose deck skill + whitelist come from the profile."""
-    deck = _parse_skill(_profile_deck_skill_path(profile_dir))
-    if deck is None:
-        raise SystemExit("profile deck skill failed to parse")
-
-    def _rebind(skill):
-        body = skill.body.replace(_DEFAULT_WS_GUID, ws_guid).replace(_DEFAULT_WS_NAME, ws_name)
-        return skill if body == skill.body else dataclasses.replace(skill, body=body)
-
-    # drop every shipped deck skill, rebind the rest, splice in the profile deck
-    catalog = tuple(_rebind(s) for s in scope.skill_catalog if s.axis != "deck") + (deck,)
-
-    gen_profile = yaml.safe_load(
-        (profile_dir / "generation.profile.yaml").read_text(encoding="utf-8")
-    )
-    lab_scope = (gen_profile or {}).get("lab_scope") or {}
-    labware = frozenset(str(x).strip() for x in (lab_scope.get("labware") or []) if str(x).strip())
-    liquid = frozenset(str(x).strip() for x in (lab_scope.get("liquid_classes") or []) if str(x).strip())
-    return dataclasses.replace(
-        scope,
-        skill_catalog=catalog,
-        labware=labware or scope.labware,
-        liquid_classes=liquid or scope.liquid_classes,
-    )
 
 
 def _format_canned_answers(answers: list[str]) -> str:
@@ -107,28 +54,20 @@ def main() -> int:
     parser.add_argument("--max-rounds", type=int, default=None)
     args = parser.parse_args()
 
-    profile = json.loads((args.profile_dir / "workspace_profile.json").read_text(encoding="utf-8"))
-    ws_name = profile["workspace"]["name"]
-    ws_guid = profile["workspace"]["guid"]
     output_dir = args.output_dir or (Path("build") / f"{args.profile_dir.name}_skills_gen")
     output_dir.mkdir(parents=True, exist_ok=True)
     log_jsonl = output_dir / "trace.jsonl"
 
-    # Grounding reads the profile's current-worktable snapshot.
-    os.environ[CURRENT_WORKTABLE_ENV] = str(args.profile_dir / "current_worktable.py")
-
+    # The product path: profile_dir drives workspace, snapshot, deck skill, and
+    # whitelist. No manual env-setting or scope-patching here.
     session = PromptAuthoringSession(
         output_dir=output_dir,
         retry_budget=args.retry_budget,
-        workspace_name=ws_name,
-        workspace_guid=ws_guid,
         lab_scope="skills",
+        profile_dir=args.profile_dir,
     )
-    # Retarget the scope at the profile's deck + whitelist before the first send.
-    session._lab_scope = _retarget_scope(session._lab_scope, args.profile_dir, ws_name, ws_guid)
-    session._registry.lab_scope = session._lab_scope
     deck_names = [s.name for s in session._lab_scope.skill_catalog if s.axis == "deck"]
-    print(f"[scope] workspace={ws_name!r} guid={ws_guid}")
+    print(f"[scope] workspace={session._registry.workspace_name!r} guid={session._registry.workspace_guid}")
     print(f"[scope] active deck skill(s): {deck_names}")
     print(f"[scope] whitelist labware={len(session._lab_scope.labware)} liquid={sorted(session._lab_scope.liquid_classes)}")
 

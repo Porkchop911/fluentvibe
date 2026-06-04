@@ -37,6 +37,24 @@ liquid_class:
   name: "Water Free Single"
   guid: "e80ad9f8-534b-41b7-96fb-c2c81cfc5c03"
 
+# Deck-physics guard rails, keyed by workspace name. The Worktable DSL guards
+# (trough reachability, LiHa/FCA tip-box, Mix liquid-class) read these instead
+# of matching a hardcoded workspace name, so other decks can carry their own
+# rules (a saved workspace profile emits an equivalent block in
+# generation.profile.yaml). A workspace with no entry here is left permissive.
+#   - trough_locations: location-name prefixes a trough can reach (empirical).
+#   - tall_trough_catalog + wash_markers: the tall catalog is only allowed for
+#     ethanol/wash troughs (standard tips can't reach its Z-Max otherwise).
+#   - require_fca_tipbox / check_mix_section: FC-universal guards — enable for
+#     any real FC deck.
+deck_rules:
+  SAT_Fluent_780_Rev3:
+    trough_locations: ["WS_100ml_"]
+    tall_trough_catalog: "100ml"
+    wash_markers: ["ethanol", "etoh", "wash", "alcohol"]
+    require_fca_tipbox: true
+    check_mix_section: true
+
 # Script defaults
 script:
   version: "2.0"
