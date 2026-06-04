@@ -63,12 +63,51 @@ def test_trough_on_arbitrary_location_raises() -> None:
 
 
 def test_trough_off_780_deck_is_not_guarded() -> None:
-    """Vanilla Worktable (no SAT_Fluent_780 binding) skips the trough rule —
-    the rule is empirical to that deck and shouldn't fire on test fixtures
-    or other workspaces."""
+    """Vanilla Worktable (no deck binding) skips the trough rule — the rule is
+    data-driven per deck and shouldn't fire on test fixtures or workspaces with
+    no configured deck_rules."""
     wt = Worktable(name="Generic")
     wt.group("Setup")
     wt.place(Trough("Buffer", catalog="25ml_short"), "Nest", 1)
+
+
+def test_unknown_bound_deck_has_no_deck_rules() -> None:
+    """A workspace with no entry in config deck_rules and no active profile is
+    left permissive — the guards are keyed to data, not a hardcoded name."""
+    wt = Worktable(name="Other")
+    wt.workspace_name = "Some_Other_Deck_Rev9"
+    assert wt._deck_rules() == {}
+    wt.group("Setup")
+    wt.place(Trough("Buffer", catalog="25ml_short"), "Nest61mm_Pos", 1)  # no raise
+
+
+def test_profile_deck_rules_drive_trough_guard(tmp_path: Path, monkeypatch) -> None:
+    """An active workspace-app profile supplies deck_rules; the trough guard
+    then enforces that deck's trough family (proves the rules are data-driven,
+    not hardcoded to 780)."""
+    import json
+    import yaml as _yaml
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+
+    name = "Profile_Deck_Q"
+    root = tmp_path / "prof"
+    root.mkdir()
+    (root / "workspace_profile.json").write_text(
+        json.dumps({"workspace": {"name": name, "guid": "11112222-3333-4444-5555-666677778888"}}),
+        encoding="utf-8",
+    )
+    (root / "generation.profile.yaml").write_text(
+        _yaml.safe_dump({"deck_rules": {name: {"trough_locations": ["WS_50ml_"]}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(root))
+
+    wt = Worktable(name="profile-bound")
+    wt.workspace_name = name
+    wt.group("Setup")
+    wt.place(Trough("Buffer", catalog="25ml_short"), "WS_50ml_1", 1)  # reachable: ok
+    with pytest.raises(TroughPlacementError, match="WS_50ml_"):
+        wt.place(Trough("Buffer2", catalog="25ml_short"), "Nest61mm_Pos", 1)
 
 
 # ── Rule 2 — 100ml trough purpose check ────────────────────────────────

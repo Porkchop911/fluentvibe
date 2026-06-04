@@ -29,10 +29,10 @@ always_on: true
 
 **Deck placement — trough rules (avoid FC "out of range" / "cannot reach
 Z-Max" / "No connector for this rotation" errors):**
-- Place **all troughs** on the trough site `WS_100ml_1` (positions 1–4) — that
-  is the only reachable trough slot on the SAT_Fluent_780 deck. Plates, magnet
-  racks, and tip boxes go on `Nest61mm_Pos` (sites 1–6 per the layout: plates
-  on 1–3, MCA tips site 4, FCA tips site 6).
+- Place labware on the locations/sites the **deck skill** lists (its "Valid
+  deck positions" table and role→slot layout are authoritative for this deck).
+  Troughs go on the deck's trough site (a `WS_*ml_*` location); plates, magnet
+  racks, and tip boxes go on the deck's plate nest (e.g. `Nest61mm_Pos`).
 - For the trough catalog, **prefer `25ml_short`** over `100ml` whenever possible
   — the `100ml` trough is taller than standard tips can reach (FC throws
   `Tip N cannot reach Z-Max of labware …`). Use `25ml_short` for anything under
@@ -40,9 +40,9 @@ Z-Max" / "No connector for this rotation" errors):**
   200 µL × 2 ≈ 42 mL).
 - Use `300ml SBS` exclusively as the waste sink (never for liquid reagents).
 - Different trough catalogs on the same trough site need different rotation
-  connectors. If the LM picks a slot/catalog combo that fails with
-  `No connector for this rotation at this site available`, swap to `25ml_short`
-  at `WS_100ml_1` — the proven-reachable combo.
+  connectors. If a slot/catalog combo fails with `No connector for this
+  rotation at this site available`, swap to `25ml_short` on the deck's trough
+  site — the most broadly reachable combo.
 
 ## Liquid classes (approved)
 

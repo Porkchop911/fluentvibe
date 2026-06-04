@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
 from .ir.schema import (
     AddLabwareStep, CommentStep, ConditionalStep, ExecuteApplicationStep,
     ExecuteWorklistStep, ExportVariableStep, GenericStep, Group,
-    ImportVariableStep, LoadWorklistStep, LoopStep, Protocol,
-    QueryVariableStep, RemoveLabwareStep, ScriptGroupStep, SetLocationStep,
-    SetVariableStep, StartTimerStep, Step, UserPromptStep, WaitForTimerStep,
-    WaitStep, WorklistColumnMapping, WorklistImportStep,
+    ImportVariableStep, LegacyDriverMacroStep, LoadWorklistStep, LoopStep,
+    Protocol, QueryVariableStep, RemoveLabwareStep, ScriptGroupStep,
+    SetLocationStep, SetVariableStep, StartTimerStep, Step, UserPromptStep,
+    WaitForTimerStep, WaitStep, WorklistColumnMapping, WorklistImportStep,
 )
 from .labware.base import Labware
 
@@ -266,6 +266,57 @@ class Worktable:
 
     def wait_for_timer(self, timer: int, duration_seconds: Union[int, float, str]) -> None:
         self._emit(WaitForTimerStep(timer=timer, duration_seconds=duration_seconds))
+
+    # ------------------------------------------------------------------
+    # Device driver macros (LegacyDriverMacro)
+    # ------------------------------------------------------------------
+
+    def legacy_driver_macro(
+        self,
+        name: str,
+        module_name: str,
+        execution_settings: Optional[str] = None,
+    ) -> None:
+        """Emit a raw FluentControl ``LegacyDriverMacro`` device command.
+
+        Binds to an installed driver module by ``module_name`` (e.g.
+        ``"SiLA-ODTC"``, ``"inhecoMTC"``). See the typed ``odtc_*`` helpers
+        below for the Inheco underdeck ODTC. Note: emitting the command does
+        not require the driver to be installed, but running it on hardware does.
+        """
+        self._emit(LegacyDriverMacroStep(
+            name=name,
+            module_name=module_name,
+            execution_settings=execution_settings,
+        ))
+
+    # --- Inheco underdeck ODTC (driver module "SiLA-ODTC") ---
+
+    def odtc_open_door(self) -> None:
+        self.legacy_driver_macro("SiLA-ODTC_OpenDoor", "SiLA-ODTC")
+
+    def odtc_close_door(self) -> None:
+        self.legacy_driver_macro("SiLA-ODTC_CloseDoor", "SiLA-ODTC")
+
+    def odtc_get_parameters(self) -> None:
+        self.legacy_driver_macro("SiLA-ODTC_GetParameters", "SiLA-ODTC")
+
+    def odtc_set_parameters(self, methods_xml_file: str) -> None:
+        """Load an ODTC method file (e.g. ``"Annealing.xml"``)."""
+        self.legacy_driver_macro(
+            "SiLA-ODTC_SetParameters", "SiLA-ODTC",
+            f"Parameter:MethodsXML:String:File:{methods_xml_file}",
+        )
+
+    def odtc_execute_method(self, method_name: str) -> None:
+        """Run a loaded ODTC method by name (e.g. ``"Annealing"``)."""
+        self.legacy_driver_macro("SiLA-ODTC_ExecuteMethod", "SiLA-ODTC", method_name)
+
+    # --- Inheco MTC heated/cooled positions (driver module "inhecoMTC") ---
+
+    def inheco_set_temperature(self, settings: Optional[str] = None) -> None:
+        """Inheco MTC SetTemperature macro (used for ODTC pre-heat staging)."""
+        self.legacy_driver_macro("inhecoMTC_SetTemperature", "inhecoMTC", settings)
 
     def export_variables(
         self,
@@ -613,29 +664,31 @@ class Worktable:
                 f"Slot {slot!r} is not on workspace {self.workspace_name!r}. "
                 f"Valid examples: {sorted(self.valid_slots)[:5]}…"
             )
-        # Trough placement guard rail — scoped to the deployment-target
-        # SAT_Fluent_780 deck (the rule is empirical to that workspace):
-        #   - Troughs only reach on `WS_100ml_*` sites.
-        #   - The `100ml` catalog is too tall for standard tips (Z-Max
+        # Trough placement guard rail — data-driven from this deck's rules
+        # (config `deck_rules`, keyed by workspace name; empirical per deck):
+        #   - Troughs only reach on the configured `trough_locations`.
+        #   - The configured tall catalog is too tall for standard tips (Z-Max
         #     unreachable) unless the trough is earmarked for ethanol/wash.
-        is_780 = (self.workspace_name or "") == "SAT_Fluent_780_Rev3"
-        if is_780 and getattr(labware, "category", None) == "trough":
+        rules = self._deck_rules()
+        trough_locations = rules.get("trough_locations") or ()
+        if trough_locations and getattr(labware, "category", None) == "trough":
             from .simulator.invariants import TroughPlacementError
-            if not location.startswith("WS_100ml_"):
+            if not any(location.startswith(prefix) for prefix in trough_locations):
                 raise TroughPlacementError(
-                    f"Trough {labware.label!r} must be placed on a "
-                    f"`WS_100ml_*` site (the only reachable trough family on "
-                    f"SAT_Fluent_780). Got {slot!r}."
+                    f"Trough {labware.label!r} must be placed on a reachable "
+                    f"trough site ({', '.join(trough_locations)}…) on "
+                    f"{self.workspace_name}. Got {slot!r}."
                 )
+            tall_catalog = str(rules.get("tall_trough_catalog") or "").strip().lower()
             catalog = (labware.catalog_name or "").strip().lower()
             label_l = (labware.label or "").lower()
-            if catalog == "100ml":
+            if tall_catalog and catalog == tall_catalog:
                 wash_marker = any(
-                    m in label_l for m in ("ethanol", "etoh", "wash", "alcohol")
+                    m in label_l for m in (rules.get("wash_markers") or ())
                 )
                 if not wash_marker:
                     raise TroughPlacementError(
-                        f"Trough {labware.label!r} uses the `100ml` catalog "
+                        f"Trough {labware.label!r} uses the `{tall_catalog}` catalog "
                         f"but isn't marked for ethanol/wash use. Standard tips "
                         f"cannot reach its Z-Max. Use `catalog='25ml_short'` "
                         f"instead, or name the trough with an `Ethanol`/`Wash` "
@@ -729,6 +782,40 @@ class Worktable:
 
     # ── Internal helpers ────────────────────────────────────────────
 
+    def _deck_rules(self) -> dict:
+        """Deck-physics guard rules for the bound workspace (may be empty).
+
+        Resolved from, in order: an active workspace-app profile
+        (``FLUENTVIBE_PROFILE_DIR``) whose workspace matches, then the shipped
+        ``generation.yaml`` ``deck_rules`` map keyed by workspace name. A
+        workspace with no rules is left permissive. Cached per workspace name
+        so the per-``place()`` lookup stays cheap.
+        """
+        name = self.workspace_name or ""
+        cached = getattr(self, "_deck_rules_cache", None)
+        if cached is not None and cached[0] == name:
+            return cached[1]
+        rules: dict = {}
+        if name:
+            try:
+                from .authoring.profile import profile_from_env
+                profile = profile_from_env()
+                if profile is not None and profile.workspace_name == name and profile.deck_rules:
+                    rules = dict(profile.deck_rules)
+            except Exception:
+                rules = {}
+            if not rules:
+                try:
+                    from .authoring.grounding import load_generation_config
+                    cfg = (load_generation_config() or {}).get("deck_rules") or {}
+                    entry = cfg.get(name)
+                    if isinstance(entry, dict):
+                        rules = dict(entry)
+                except Exception:
+                    rules = {}
+        self._deck_rules_cache = (name, rules)
+        return rules
+
     def _iter_all_steps(self) -> Iterator[Step]:
         """Yield every authored step, recursing into loop/conditional/group bodies."""
         def walk(steps: list[Step]) -> Iterator[Step]:
@@ -755,11 +842,11 @@ class Worktable:
         on this rule despite the skill spelling it out, so the DSL refuses
         the compile up front to feed the repair loop a concrete traceback.
 
-        Scoped to the deployment-target workspace `SAT_Fluent_780_Rev3` —
-        the empty/generic workspaces used in IR-fidelity tests don't carry
-        the same tip-box assumption.
+        Gated on this deck's `require_fca_tipbox` rule (config `deck_rules`),
+        so the empty/generic workspaces used in IR-fidelity tests — which carry
+        no deck rules — don't inherit the tip-box assumption.
         """
-        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+        if not self._deck_rules().get("require_fca_tipbox"):
             return
         liha_step_prefixes = ("Liha", "Worklist", "LoadWorklist", "ExecuteWorklist")
         uses_liha = any(
@@ -794,9 +881,9 @@ class Worktable:
         `No DiTi-Labware MCA96 … found` + `Tip(s) are not mounted`. Resolve
         each LiHa tip-pickup to its placed labware and require an FCA catalog.
 
-        Scoped to `SAT_Fluent_780_Rev3` like the other deck guards.
+        Gated on this deck's `require_fca_tipbox` rule like the presence check.
         """
-        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+        if not self._deck_rules().get("require_fca_tipbox"):
             return
         placed = {
             lw.label: lw for stack in self.slot_map.values() for lw in stack
@@ -832,9 +919,9 @@ class Worktable:
         (data-driven — matches FC's own model). Unknown classes / no catalog
         index are left alone so this never blocks on missing data.
 
-        Scoped to `SAT_Fluent_780_Rev3` like the other deck guards.
+        Gated on this deck's `check_mix_section` rule (config `deck_rules`).
         """
-        if (self.workspace_name or "") != "SAT_Fluent_780_Rev3":
+        if not self._deck_rules().get("check_mix_section"):
             return
         try:
             from .catalog import index_exists, liquid_class_supports_section

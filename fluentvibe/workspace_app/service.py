@@ -409,6 +409,33 @@ def _generation_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "labware": labware_names,
             "liquid_classes": [profile["liquid_class"]["name"]],
         },
+        "deck_rules": _profile_deck_rules(profile),
+    }
+
+
+def _profile_deck_rules(profile: dict[str, Any]) -> dict[str, Any]:
+    """Deck-physics guard rules for this workspace, keyed by name.
+
+    The Worktable DSL guards (``Worktable._deck_rules``) read this. Trough
+    locations are *derived* from the deck's own valid slots (the ``WS_*ml_*``
+    trough family actually present) — data, not invented physics. The
+    FC-universal guards (FCA tip box, Mix liquid class) are enabled for any real
+    deck. We deliberately do not assert tip-height / wash-capacity rules we
+    cannot verify for an arbitrary deck.
+    """
+    deck = profile.get("deck") or {}
+    locations = (deck.get("position_summary_by_location") or {}).keys()
+    trough_prefixes = sorted({
+        match.group(1)
+        for loc in locations
+        if (match := re.match(r"(WS_\d+ml_)\d+$", str(loc)))
+    })
+    return {
+        profile["workspace"]["name"]: {
+            "trough_locations": trough_prefixes,
+            "require_fca_tipbox": True,
+            "check_mix_section": True,
+        }
     }
 
 

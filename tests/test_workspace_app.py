@@ -106,6 +106,16 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     assert detail["workspace"]["guid"] in body
     assert detail["workspace"]["name"] in body
 
+    # generation.profile.yaml carries data-driven deck_rules for this workspace
+    # (trough family derived from valid slots + the FC-universal guard flags).
+    import yaml
+
+    gen_profile = yaml.safe_load(Path(paths["generation_yaml"]).read_text(encoding="utf-8"))
+    deck_rules = gen_profile["deck_rules"][detail["workspace"]["name"]]
+    assert deck_rules["require_fca_tipbox"] is True
+    assert deck_rules["check_mix_section"] is True
+    assert all(loc.startswith("WS_") for loc in deck_rules["trough_locations"])
+
 
 def test_save_profile_rejects_invalid_slot(tmp_path: Path) -> None:
     if not index_exists():

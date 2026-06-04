@@ -80,6 +80,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_author.add_argument("--retry-budget", type=int, default=2)
     p_author.add_argument("--workspace", default=None)
     p_author.add_argument("--workspace-guid", default=None)
+    p_author.add_argument("--profile", type=Path, default=None,
+                          help="workspace-app profile dir (build/workspaces/<name>); "
+                               "drives the workspace, grounding snapshot, deck skill, "
+                               "and labware/liquid whitelist for this run")
     p_author.add_argument("--json", dest="as_json", action="store_true",
                           help="emit a JSON summary of the authoring result")
     p_author.add_argument("--model-trace", action="store_true",
@@ -120,6 +124,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_chat.add_argument("--retry-budget", type=int, default=8)
     p_chat.add_argument("--workspace", default=None)
     p_chat.add_argument("--workspace-guid", default=None)
+    p_chat.add_argument("--profile", type=Path, default=None,
+                        help="workspace-app profile dir (build/workspaces/<name>); "
+                             "drives the workspace, grounding snapshot, deck skill, "
+                             "and labware/liquid whitelist for this run")
     p_chat.add_argument(
         "--fc-gate", action="store_true",
         help="after authoring success, run FluentControl-shell validation and "
@@ -310,9 +318,36 @@ def _cmd_decompile(args) -> int:
     return 0
 
 
+def _activate_profile(args):
+    """Activate a ``--profile`` dir for this run, if given.
+
+    Sets ``FLUENTVIBE_PROFILE_DIR`` (so ``load_lab_scope`` swaps in the
+    profile's deck skill + whitelist) and the grounding-snapshot env, and
+    defaults ``--workspace``/``--workspace-guid`` from the profile. Works for
+    both the session (chat) and service (author) paths, which both read these.
+    Returns the resolved profile, or ``None`` when ``--profile`` was omitted.
+    """
+    profile_dir = getattr(args, "profile", None)
+    if profile_dir is None:
+        return None
+    from .authoring.profile import resolve_profile, PROFILE_DIR_ENV
+    from .authoring.grounding import CURRENT_WORKTABLE_ENV
+
+    rp = resolve_profile(profile_dir)
+    os.environ[PROFILE_DIR_ENV] = str(rp.root)
+    os.environ.setdefault(CURRENT_WORKTABLE_ENV, str(rp.current_worktable))
+    if not args.workspace:
+        args.workspace = rp.workspace_name
+    if not args.workspace_guid:
+        args.workspace_guid = rp.workspace_guid
+    print(f"Profile: {rp.workspace_name} ({rp.root})", file=sys.stderr)
+    return rp
+
+
 def _cmd_author(args) -> int:
     from .authoring import PromptAuthoringService
 
+    _activate_profile(args)
     prompt = " ".join(args.prompt).strip()
     kwargs: dict[str, Any] = dict(
         output_dir=args.output_dir,
@@ -401,6 +436,7 @@ def _cmd_render_trace(args) -> int:
 
 def _cmd_chat(args) -> int:
     from .authoring import PromptAuthoringSession
+    _activate_profile(args)
     trace_config = _trace_config_for_cli(args.output_dir, args)
 
     def new_session() -> PromptAuthoringSession:

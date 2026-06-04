@@ -19,6 +19,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from fluentvibe.authoring.lab_scope import load_lab_scope, resolve_lab_scope_mode  # noqa: E402
 from fluentvibe.authoring.lab_skills import (  # noqa: E402
     Skill,
+    apply_profile_deck,
     assemble_context,
     build_initial_scope_message,
     discover_skills,
@@ -189,6 +190,30 @@ def test_select_falls_back_on_garbage_reply():
     cat = _catalog()
     names = select_skills("x", cat, _FakeClient("sorry, I cannot help"))
     assert set(names) == {s.name for s in cat}
+
+
+# ── profile deck swap ──────────────────────────────────────────────────
+
+def test_apply_profile_deck_swaps_the_deck(tmp_path):
+    cat = _catalog()
+    assert "deck-sat-780" in {s.name for s in cat}
+    deck = tmp_path / "deck-myprofile.md"
+    deck.write_text(
+        "---\nname: deck-myprofile\naxis: deck\ndescription: a profile deck\n"
+        "always_on: true\n---\nbind here\n",
+        encoding="utf-8",
+    )
+    swapped = apply_profile_deck(cat, deck)
+    deck_names = {s.name for s in swapped if s.axis == "deck"}
+    assert deck_names == {"deck-myprofile"}  # shipped 780 dropped, profile spliced
+    # non-deck skills are untouched
+    assert {s.name for s in cat if s.axis != "deck"} == {s.name for s in swapped if s.axis != "deck"}
+
+
+def test_apply_profile_deck_degrades_on_bad_file(tmp_path):
+    cat = _catalog()
+    missing = tmp_path / "deck-nope.md"
+    assert apply_profile_deck(cat, missing) == cat  # unchanged, not dropped
 
 
 # ── assembly ───────────────────────────────────────────────────────────
