@@ -1282,6 +1282,27 @@ class Renderer:
                     "IsDisabledForExecution": str(step.disabled).lower(),
                 })
 
+            case StepType.LEGACY_DRIVER_MACRO:
+                settings = step.execution_settings
+                if settings is None or settings == "":
+                    settings_element = "<ExecutionSettings />"
+                else:
+                    escaped = (
+                        str(settings)
+                        .replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                    )
+                    settings_element = f"<ExecutionSettings>{escaped}</ExecutionSettings>"
+                params.update({
+                    "Name": step.name,
+                    "ModuleName": step.module_name,
+                    "ExecutionSettingsElement": settings_element,
+                    # Driver macros require lowercase bools for these attributes
+                    "IsBreakpoint": str(step.breakpoint).lower(),
+                    "IsDisabledForExecution": str(step.disabled).lower(),
+                })
+
 
 
             case StepType.CGA_GET_FINGERS:

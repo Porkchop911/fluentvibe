@@ -22,7 +22,7 @@ from ..ir.schema import (
     Mca384DropTipsStep, Mca384GetTipsStep, Mca384MoveArmStep,
     QueryVariableStep, ScriptGroupStep, StartTimerStep, UserPromptStep,
     WaitForTimerStep, WaitStep, WorklistImportStep, LoadWorklistStep,
-    ExecuteWorklistStep,
+    ExecuteWorklistStep, LegacyDriverMacroStep,
 )
 from ..labware.base import Labware, Layer
 from ..labware.tipboxes import TipBox
@@ -214,6 +214,9 @@ class Simulator:
         elif isinstance(step, (ImportVariableStep, QueryVariableStep, ExecuteApplicationStep)):
             message = "runtime/user/external side effect is not modeled"
         elif isinstance(step, (WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep)):
+            effect = EffectKind.VALIDATION_ONLY
+        elif isinstance(step, LegacyDriverMacroStep):
+            # External device driver macro (e.g. ODTC SiLA-ODTC); no twin effect.
             effect = EffectKind.VALIDATION_ONLY
         elif isinstance(step, GenericStep):
             effect, message = self._on_generic_step(step)

@@ -66,6 +66,8 @@ class StepType(str, Enum):
     WORKLIST_IMPORT = "worklist_import"
     LOAD_WORKLIST = "load_worklist"
     EXECUTE_WORKLIST = "execute_worklist"
+    # Device / legacy driver macros (e.g. Inheco ODTC via SiLA-ODTC, inhecoMTC)
+    LEGACY_DRIVER_MACRO = "legacy_driver_macro"
 
 
 class BaseStep(BaseModel):
@@ -482,6 +484,29 @@ class ExecuteWorklistStep(BaseStep):
     delete_gwl_scripts: bool = False
 
 
+class LegacyDriverMacroStep(BaseStep):
+    """A FluentControl ``LegacyDriverMacro`` device command.
+
+    This is how external driver modules are invoked from a script — e.g. the
+    Inheco underdeck ODTC (module ``SiLA-ODTC``: open/close door, set/execute
+    method) or the Inheco MTC (module ``inhecoMTC``). The macro is bound to a
+    driver by ``module_name`` and identified by ``name``; ``execution_settings``
+    carries the macro payload (e.g. a method name, or
+    ``Parameter:MethodsXML:String:File:Annealing.xml``). ``None``/empty renders
+    as a self-closing ``<ExecutionSettings />``.
+
+    NOTE: emitting this command does not require the driver to be installed in
+    FluentControl, but *running* it on hardware does (the driver software is an
+    instrument-side dependency).
+    """
+    step_type: Literal[StepType.LEGACY_DRIVER_MACRO] = StepType.LEGACY_DRIVER_MACRO
+    name: str = Field(..., description="Macro name, e.g. 'SiLA-ODTC_ExecuteMethod'")
+    module_name: str = Field(..., description="Driver module/CallName, e.g. 'SiLA-ODTC'")
+    execution_settings: Optional[str] = Field(
+        default=None, description="Macro payload string; None/empty -> <ExecutionSettings />"
+    )
+
+
 class GenericStep(BaseModel):
     """
     Generic step that accepts any step type from the reference.
@@ -586,6 +611,7 @@ Step = Union[
     WorklistImportStep,
     LoadWorklistStep,
     ExecuteWorklistStep,
+    LegacyDriverMacroStep,
     ScriptGroupStep,
     LoopStep,
     ConditionalStep,
@@ -716,4 +742,6 @@ STEP_TO_COMMAND_ID = {
     StepType.WORKLIST_IMPORT: "WorklistImport",
     StepType.LOAD_WORKLIST: "LoadWorklist",
     StepType.EXECUTE_WORKLIST: "ExecuteWorklist",
+    # Device / legacy driver macros
+    StepType.LEGACY_DRIVER_MACRO: "LegacyDriverMacro",
 }

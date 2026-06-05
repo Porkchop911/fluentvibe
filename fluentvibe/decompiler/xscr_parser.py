@@ -36,7 +36,7 @@ from ..ir.schema import (
     ScriptGroupStep, SetLocationStep, SetTipsBackStep, SetVariableStep,
     StartTimerStep, STEP_TO_COMMAND_ID, Step, StepType, UserPromptStep,
     WaitForTimerStep, WaitStep, WorklistColumnMapping, WorklistImportStep,
-    LoadWorklistStep, ExecuteWorklistStep,
+    LoadWorklistStep, ExecuteWorklistStep, LegacyDriverMacroStep,
 )
 
 
@@ -304,6 +304,8 @@ def _parse_step_object(obj: ET.Element) -> Optional[Step]:
         )
     if step_type == StepType.RGA_TRANSFER_LABWARE:
         return _parse_rga_transfer(obj)
+    if step_type == StepType.LEGACY_DRIVER_MACRO:
+        return _parse_legacy_driver_macro(obj)
     if step_type == StepType.CGA_GET_FINGERS:
         return CgaGetFingersStep(labware_name=_extract_field(obj, "LabwareName"))
     if step_type == StepType.CGA_DROP_FINGERS:
@@ -683,6 +685,28 @@ def _parse_rga_transfer(obj: ET.Element) -> RgaTransferLabwareStep:
         labware_name=labware_name,
         destination_location=dest_loc,
         destination_site=dest_pos,
+    )
+
+
+def _parse_legacy_driver_macro(obj: ET.Element) -> LegacyDriverMacroStep:
+    """A ``LegacyDriverMacro`` (e.g. Inheco ODTC ``SiLA-ODTC`` commands).
+
+    ``Name`` / ``ModuleName`` are *attributes* of the inner ``<LegacyDriverMacro>``
+    element; the payload is the ``<ExecutionSettings>`` text (absent/self-closing
+    when empty).
+    """
+    name = ""
+    module_name = ""
+    for el in obj.iter():
+        if isinstance(el.tag, str) and _local(el.tag) == "LegacyDriverMacro":
+            name = el.attrib.get("Name", "") or ""
+            module_name = el.attrib.get("ModuleName", "") or ""
+            break
+    settings = _extract_field(obj, "ExecutionSettings")
+    return LegacyDriverMacroStep(
+        name=name,
+        module_name=module_name,
+        execution_settings=settings or None,
     )
 
 
