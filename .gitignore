@@ -12,6 +12,9 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
+# Node (Playwright and other JS tooling)
+node_modules/
+
 # Virtual envs
 .venv/
 venv/

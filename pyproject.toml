@@ -35,6 +35,8 @@ fluentvibe = [
   "_assets/reference/*.yaml",
   "_assets/reference/*.txt",
   "_assets/config/*.yaml",
+  "_assets/config/*.md",
+  "_assets/config/skills/*/*.md",
   "catalog/*.db",
   "workspace_app/static/*.html",
 ]
@@ -43,6 +45,10 @@ fluentvibe = [
 include = ["fluentvibe*"]
 
 [tool.pytest.ini_options]
+# Live tests need a local LM endpoint / running FluentControl and are not part
+# of the default offline suite. Run them explicitly with `-m live_lm` or
+# `-m fluentcontrol_shell` (or `-m "live_lm or fluentcontrol_shell"`).
+addopts = "-m 'not live_lm and not fluentcontrol_shell'"
 markers = [
   "live_lm: requires LM Studio at the configured authoring endpoint",
   "fluentcontrol_shell: requires a running FluentControl UI and shell XSCR",

@@ -249,8 +249,11 @@ def build_index(
                 counts["liquid_class_heads"] = len(liquid_class_head_rows)
 
         # ── Install fingerprint + schema version ─────────────────
+        # INSERT OR REPLACE so a rebuild against an existing index DB is
+        # idempotent — install_path is the PRIMARY KEY, so a plain INSERT
+        # raises IntegrityError on the second build in a process/session.
         conn.execute(
-            """INSERT INTO install
+            """INSERT OR REPLACE INTO install
                (install_path, fingerprint, built_at, schema_version)
                VALUES (?, ?, ?, ?)""",
             (

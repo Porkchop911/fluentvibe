@@ -130,7 +130,6 @@ fluentvibe catalog refresh
 - [Deployment](docs/deployment.md)
 - [CLI](docs/cli.md)
 - [Decompiler](docs/decompile.md)
-- [Manual test walkthrough](MANUAL_TEST.md)
 - [Development](docs/development.md)
 - [Glossary](docs/glossary.md)
 

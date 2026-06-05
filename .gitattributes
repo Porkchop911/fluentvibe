@@ -1,0 +1,6 @@
+# Normalize line endings: store LF in the repo, check out native per platform.
+# Resolves the recurring "LF will be replaced by CRLF" churn on Windows.
+* text=auto
+
+# Binary assets — never normalize or diff as text.
+*.db binary
