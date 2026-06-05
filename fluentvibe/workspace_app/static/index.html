@@ -264,6 +264,11 @@
     <div>
       <section>
         <h2>Workspace</h2>
+        <label for="existingProfile">Load existing profile</label>
+        <div class="actions">
+          <select id="existingProfile"></select>
+          <button id="loadProfile" class="secondary">Load profile</button>
+        </div>
         <label for="profileName">Profile name</label>
         <input id="profileName" value="sat_780_default">
         <label for="configurationSelect">Instrument configuration</label>
@@ -357,6 +362,53 @@
         $('liquidClass').innerHTML = state.liquidClasses.map(l =>
           `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`
         ).join('');
+        await loadProfiles();
+      } catch (err) {
+        setStatus(err.message, true);
+      }
+    }
+
+    async function loadProfiles() {
+      try {
+        const data = await api('/api/profiles');
+        const options = ['<option value="">— new profile —</option>'].concat(
+          (data.profiles || []).map(p =>
+            `<option value="${escapeHtml(p.profile_name)}">${escapeHtml(p.profile_name)}${p.workspace_name ? ` (${escapeHtml(p.workspace_name)})` : ''}</option>`
+          )
+        );
+        $('existingProfile').innerHTML = options.join('');
+      } catch (err) {
+        // Listing profiles is best-effort; an empty/missing dir is not an error.
+        $('existingProfile').innerHTML = '<option value="">— new profile —</option>';
+      }
+    }
+
+    async function loadProfile() {
+      const name = $('existingProfile').value;
+      if (!name) {
+        setStatus('Select a saved profile to load first.', true);
+        return;
+      }
+      setStatus(`Loading profile "${name}"...`);
+      try {
+        const profile = await api(`/api/profile?name=${encodeURIComponent(name)}`);
+        // Select the saved configuration + workspace, then re-fetch fresh deck
+        // data (slots, source hash) so a re-save validates against the current
+        // workspace file rather than the stored snapshot.
+        if (profile.configuration && profile.configuration.guid) {
+          $('configurationSelect').value = profile.configuration.guid;
+        }
+        if (profile.workspace && profile.workspace.guid) {
+          $('workspaceSelect').value = profile.workspace.guid;
+        }
+        await loadWorkspace();
+        // Overlay the saved selections on top of the fresh workspace defaults.
+        $('profileName').value = profile.profile_name;
+        if (Array.isArray(profile.common_labware)) state.commonLabware = profile.common_labware;
+        if (profile.liquid_class) $('liquidClass').value = profile.liquid_class;
+        renderCommonLabware();
+        renderDeck();
+        setStatus(`Loaded profile "${profile.profile_name}" — edit and Save profile to overwrite.`);
       } catch (err) {
         setStatus(err.message, true);
       }
@@ -654,6 +706,8 @@
           })
         });
         setStatus(`Saved profile: ${data.paths.root}`);
+        await loadProfiles();
+        $('existingProfile').value = $('profileName').value;
       } catch (err) {
         setStatus(err.message, true);
       }
@@ -667,6 +721,7 @@
 
     let searchTimer = null;
     $('loadWorkspace').addEventListener('click', loadWorkspace);
+    $('loadProfile').addEventListener('click', () => loadProfile().catch(err => setStatus(err.message, true)));
     $('suggestCommon').addEventListener('click', useDefaults);
     $('addLabware').addEventListener('click', addSelectedLabware);
     $('saveProfile').addEventListener('click', saveProfile);

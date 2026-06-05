@@ -117,6 +117,76 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     assert all(loc.startswith("WS_") for loc in deck_rules["trough_locations"])
 
 
+def test_list_and_load_profiles_roundtrip(tmp_path: Path) -> None:
+    # Hermetic: write two synthetic saved profiles, then list + load them.
+    for pname, wsname, guid in [
+        ("alpha", "Deck A", "11111111-1111-1111-1111-111111111111"),
+        ("beta", "Deck B", "22222222-2222-2222-2222-222222222222"),
+    ]:
+        root = tmp_path / pname
+        root.mkdir()
+        (root / "workspace_profile.json").write_text(
+            json.dumps({
+                "profile_name": pname,
+                "workspace": {"name": wsname, "guid": guid},
+                "configuration": {"guid": "cfg-1", "name": "cfg-1"},
+                "common_labware": [
+                    {"catalog_name": "Foo Plate", "label": "Foo",
+                     "preferred_location": "Nest61mm_Pos", "preferred_position": 1},
+                ],
+                "liquid_class": {"name": "Water Free Single"},
+            }),
+            encoding="utf-8",
+        )
+
+    listing = service.list_profiles(base_dir=tmp_path)
+    assert listing["ok"] is True
+    names = {p["profile_name"] for p in listing["profiles"]}
+    assert names == {"alpha", "beta"}
+
+    loaded = service.load_profile("alpha", base_dir=tmp_path)
+    assert loaded["profile_name"] == "alpha"
+    assert loaded["workspace"] == {"name": "Deck A", "guid": "11111111-1111-1111-1111-111111111111"}
+    assert loaded["configuration"]["guid"] == "cfg-1"
+    assert loaded["liquid_class"] == "Water Free Single"
+    assert loaded["common_labware"][0]["preferred_location"] == "Nest61mm_Pos"
+
+
+def test_list_profiles_empty_dir_is_ok(tmp_path: Path) -> None:
+    assert service.list_profiles(base_dir=tmp_path / "nope") == {"ok": True, "profiles": []}
+
+
+def test_load_profile_missing_raises(tmp_path: Path) -> None:
+    try:
+        service.load_profile("ghost", base_dir=tmp_path)
+    except ValueError as exc:
+        assert "not found" in str(exc).lower()
+    else:
+        raise AssertionError("loading a missing profile should raise")
+
+
+def test_saved_profile_is_listable_and_loadable(tmp_path: Path) -> None:
+    # End-to-end through save_profile: save → list → load reflects selections.
+    if not index_exists():
+        return
+    detail = service.workspace_detail(name=_workspace_name())
+    common = [c for c in detail["default_common_labware"] if c.get("catalog_name")][:2]
+    service.save_profile(
+        {
+            "profile_name": "editme",
+            "workspace": detail["workspace"],
+            "workspace_source": detail["workspace_source"],
+            "common_labware": common,
+            "liquid_class": detail["liquid_class"],
+        },
+        base_dir=tmp_path,
+    )
+    assert "editme" in {p["profile_name"] for p in service.list_profiles(base_dir=tmp_path)["profiles"]}
+    loaded = service.load_profile("editme", base_dir=tmp_path)
+    assert loaded["workspace"]["guid"] == detail["workspace"]["guid"]
+    assert len(loaded["common_labware"]) == len(common)
+
+
 def test_save_profile_rejects_invalid_slot(tmp_path: Path) -> None:
     if not index_exists():
         return
