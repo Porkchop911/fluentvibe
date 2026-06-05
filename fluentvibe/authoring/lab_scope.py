@@ -34,6 +34,26 @@ _VALID_MODES = ("off", "cheatsheet", "enforce", "skills")
 _ENV_VAR = "FLUENTVIBE_LAB_SCOPE"
 _CONFIG_DIR = Path(__file__).resolve().parent.parent / "_assets" / "config"
 
+
+class LabScopeSetupError(RuntimeError):
+    """Raised when ``skills`` mode is active but no deck matches the workspace.
+
+    The deck is workspace-specific and must come from a set-up workspace — a
+    ``--profile`` / ``FLUENTVIBE_PROFILE_DIR`` profile, or a shipped deck skill
+    whose ``workspace:`` frontmatter matches the configured ``worktable`` in
+    ``generation.yaml``. There is intentionally no hardwired default deck, so a
+    misconfigured run fails loud with actionable guidance instead of silently
+    authoring against the wrong deck.
+    """
+
+
+def _configured_worktable() -> tuple[str | None, str | None]:
+    """The workspace (name, guid) bound in ``generation.yaml`` ``worktable``."""
+    wt = (load_generation_config() or {}).get("worktable") or {}
+    name = str(wt.get("name") or "").strip() or None
+    guid = str(wt.get("guid") or "").strip() or None
+    return name, guid
+
 # Sentinel: distinguishes "caller passed profile=None (opt out of env default)"
 # from "caller didn't specify, resolve from FLUENTVIBE_PROFILE_DIR".
 _UNSET: "ResolvedProfile | None" = object()  # type: ignore[assignment]
@@ -224,16 +244,38 @@ def load_lab_scope(
         skills_block = block.get("skills") or {}
         if not skills_block.get("enabled", False):
             return _OFF
-        from .lab_skills import discover_skills  # lazy: avoids import cycle
+        from .lab_skills import (  # lazy: avoids import cycle
+            apply_profile_deck,
+            discover_skills,
+            select_deck_for_workspace,
+        )
 
         skills_dir = _CONFIG_DIR / (skills_block.get("dir") or "skills")
         catalog = discover_skills(skills_dir)
         if not catalog:
             return _OFF
-        if profile is not None and profile.deck_skill is not None:
-            from .lab_skills import apply_profile_deck
 
+        # The deck must come from a set-up workspace, never a hardwired default.
+        # A profile (explicit/env) supplies its own deck directly; otherwise the
+        # configured worktable selects the shipped deck whose workspace matches.
+        if profile is not None and profile.deck_skill is not None:
             catalog = apply_profile_deck(catalog, profile.deck_skill)
+        else:
+            ws_name, ws_guid = (
+                (profile.workspace_name, profile.workspace_guid)
+                if profile is not None
+                else _configured_worktable()
+            )
+            matched = select_deck_for_workspace(catalog, ws_name, ws_guid)
+            if matched is None:
+                raise LabScopeSetupError(
+                    f"No deck skill matches the configured workspace "
+                    f"{ws_name or '(unset)'!r}. Set up a workspace with "
+                    f"`fluentvibe workspace-app` and pass it via `--profile "
+                    f"build/workspaces/<name>` (or FLUENTVIBE_PROFILE_DIR), or "
+                    f"add a deck skill whose `workspace:` frontmatter matches."
+                )
+            catalog = matched
         return LabScope(
             mode=mode,
             cheatsheet_text=None,

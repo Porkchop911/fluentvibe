@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import yaml
@@ -45,6 +45,20 @@ class Skill:
     always_on: bool
     body: str
     path: Path
+    # Deck skills only: the workspace this deck targets, so deck selection can
+    # match it to the active workspace instead of relying on a hardwired
+    # always-on default. Parsed from a ``workspace: {name:, guid:}`` frontmatter
+    # mapping; ``None`` for non-deck skills (and decks that omit it).
+    workspace_name: str | None = None
+    workspace_guid: str | None = None
+
+    def matches_workspace(self, name: str | None, guid: str | None) -> bool:
+        """True when this deck targets the given workspace (guid wins, else name)."""
+        if self.workspace_guid and guid:
+            return self.workspace_guid == guid
+        if self.workspace_name and name:
+            return self.workspace_name == name
+        return False
 
 
 def _parse_skill(path: Path) -> Skill | None:
@@ -67,6 +81,9 @@ def _parse_skill(path: Path) -> Skill | None:
     description = str(meta.get("description") or "").strip()
     if not name or axis not in _VALID_AXES or not description:
         return None
+    ws = meta.get("workspace") if isinstance(meta.get("workspace"), dict) else {}
+    ws_name = str(ws.get("name") or "").strip() or None
+    ws_guid = str(ws.get("guid") or "").strip() or None
     return Skill(
         name=name,
         axis=axis,
@@ -74,6 +91,8 @@ def _parse_skill(path: Path) -> Skill | None:
         always_on=bool(meta.get("always_on", False)),
         body=match.group(2).strip(),
         path=path,
+        workspace_name=ws_name,
+        workspace_guid=ws_guid,
     )
 
 
@@ -100,6 +119,23 @@ def _order_names(names: set[str], catalog: tuple[Skill, ...]) -> list[str]:
     return [s.name for s in catalog if s.name in names]
 
 
+def _without_decks(catalog: tuple[Skill, ...]) -> tuple[Skill, ...]:
+    """``catalog`` with every ``axis == "deck"`` skill removed."""
+    return tuple(s for s in catalog if s.axis != "deck")
+
+
+def _with_active_deck(
+    catalog: tuple[Skill, ...], deck: Skill
+) -> tuple[Skill, ...]:
+    """Drop shipped decks and splice ``deck`` in, forced ``always_on``.
+
+    The active deck is selected from the workspace, so it must always be
+    injected (never left to the optional LM pre-pass) — mark it ``always_on``.
+    """
+    rebuilt = _without_decks(catalog) + (replace(deck, always_on=True),)
+    return tuple(sorted(rebuilt, key=lambda s: (_AXIS_ORDER[s.axis], s.name)))
+
+
 def apply_profile_deck(
     catalog: tuple[Skill, ...], deck_skill_path: Path
 ) -> tuple[Skill, ...]:
@@ -117,9 +153,25 @@ def apply_profile_deck(
     deck = _parse_skill(deck_skill_path)
     if deck is None:
         return catalog
-    kept = tuple(s for s in catalog if s.axis != "deck")
-    rebuilt = kept + (deck,)
-    return tuple(sorted(rebuilt, key=lambda s: (_AXIS_ORDER[s.axis], s.name)))
+    return _with_active_deck(catalog, deck)
+
+
+def select_deck_for_workspace(
+    catalog: tuple[Skill, ...],
+    workspace_name: str | None,
+    workspace_guid: str | None,
+) -> tuple[Skill, ...] | None:
+    """Keep only the shipped deck matching the active workspace, forced on.
+
+    Returns the rebuilt catalog (non-deck skills + the matched deck) when a
+    shipped ``axis == "deck"`` skill targets ``workspace_name``/``guid``, or
+    ``None`` when no deck matches — the caller treats that as "no deck for this
+    workspace", a fail-loud signal rather than a silent default.
+    """
+    for skill in catalog:
+        if skill.axis == "deck" and skill.matches_workspace(workspace_name, workspace_guid):
+            return _with_active_deck(catalog, skill)
+    return None
 
 
 _SELECTION_SYSTEM = (

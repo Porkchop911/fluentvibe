@@ -203,7 +203,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_find.set_defaults(func=_cmd_catalog_find)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    from .authoring.lab_scope import LabScopeSetupError
+
+    try:
+        return args.func(args)
+    except LabScopeSetupError as exc:
+        print(f"Workspace not set up: {exc}", file=sys.stderr)
+        return 3
 
 
 # ── compile / simulate ─────────────────────────────────────────────

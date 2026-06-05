@@ -1,8 +1,11 @@
 ---
 name: deck-sat-780
 axis: deck
-description: The SAT_Fluent_780_Rev3 deck profile — workspace GUID, valid deck positions, the default role-to-slot layout, and reachability constraints. Always loaded (this lab runs one deck); swap this file to target an alternate deck.
-always_on: true
+description: The SAT_Fluent_780_Rev3 deck profile — workspace GUID, valid deck positions, the default role-to-slot layout, and reachability constraints. Selected when the active workspace (a profile, or the generation.yaml worktable binding) is SAT_Fluent_780_Rev3.
+workspace:
+  name: SAT_Fluent_780_Rev3
+  guid: 291ba293-6361-4f8f-aa8d-7c2643d3f096
+always_on: false
 ---
 ## Deck / workspace
 
