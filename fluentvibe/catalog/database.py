@@ -37,20 +37,46 @@ class TecanDatabase:
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_schema()
-        self._migrate_schema()
-        self.seed_dsl_recipes()
+        # The shipped tecan.db is immutable reference data: when it already
+        # exists, open it read-only and skip schema-init/migrate/seed so that
+        # merely reading it never rewrites the file. This keeps the tracked
+        # tecan.db pristine when tests/compiles touch it (review hygiene) — the
+        # runtime only reads it. Build + seed only when absent; to refresh
+        # shipped recipes, delete tecan.db and reconstruct once.
+        #
+        # Only the default/shipped path is treated this way. A caller-supplied
+        # db_path is a working database that still builds and migrates normally
+        # (e.g. upgrading a legacy db to add the dsl_recipes table).
+        is_shipped = self.db_path == DEFAULT_DB_PATH
+        self._read_only = (
+            is_shipped and self.db_path.exists() and self.db_path.stat().st_size > 0
+        )
+        if not self._read_only:
+            self._init_schema()
+            self._migrate_schema()
+            self.seed_dsl_recipes()
 
     @contextmanager
     def _connection(self):
-        """Context manager for database connections."""
-        conn = sqlite3.connect(self.db_path)
+        """Context manager for database connections.
+
+        Existing databases are opened read-only/immutable so reads can never
+        rewrite the file; only a freshly built database is writable.
+        """
+        if self._read_only:
+            conn = sqlite3.connect(
+                f"file:{self.db_path}?mode=ro&immutable=1", uri=True
+            )
+        else:
+            conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             yield conn
-            conn.commit()
+            if not self._read_only:
+                conn.commit()
         except Exception:
-            conn.rollback()
+            if not self._read_only:
+                conn.rollback()
             raise
         finally:
             conn.close()
