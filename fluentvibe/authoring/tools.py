@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import re
 import tempfile
 import threading
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
 
@@ -780,6 +782,54 @@ _API_LOOKUPS: dict[str, dict[str, Any]] = {
 }
 
 
+# Common arg-name slips small local models make, mapped onto the canonical
+# parameter. Only applied when the canonical name is a real parameter of the
+# target method and the model didn't already supply it.
+_TOOL_ARG_ALIASES = {
+    "message": "question",
+    "prompt": "question",
+    "query": "question",
+    "code": "source",
+    "python": "source",
+    "script": "source",
+    "source_code": "source",
+    "python_source": "source",
+    "draft": "source",
+}
+
+
+def reconcile_tool_args(
+    fn: Callable[..., Any], payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Best-effort align LM-supplied kwargs with a tool method's real signature.
+
+    Small local models routinely misname args (``message`` for ``question``)
+    or pass junk keys, which would raise an opaque ``TypeError`` deep in the
+    call. Filter to the parameters the method actually accepts and remap known
+    aliases onto missing parameters, so a fumbled call still lands (or fails
+    with a clean, recoverable message rather than a crash).
+    """
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return dict(payload)
+    if any(p.kind is p.VAR_KEYWORD for p in params.values()):
+        return dict(payload)  # method takes **kwargs — don't second-guess it
+    accepted = {
+        n for n, p in params.items()
+        if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+    }
+    cleaned: dict[str, Any] = {}
+    unknown: dict[str, Any] = {}
+    for key, value in payload.items():
+        (cleaned if key in accepted else unknown)[key] = value
+    for key, value in unknown.items():
+        target = _TOOL_ARG_ALIASES.get(key)
+        if target and target in accepted and target not in cleaned:
+            cleaned[target] = value
+    return cleaned
+
+
 def tool_definitions() -> list[dict[str, Any]]:
     return [
         _tool("ask_user",
@@ -1143,13 +1193,33 @@ class AuthoringToolRegistry:
         fn = self.functions().get(name)
         if fn is None:
             return _compact({"ok": False, "category": "unknown_tool", "message": f"Unknown tool {name!r}."})
+        payload = reconcile_tool_args(fn, payload)
         try:
             result = fn(**payload)
         except TypeError as exc:
-            result = {"ok": False, "category": "bad_tool_arguments", "message": str(exc)}
+            result = {
+                "ok": False,
+                "category": "bad_tool_arguments",
+                "message": f"{exc}. `{name}` accepts: {self._tool_arg_names(name)}. "
+                           "Resend the call with the correct argument names.",
+            }
         except Exception as exc:
             result = {"ok": False, "category": "tool_error", "message": str(exc)}
         return _compact(result)
+
+    @staticmethod
+    @lru_cache(maxsize=64)
+    def _tool_arg_names(name: str) -> str:
+        """Comma-joined parameter names a tool accepts, for actionable errors."""
+        for td in tool_definitions():
+            fn = td["function"]
+            if fn["name"] == name:
+                props = (fn.get("parameters") or {}).get("properties") or {}
+                req = set((fn.get("parameters") or {}).get("required") or [])
+                return ", ".join(
+                    f"{k} (required)" if k in req else k for k in props
+                ) or "(no arguments)"
+        return "(unknown tool)"
 
     def _record_call(
         self,
