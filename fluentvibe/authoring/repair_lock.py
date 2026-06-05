@@ -52,6 +52,12 @@ class RepairLockState:
         if not category:
             return None
 
+        # A malformed tool call (wrong/missing argument names) is a call-mechanics
+        # slip, not a stalled draft — the model never evaluated a draft. Don't let
+        # it trip the no-progress give-up; the outer retry budget still bounds it.
+        if category == "bad_tool_arguments":
+            return None
+
         source_hash = _source_hash(arguments.get("source"))
         if category == self.category and source_hash == self.last_source_hash:
             self.repeated_no_progress_count += 1

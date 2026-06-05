@@ -167,7 +167,7 @@ class Labware:
         #   - index missing + catalog given        → warn, offline synthesis.
         #   - index missing + no catalog           → offline synthesis silently
         #     (offline-fallback path; catalog name becomes `<offline:ClassName>`).
-        from ..catalog.catalog import index_exists, resolve_by_name
+        from ..catalog.catalog import index_exists, resolve_by_name, suggest_names
 
         if index_exists():
             if not catalog:
@@ -178,8 +178,12 @@ class Labware:
                 )
             entry = resolve_by_name(catalog)
             if entry is None:
+                hint = ""
+                suggestions = suggest_names(catalog)
+                if suggestions:
+                    hint = " Did you mean: " + ", ".join(repr(s) for s in suggestions) + "?"
                 raise ValueError(
-                    f"Catalog name {catalog!r} not found in fluentvibe catalog index. "
+                    f"Catalog name {catalog!r} not found in fluentvibe catalog index.{hint} "
                     f"Run `fluentvibe catalog find {catalog!r}` to search."
                 )
             self._populate_from_catalog(entry, max_well_volume_ul=max_well_volume_ul)

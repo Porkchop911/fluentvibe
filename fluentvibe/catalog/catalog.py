@@ -258,6 +258,29 @@ def find_components(pattern: str, *, db_path: Path | str | None = None) -> list[
     return [_entry_from_row(r) for r in rows]
 
 
+def suggest_names(name: str, *, limit: int = 3, db_path: Path | str | None = None) -> list[str]:
+    """Closest real component names to a (likely mistyped) catalog name.
+
+    Small models mangle separators/casing — e.g. ``FCA_200ul_SBS`` for the real
+    ``FCA, 200ul SBS``. Build a candidate pool from components that share an
+    alphanumeric token with the query, then rank by string similarity so the
+    "not found" error can offer a concrete correction.
+    """
+    import difflib
+    import re as _re
+
+    if not name:
+        return []
+    tokens = [t for t in _re.split(r"[^A-Za-z0-9]+", name) if len(t) >= 2]
+    pool: dict[str, None] = {}
+    for tok in sorted(tokens, key=len, reverse=True)[:2]:
+        for entry in find_components(tok, db_path=db_path):
+            pool[entry.name] = None
+    if not pool:
+        return []
+    return difflib.get_close_matches(name, list(pool), n=limit, cutoff=0.5)
+
+
 def find_components_by_metadata(
     pattern: str,
     *,
