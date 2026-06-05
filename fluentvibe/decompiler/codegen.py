@@ -37,6 +37,7 @@ from ..ir.schema import (
     ScriptGroupStep, SetLocationStep, SetTipsBackStep, SetVariableStep,
     StartTimerStep, Step, UserPromptStep, WaitForTimerStep, WaitStep,
     WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep,
+    LegacyDriverMacroStep,
 )
 
 
@@ -504,6 +505,11 @@ def _emit_steps(
             i += 1
             continue
 
+        if isinstance(step, LegacyDriverMacroStep):
+            out.append(indent + _emit_legacy_driver_macro(step))
+            i += 1
+            continue
+
         if isinstance(step, GenericStep):
             out.append(indent + _emit_generic_step(step))
             i += 1
@@ -714,6 +720,41 @@ def _load_worklist_kwargs(step: LoadWorklistStep) -> list[str]:
 
 def _columns_dict(step: WorklistImportStep) -> dict[str, str]:
     return {col.column_name: col.gwl_index for col in step.columns}
+
+
+_ODTC_MACRO_TO_HELPER = {
+    "SiLA-ODTC_OpenDoor": ("odtc_open_door", False),
+    "SiLA-ODTC_CloseDoor": ("odtc_close_door", False),
+    "SiLA-ODTC_GetParameters": ("odtc_get_parameters", False),
+    "SiLA-ODTC_ExecuteMethod": ("odtc_execute_method", True),
+}
+
+_ODTC_SETPARAMS_PREFIX = "Parameter:MethodsXML:String:File:"
+
+
+def _emit_legacy_driver_macro(step: LegacyDriverMacroStep) -> str:
+    """Prefer the typed ``wt.odtc_*`` helpers for SiLA-ODTC; otherwise emit the
+    generic ``wt.legacy_driver_macro(...)`` call."""
+    if step.module_name == "SiLA-ODTC":
+        if (
+            step.name == "SiLA-ODTC_SetParameters"
+            and step.execution_settings
+            and step.execution_settings.startswith(_ODTC_SETPARAMS_PREFIX)
+        ):
+            file_arg = step.execution_settings[len(_ODTC_SETPARAMS_PREFIX):]
+            return f"wt.odtc_set_parameters({file_arg!r})"
+        helper = _ODTC_MACRO_TO_HELPER.get(step.name)
+        if helper:
+            method, takes_arg = helper
+            if takes_arg:
+                return f"wt.{method}({(step.execution_settings or '')!r})"
+            return f"wt.{method}()"
+    if step.execution_settings is None:
+        return f"wt.legacy_driver_macro({step.name!r}, {step.module_name!r})"
+    return (
+        f"wt.legacy_driver_macro({step.name!r}, {step.module_name!r}, "
+        f"{step.execution_settings!r})"
+    )
 
 
 def _emit_generic_step(step: GenericStep) -> str:

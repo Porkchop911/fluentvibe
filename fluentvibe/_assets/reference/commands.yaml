@@ -868,6 +868,18 @@ commands:
     &amp;gt;&amp;lt;FixedSite&amp;gt;{{FixedSite}}&amp;lt;/FixedSite&amp;gt;&amp;lt;Labware&amp;gt;{{LabwareName}}&amp;lt;/Labware&amp;gt;&amp;lt;Location&amp;gt;{{DestinationLocation}}&amp;lt;/Location&amp;gt;&amp;lt;MoveToBase&amp;gt;{{MoveToBase}}&amp;lt;/MoveToBase&amp;gt;&amp;lt;OnTheFlyTool&amp;gt;&amp;lt;/OnTheFlyTool&amp;gt;&amp;lt;Site&amp;gt;{{DestinationSite}}&amp;lt;/Site&amp;gt;&amp;lt;UseOnTheFlyTool&amp;gt;false&amp;lt;/UseOnTheFlyTool&amp;gt;&amp;lt;/TransferLabwareCommandParameters&amp;gt;</ExecutionSettings>\n\
     \  </ApplicationDriverMacro>\n</Object>"
   type: Tecan.VisionX.ApplicationDriver.ApplicationDriverBase.ApplicationDriverMacro
+- category: device
+  confidence: 0.85
+  description: Generic FluentControl LegacyDriverMacro device command (e.g. Inheco ODTC
+    via SiLA-ODTC, inhecoMTC)
+  id: LegacyDriverMacro
+  parameters: []
+  template: "<Object Type=\"Tecan.VisionX.ApplicationDriver.LegacyDriverMacro\">\n\
+    \  <LegacyDriverMacro Version=\"1\" Name=\"{{Name}}\" ModuleName=\"{{ModuleName}}\"\
+    \ ExecutionTime=\"PT2S\" IsBreakpoint=\"{{IsBreakpoint}}\" IsDisabledForExecution=\"\
+    {{IsDisabledForExecution}}\" LineNumber=\"{{LineNumber}}\">\n    {{ExecutionSettingsElement}}\n\
+    \  </LegacyDriverMacro>\n</Object>"
+  type: Tecan.VisionX.ApplicationDriver.LegacyDriverMacro
 - _template_source: programmatic
   category: gripper
   confidence: 0.85
