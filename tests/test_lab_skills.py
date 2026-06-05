@@ -16,13 +16,19 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fluentvibe.authoring.lab_scope import load_lab_scope, resolve_lab_scope_mode  # noqa: E402
+from fluentvibe.authoring import lab_scope as lab_scope_mod  # noqa: E402
+from fluentvibe.authoring.lab_scope import (  # noqa: E402
+    LabScopeSetupError,
+    load_lab_scope,
+    resolve_lab_scope_mode,
+)
 from fluentvibe.authoring.lab_skills import (  # noqa: E402
     Skill,
     apply_profile_deck,
     assemble_context,
     build_initial_scope_message,
     discover_skills,
+    select_deck_for_workspace,
     select_skills,
 )
 
@@ -74,18 +80,23 @@ def test_discover_real_catalog():
     assert {"core-worktable-api", "deck-sat-780", "family-bead-cleanup-ampure"} <= names
     assert all(s.axis in {"api", "deck", "family"} for s in catalog)
     assert all(s.description for s in catalog)
-    # at least the core api + the deck are always_on
+    # the core api skills are always_on; decks are NOT (they are selected by
+    # workspace match, never hardwired) and carry workspace frontmatter.
     always = {s.name for s in catalog if s.always_on}
-    assert {"core-worktable-api", "deck-sat-780"} <= always
+    assert "core-worktable-api" in always
+    assert "deck-sat-780" not in always
+    deck = next(s for s in catalog if s.name == "deck-sat-780")
+    assert deck.workspace_name == "SAT_Fluent_780_Rev3"
+    assert deck.workspace_guid == "291ba293-6361-4f8f-aa8d-7c2643d3f096"
 
 
 def test_shipped_catalog_is_well_formed():
     """Integrity guard for the whole shipped skill library as it grows.
 
     Every file parses, names are unique, axes valid, descriptions non-empty,
-    and the always_on set stays the intended minimal core (core api + labware
-    + the single deck). New skills must be always_on=false so the LM pre-pass
-    stays purely additive.
+    and the always_on set stays the intended minimal core (core api + labware).
+    Decks are never always_on — they are selected by workspace match — and all
+    other skills must be always_on=false so the LM pre-pass stays additive.
     """
     config_dir = REPO_ROOT / "fluentvibe" / "_assets" / "config" / "skills"
     md_files = sorted(config_dir.rglob("*.md"))  # recurse category subfolders
@@ -105,8 +116,12 @@ def test_shipped_catalog_is_well_formed():
     assert always == {
         "core-worktable-api",
         "labware-and-liquid-classes",
-        "deck-sat-780",
     }
+    # every deck skill declares the workspace it targets (for deck selection)
+    decks = [s for s in catalog if s.axis == "deck"]
+    assert decks, "no deck skills shipped"
+    assert all(s.workspace_name for s in decks), "a deck skill lacks workspace frontmatter"
+    assert not any(s.always_on for s in decks), "a deck skill is hardwired always_on"
 
 
 def test_discover_skips_malformed_and_missing(tmp_path):
@@ -214,6 +229,64 @@ def test_apply_profile_deck_degrades_on_bad_file(tmp_path):
     cat = _catalog()
     missing = tmp_path / "deck-nope.md"
     assert apply_profile_deck(cat, missing) == cat  # unchanged, not dropped
+
+
+def test_apply_profile_deck_forces_the_deck_always_on(tmp_path):
+    cat = _catalog()
+    deck = tmp_path / "deck-myprofile.md"
+    # note: always_on omitted in the file — selection must force it on anyway
+    deck.write_text(
+        "---\nname: deck-myprofile\naxis: deck\ndescription: a profile deck\n---\nbind\n",
+        encoding="utf-8",
+    )
+    swapped = apply_profile_deck(cat, deck)
+    spliced = next(s for s in swapped if s.name == "deck-myprofile")
+    assert spliced.always_on is True
+
+
+# ── workspace-matched deck selection ───────────────────────────────────
+
+def test_select_deck_for_workspace_matches_by_guid_then_name():
+    cat = discover_skills(
+        REPO_ROOT / "fluentvibe" / "_assets" / "config" / "skills"
+    )
+    # by guid
+    by_guid = select_deck_for_workspace(
+        cat, None, "291ba293-6361-4f8f-aa8d-7c2643d3f096"
+    )
+    assert by_guid is not None
+    deck = next(s for s in by_guid if s.axis == "deck")
+    assert deck.name == "deck-sat-780" and deck.always_on is True
+    # by name
+    by_name = select_deck_for_workspace(cat, "SAT_Fluent_780_Rev3", None)
+    assert by_name is not None
+    assert {s.name for s in by_name if s.axis == "deck"} == {"deck-sat-780"}
+
+
+def test_select_deck_for_workspace_returns_none_when_unmatched():
+    cat = discover_skills(
+        REPO_ROOT / "fluentvibe" / "_assets" / "config" / "skills"
+    )
+    assert select_deck_for_workspace(cat, "No_Such_Workspace", None) is None
+
+
+def test_skills_fails_loud_when_no_deck_matches(monkeypatch):
+    # no profile + a configured workspace with no shipped deck => fail loud,
+    # never a silent default deck.
+    monkeypatch.setattr(
+        lab_scope_mod, "_configured_worktable", lambda: ("No_Such_Workspace", None)
+    )
+    with pytest.raises(LabScopeSetupError):
+        load_lab_scope("skills", profile=None)
+
+
+def test_skills_default_deck_follows_configured_worktable():
+    # the shipped generation.yaml worktable is SAT_Fluent_780_Rev3, so the bare
+    # (profile-less) skills scope resolves to that deck — driven by config, not
+    # a hardwired always_on flag.
+    scope = load_lab_scope("skills", profile=None)
+    deck_names = {s.name for s in scope.skill_catalog if s.axis == "deck"}
+    assert deck_names == {"deck-sat-780"}
 
 
 # ── assembly ───────────────────────────────────────────────────────────
