@@ -19,8 +19,7 @@
       <Guid>{{liquid_class_guid}}</Guid>
       <TypeId>LiquidClass</TypeId>
       <ObjectName>{{liquid_class_name}}</ObjectName>
-    </Reference>
-{{file_references}}
+    </Reference>{{file_references}}
     <PayloadData>
       <Script version="{{script_version}}" contentIsDeepSave="False" contentIsApproved="False" dataVersion="{{data_version}}">
         <Properties>

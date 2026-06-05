@@ -947,6 +947,22 @@ class Renderer:
         return False
 
     def _replace_xml_tag(self, xml: str, tag_name: str, value: str) -> str:
+        if value == "":
+            # Empty value: preserve the template's element form rather than
+            # injecting an empty value. A self-closing <Tag /> must stay
+            # self-closing (expanding it to <Tag></Tag> diverges from
+            # FluentControl's own serialization); an expanded element keeps its
+            # form with its content cleared. Templates intentionally use both
+            # forms in different commands, so don't normalize across them.
+            if re.search(fr"<{tag_name}\s*/>", xml):
+                return xml
+            return re.sub(
+                fr"<{tag_name}>.*?</{tag_name}>",
+                lambda _: f"<{tag_name}></{tag_name}>",
+                xml,
+                count=1,
+                flags=re.DOTALL,
+            )
         if re.search(fr"<{tag_name}\s*/>", xml):
             return re.sub(
                 fr"<{tag_name}\s*/>",
@@ -1007,7 +1023,10 @@ class Renderer:
         for path in paths:
             if path and path not in unique:
                 unique.append(path)
-        return "\n".join(
+        # Leading newline so the block starts on its own line after the
+        # preceding </Reference>; when there are no references the placeholder
+        # collapses to nothing (no stray blank line before <PayloadData>).
+        return "\n" + "\n".join(
             f'    <FileReference>\n      <File>{self._xml_escape(path)}</File>\n    </FileReference>'
             for path in unique
         )

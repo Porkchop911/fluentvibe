@@ -1,5 +1,21 @@
 # Development
 
+## Test baseline
+
+The default offline suite requires no FluentControl install or local LM and is
+deterministic across runs:
+
+```
+python -m pytest -q
+# 533 passed, 7 skipped, 6 deselected
+```
+
+Live and shell tests are deselected by default (see `addopts` in
+`pyproject.toml`); run them explicitly with `pytest -m live_lm` or
+`pytest -m fluentcontrol_shell`. Install-backed tests skip automatically unless a
+local FluentControl install is reachable, and assert install-independent
+invariants rather than pinning a specific install's GUIDs.
+
 ## Repo layout
 
 ```
