@@ -67,6 +67,11 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
                 ))
             elif parsed.path == "/api/liquid-classes":
                 self._json(service.list_liquid_classes())
+            elif parsed.path == "/api/profiles":
+                self._json(service.list_profiles())
+            elif parsed.path == "/api/profile":
+                qs = parse_qs(parsed.query)
+                self._json(service.load_profile(_first(qs, "name") or ""))
             elif parsed.path == "/api/suggest-roles":
                 qs = parse_qs(parsed.query)
                 self._json(service.suggest_roles(

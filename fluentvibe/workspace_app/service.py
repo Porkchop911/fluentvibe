@@ -37,6 +37,7 @@ from ..catalog.catalog import (
 
 
 PROFILE_SCHEMA_VERSION = 1
+PROFILES_BASE_DIR = Path("build") / "workspaces"
 DEFAULT_FC_INSTALL = Path(r"C:\ProgramData\Tecan\VisionX\DataBase")
 DEFAULT_INSTRUMENT_CONFIG_DIR = Path(r"C:\ProgramData\Tecan\VisionX\InstrumentConfigurations")
 COMMON_LABWARE_CATEGORIES: tuple[dict[str, Any], ...] = (
@@ -257,7 +258,7 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
         valid_slots=set(bundle.valid_slots),
     )
     liquid_class = str(payload.get("liquid_class") or "Water Free Single")
-    root = (base_dir or Path("build") / "workspaces") / profile_name
+    root = (base_dir or PROFILES_BASE_DIR) / profile_name
     deck_skill_name = f"deck-{profile_name}"
     paths = ProfilePaths(
         root=root,
@@ -304,6 +305,62 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
     )
     paths.readme.write_text(_profile_readme(profile, paths), encoding="utf-8")
     return {"ok": True, "profile": profile, "paths": paths.to_dict()}
+
+
+def list_profiles(base_dir: Path | None = None) -> dict[str, Any]:
+    """List saved workspace profiles under the profiles base dir.
+
+    Each entry is a lightweight summary; use :func:`load_profile` to rehydrate
+    one into the editor form for modification.
+    """
+    root = base_dir or PROFILES_BASE_DIR
+    profiles: list[dict[str, Any]] = []
+    if root.exists():
+        for json_path in sorted(root.glob("*/workspace_profile.json")):
+            try:
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            workspace = data.get("workspace") or {}
+            profiles.append({
+                "profile_name": data.get("profile_name") or json_path.parent.name,
+                "workspace_name": workspace.get("name"),
+                "workspace_guid": workspace.get("guid"),
+                "root": str(json_path.parent),
+                "mtime": json_path.stat().st_mtime,
+            })
+    profiles.sort(key=lambda item: item["mtime"], reverse=True)
+    return {"ok": True, "profiles": profiles}
+
+
+def load_profile(profile_name: str, *, base_dir: Path | None = None) -> dict[str, Any]:
+    """Rehydrate a saved profile into editor form-state for modification.
+
+    Returns the selections the UI needs to pre-populate the form (workspace,
+    configuration, common labware with preferred slots, liquid class). The deck
+    geometry and a fresh ``workspace_source`` are *not* returned — the editor
+    re-fetches those via ``workspace_detail`` so a re-save always validates
+    against the current workspace file rather than the stored snapshot.
+    """
+    root = base_dir or PROFILES_BASE_DIR
+    safe = _safe_profile_name(profile_name)
+    json_path = root / safe / "workspace_profile.json"
+    if not json_path.exists():
+        raise ValueError(f"Profile not found: {profile_name!r}")
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read profile {profile_name!r}: {exc}") from exc
+    workspace = data.get("workspace") or {}
+    liquid_class = data.get("liquid_class") or {}
+    return {
+        "ok": True,
+        "profile_name": data.get("profile_name") or safe,
+        "workspace": {"name": workspace.get("name"), "guid": workspace.get("guid")},
+        "configuration": data.get("configuration"),
+        "common_labware": data.get("common_labware") or [],
+        "liquid_class": liquid_class.get("name") or "Water Free Single",
+    }
 
 
 def _workspace_bundle(name: str | None = None, guid: str | None = None):
