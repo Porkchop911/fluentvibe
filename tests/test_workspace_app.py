@@ -152,6 +152,10 @@ def test_list_and_load_profiles_roundtrip(tmp_path: Path) -> None:
     assert loaded["liquid_class"] == "Water Free Single"
     assert loaded["common_labware"][0]["preferred_location"] == "Nest61mm_Pos"
 
+    loaded_by_path = service.load_profile(str(tmp_path / "alpha"))
+    assert loaded_by_path["profile_name"] == "alpha"
+    assert loaded_by_path["workspace"]["guid"] == "11111111-1111-1111-1111-111111111111"
+
 
 def test_list_profiles_empty_dir_is_ok(tmp_path: Path) -> None:
     assert service.list_profiles(base_dir=tmp_path / "nope") == {"ok": True, "profiles": []}

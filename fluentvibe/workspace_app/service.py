@@ -480,8 +480,20 @@ def _workbench_path(raw: Any, leaf: str) -> Path:
 
 
 def _profile_dir(profile_name: str) -> Path:
-    safe = _safe_profile_name(profile_name)
-    return PROFILES_BASE_DIR / safe
+    return _profile_root(profile_name)
+
+
+def _profile_root(profile_name: str, *, base_dir: Path | None = None) -> Path:
+    raw = str(profile_name or "").strip()
+    root = base_dir or PROFILES_BASE_DIR
+    if not raw:
+        return root / ""
+    candidate = Path(raw).expanduser()
+    if (candidate / "workspace_profile.json").exists():
+        return candidate
+    if candidate.name == "workspace_profile.json" and candidate.exists():
+        return candidate.parent
+    return root / _safe_profile_name(raw)
 
 
 def suggest_common_labware(
@@ -637,9 +649,9 @@ def load_profile(profile_name: str, *, base_dir: Path | None = None) -> dict[str
     re-fetches those via ``workspace_detail`` so a re-save always validates
     against the current workspace file rather than the stored snapshot.
     """
-    root = base_dir or PROFILES_BASE_DIR
-    safe = _safe_profile_name(profile_name)
-    json_path = root / safe / "workspace_profile.json"
+    root = _profile_root(profile_name, base_dir=base_dir)
+    safe = root.name
+    json_path = root / "workspace_profile.json"
     if not json_path.exists():
         raise ValueError(f"Profile not found: {profile_name!r}")
     try:
