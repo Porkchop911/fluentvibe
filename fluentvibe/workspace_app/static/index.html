@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>fluentvibe Workspace Setup</title>
+  <title>fluentvibe Workbench</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f5f6f8;
+      --bg: #f4f6f8;
       --panel: #fff;
       --line: #d8dee6;
       --text: #1f2933;
@@ -15,7 +15,9 @@
       --accent: #1667c7;
       --accent-soft: #e8f1ff;
       --bad: #b42318;
+      --good: #137333;
       --deck: #e7ebef;
+      --code: #111827;
     }
     * { box-sizing: border-box; }
     body {
@@ -26,22 +28,88 @@
     }
     header {
       display: flex;
-      gap: 12px;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 18px;
+      gap: 12px;
+      padding: 12px 16px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
       position: sticky;
       top: 0;
-      z-index: 5;
+      z-index: 10;
     }
     h1 { font-size: 18px; margin: 0; }
-    main {
+    h2 { font-size: 15px; margin: 0 0 12px; }
+    h3 { font-size: 13px; margin: 10px 0 6px; }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 10px 0 4px;
+    }
+    input, select, textarea, button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 7px 8px;
+      font: inherit;
+      background: #fff;
+    }
+    textarea {
+      min-height: 260px;
+      resize: vertical;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    button {
+      min-height: 34px;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      cursor: pointer;
+      font-weight: 650;
+    }
+    button.secondary {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #b7d4f8;
+    }
+    button.danger {
+      background: #fff1f0;
+      color: var(--bad);
+      border-color: #f4b5ae;
+    }
+    button:disabled { opacity: .48; cursor: not-allowed; }
+    main { padding: 14px; }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .tab {
+      width: auto;
+      min-height: 32px;
+      padding: 5px 10px;
+      color: var(--text);
+      background: #fff;
+      border-color: var(--line);
+    }
+    .tab.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: #b7d4f8;
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .grid {
       display: grid;
-      grid-template-columns: minmax(360px, 460px) minmax(0, 1fr);
-      gap: 16px;
-      padding: 16px;
+      grid-template-columns: minmax(340px, 460px) minmax(0, 1fr);
+      gap: 14px;
+    }
+    .wide-grid {
+      display: grid;
+      grid-template-columns: minmax(340px, 520px) minmax(0, 1fr);
+      gap: 14px;
     }
     section {
       background: var(--panel);
@@ -49,44 +117,25 @@
       border-radius: 8px;
       padding: 14px;
     }
-    h2 { font-size: 15px; margin: 0 0 12px; }
-    label {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      margin: 10px 0 4px;
-    }
-    input, select, button {
-      width: 100%;
-      min-height: 34px;
+    .stack { display: grid; gap: 12px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+    .triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 12px; color: var(--muted); }
+    .status { min-height: 22px; margin-top: 10px; color: var(--muted); white-space: pre-wrap; }
+    .status.error { color: var(--bad); }
+    .status.ok { color: var(--good); }
+    .pre {
+      min-height: 120px;
+      max-height: 520px;
+      overflow: auto;
       border: 1px solid var(--line);
       border-radius: 6px;
-      padding: 6px 8px;
-      font: inherit;
-      background: #fff;
-    }
-    button {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-      cursor: pointer;
-      font-weight: 600;
-    }
-    button.secondary {
-      background: var(--accent-soft);
-      color: var(--accent);
-      border-color: #b7d4f8;
-    }
-    button:disabled { opacity: .45; cursor: not-allowed; }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    .muted { color: var(--muted); }
-    .error { color: var(--bad); white-space: pre-wrap; }
-    .status { margin-top: 12px; min-height: 20px; }
-    .chooser {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      align-items: end;
+      padding: 10px;
+      background: #fbfcfd;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
     }
     .common-list { display: grid; gap: 8px; margin-top: 12px; }
     .common-item {
@@ -103,8 +152,7 @@
       justify-content: space-between;
       gap: 8px;
     }
-    .common-title { font-weight: 700; overflow-wrap: anywhere; }
-    .common-meta { font-size: 12px; color: var(--muted); }
+    .common-title { font-weight: 750; overflow-wrap: anywhere; }
     .mini {
       width: auto;
       min-height: 28px;
@@ -116,26 +164,19 @@
       grid-template-columns: 1fr 90px;
       gap: 8px;
     }
-    .deck-wrap {
-      display: grid;
-      gap: 12px;
-    }
     .deck-map {
       position: relative;
-      min-height: 640px;
+      min-height: 620px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--deck);
       overflow: auto;
-      padding: 0;
     }
     .deck-canvas {
       position: relative;
       min-width: 100%;
-      min-height: 620px;
-      background:
-        linear-gradient(to bottom, rgba(255,255,255,.45), rgba(255,255,255,.18)),
-        var(--deck);
+      min-height: 600px;
+      background: linear-gradient(to bottom, rgba(255,255,255,.48), rgba(255,255,255,.18)), var(--deck);
     }
     .deck-label {
       position: absolute;
@@ -143,7 +184,7 @@
       top: 8px;
       color: var(--muted);
       font-size: 12px;
-      background: rgba(255,255,255,.78);
+      background: rgba(255,255,255,.82);
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 3px 8px;
@@ -152,7 +193,7 @@
     .deck-frame {
       position: absolute;
       border: 2px solid #8c98a6;
-      background: rgba(255,255,255,.22);
+      background: rgba(255,255,255,.24);
       box-shadow: inset 0 -18px 0 rgba(255,255,255,.44);
     }
     .grid-line {
@@ -160,7 +201,7 @@
       top: 0;
       bottom: 0;
       width: 1px;
-      background: rgba(91, 105, 121, .26);
+      background: rgba(91, 105, 121, .24);
       z-index: 1;
     }
     .grid-label {
@@ -183,33 +224,7 @@
       top: 3px;
       color: #5f6f82;
       font-size: 10px;
-      font-weight: 700;
-    }
-    .carrier {
-      min-height: 170px;
-      border: 2px solid #aeb8c3;
-      border-radius: 8px;
-      background: rgba(255,255,255,.58);
-      padding: 8px;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      gap: 8px;
-    }
-    .carrier-title {
-      font-weight: 800;
-      font-size: 12px;
-      overflow-wrap: anywhere;
-    }
-    .carrier-meta {
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 500;
-    }
-    .carrier-sites {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-      gap: 6px;
-      align-content: start;
+      font-weight: 750;
     }
     .slot {
       position: absolute;
@@ -230,8 +245,8 @@
       box-shadow: 0 0 0 2px rgba(22,103,199,.16);
     }
     .slot .pos { font-weight: 800; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .slot .small { color: var(--muted); overflow-wrap: anywhere; }
-    .slot.compact .small.coords { display: none; }
+    .slot .tiny { color: var(--muted); overflow-wrap: anywhere; }
+    .slot.compact .coords { display: none; }
     .badge {
       display: inline-block;
       margin-top: 5px;
@@ -240,16 +255,10 @@
       background: #dcecff;
       color: #114c91;
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 750;
     }
-    .location h3 { margin: 0 0 8px; font-size: 13px; }
-    .slots-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-      gap: 8px;
-    }
-    @media (max-width: 950px) {
-      main { grid-template-columns: 1fr; }
+    @media (max-width: 980px) {
+      .grid, .wide-grid { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
       .deck-map { min-height: 460px; }
     }
@@ -257,63 +266,201 @@
 </head>
 <body>
   <header>
-    <h1>fluentvibe Workspace Setup</h1>
-    <div class="muted" id="workspaceSummary">Select a workspace to begin.</div>
+    <h1>fluentvibe Workbench</h1>
+    <div class="muted" id="workspaceSummary">Select a workspace or profile.</div>
   </header>
   <main>
-    <div>
-      <section>
-        <h2>Workspace</h2>
-        <label for="existingProfile">Load existing profile</label>
-        <div class="actions">
-          <select id="existingProfile"></select>
-          <button id="loadProfile" class="secondary">Load profile</button>
-        </div>
-        <label for="profileName">Profile name</label>
-        <input id="profileName" value="sat_780_default">
-        <label for="configurationSelect">Instrument configuration</label>
-        <select id="configurationSelect"></select>
-        <div class="common-meta" id="configurationSummary"></div>
-        <label for="workspaceSelect">Workspace deck layout</label>
-        <select id="workspaceSelect"></select>
-        <div class="actions">
-          <button id="loadWorkspace">Load</button>
-          <button id="suggestCommon" class="secondary" disabled>Use defaults</button>
-        </div>
-      </section>
+    <nav class="tabs">
+      <button class="tab active" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="author">Author</button>
+      <button class="tab" data-tab="code">Code Lab</button>
+      <button class="tab" data-tab="decompile">Decompile</button>
+      <button class="tab" data-tab="catalog">Catalog</button>
+      <button class="tab" data-tab="fc">FluentControl</button>
+    </nav>
 
-      <section style="margin-top: 16px;">
-        <h2>Commonly Used Labware</h2>
-        <div class="chooser">
-          <div>
-            <label for="categorySelect">Category</label>
-            <select id="categorySelect"></select>
-          </div>
-          <div>
-            <label for="labwareSearch">Search</label>
-            <input id="labwareSearch" placeholder="96, MCA, trough...">
-          </div>
+    <div class="panel active" id="tab-setup">
+      <div class="grid">
+        <div class="stack">
+          <section>
+            <h2>Workspace Profile</h2>
+            <label for="existingProfile">Load existing profile</label>
+            <div class="actions">
+              <select id="existingProfile"></select>
+              <button id="loadProfile" class="secondary">Load profile</button>
+            </div>
+            <label for="profileName">Profile name</label>
+            <input id="profileName" value="sat_780_default">
+            <label for="configurationSelect">Instrument configuration</label>
+            <select id="configurationSelect"></select>
+            <div class="small" id="configurationSummary"></div>
+            <label for="workspaceSelect">Workspace deck layout</label>
+            <select id="workspaceSelect"></select>
+            <div class="actions">
+              <button id="loadWorkspace">Load</button>
+              <button id="suggestCommon" class="secondary" disabled>Use defaults</button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Common Labware</h2>
+            <div class="actions">
+              <div>
+                <label for="categorySelect">Category</label>
+                <select id="categorySelect"></select>
+              </div>
+              <div>
+                <label for="labwareSearch">Search</label>
+                <input id="labwareSearch" placeholder="96, MCA, trough">
+              </div>
+            </div>
+            <label for="labwareSelect">Available labware</label>
+            <select id="labwareSelect"></select>
+            <button id="addLabware" class="secondary" style="margin-top:8px" disabled>Add to common list</button>
+            <div class="common-list" id="commonList"></div>
+            <label for="liquidClass">Default liquid class</label>
+            <select id="liquidClass"></select>
+            <button id="saveProfile" style="margin-top:12px" disabled>Save profile</button>
+            <div class="status" id="status"></div>
+          </section>
         </div>
-        <label for="labwareSelect">Available labware</label>
-        <select id="labwareSelect"></select>
-        <button id="addLabware" class="secondary" style="margin-top: 8px;" disabled>Add to common list</button>
-        <div class="common-list" id="commonList"></div>
-        <label for="liquidClass">Default liquid class</label>
-        <select id="liquidClass"></select>
-        <button id="saveProfile" style="margin-top: 12px;" disabled>Save profile</button>
-        <div class="status" id="status"></div>
-      </section>
+
+        <section>
+          <h2>Worktable Layout</h2>
+          <div class="deck-map" id="deckMap">
+            <div class="deck-label">Workspace XY coordinates from FluentControl data</div>
+          </div>
+          <div id="slotGroups" class="small"></div>
+        </section>
+      </div>
     </div>
 
-    <section>
-      <h2>Worktable Layout</h2>
-      <div class="deck-wrap">
-        <div class="deck-map" id="deckMap">
-          <div class="deck-label">Workspace XY coordinates from FluentControl data</div>
-        </div>
-        <div id="slotGroups"></div>
+    <div class="panel" id="tab-author">
+      <div class="wide-grid">
+        <section>
+          <h2>Prompt Authoring</h2>
+          <label for="authorProfile">Profile</label>
+          <select id="authorProfile"></select>
+          <div class="triple">
+            <div>
+              <label for="authorLabScope">Lab scope</label>
+              <select id="authorLabScope">
+                <option value="skills">skills</option>
+                <option value="enforce">enforce</option>
+                <option value="cheatsheet">cheatsheet</option>
+                <option value="off">off</option>
+              </select>
+            </div>
+            <div>
+              <label for="authorRetry">Retry budget</label>
+              <input id="authorRetry" type="number" min="1" value="8">
+            </div>
+            <div>
+              <label for="authorModel">Model</label>
+              <input id="authorModel" placeholder="default">
+            </div>
+          </div>
+          <label for="authorPrompt">Message</label>
+          <textarea id="authorPrompt" placeholder="Author a protocol..."></textarea>
+          <div class="actions">
+            <button id="startAuthor">Start session</button>
+            <button id="sendAuthor" class="secondary" disabled>Send</button>
+          </div>
+          <div class="status" id="authorStatus"></div>
+        </section>
+        <section>
+          <h2>Authoring Result</h2>
+          <div class="pre" id="authorResult"></div>
+          <label for="generatedCode">Generated / best draft code</label>
+          <textarea id="generatedCode"></textarea>
+        </section>
       </div>
-    </section>
+    </div>
+
+    <div class="panel" id="tab-code">
+      <div class="wide-grid">
+        <section>
+          <h2>Source Validation</h2>
+          <label for="codeProfile">Profile</label>
+          <select id="codeProfile"></select>
+          <label for="sourcePath">Optional Python file path</label>
+          <input id="sourcePath" placeholder="D:\python\fluentvibe\examples\simple_transfer.py">
+          <label for="sourceText">Python source</label>
+          <textarea id="sourceText" placeholder="Paste a build_worktable() protocol here."></textarea>
+          <div class="actions">
+            <button id="simulateSource">Simulate</button>
+            <button id="compileSource" class="secondary">Compile + simulate</button>
+          </div>
+          <div class="status" id="codeStatus"></div>
+        </section>
+        <section>
+          <h2>Validation Report</h2>
+          <div class="pre" id="codeResult"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-decompile">
+      <div class="wide-grid">
+        <section>
+          <h2>Decompiler</h2>
+          <label for="decompilePath">XSCR path</label>
+          <input id="decompilePath" placeholder="D:\path\protocol.xscr">
+          <label><input id="decompileStrict" type="checkbox" style="width:auto;min-height:auto"> fail when unknown commands remain</label>
+          <button id="runDecompile">Decompile</button>
+          <div class="status" id="decompileStatus"></div>
+        </section>
+        <section>
+          <h2>Decompiled Python</h2>
+          <div class="pre" id="decompileMeta"></div>
+          <textarea id="decompileSource"></textarea>
+        </section>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-catalog">
+      <div class="wide-grid">
+        <section>
+          <h2>Catalog</h2>
+          <button id="loadCatalogInfo" class="secondary">Refresh info</button>
+          <label for="catalogQuery">Search labware</label>
+          <input id="catalogQuery" placeholder="magnet, 96, DiTi">
+          <button id="catalogSearch" class="secondary" style="margin-top:8px">Search</button>
+          <label for="catalogInstall">Optional install path for rebuild</label>
+          <input id="catalogInstall" placeholder="C:\ProgramData\Tecan\VisionX\DataBase">
+          <button id="catalogRefresh" class="danger" style="margin-top:8px">Rebuild catalog index</button>
+          <div class="status" id="catalogStatus"></div>
+        </section>
+        <section>
+          <h2>Catalog Result</h2>
+          <div class="pre" id="catalogResult"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-fc">
+      <div class="wide-grid">
+        <section>
+          <h2>FluentControl Gate</h2>
+          <label for="fcXscrPath">XSCR path</label>
+          <input id="fcXscrPath" placeholder="D:\path\compiled.xscr">
+          <label><input id="fcOpenDirect" type="checkbox" style="width:auto;min-height:auto"> open XSCR directly</label>
+          <button id="fcValidate" class="secondary">Validate via shell</button>
+          <h3>Deploy</h3>
+          <label for="deployObjectName">Optional object name</label>
+          <input id="deployObjectName" placeholder="Protocol name in FluentControl">
+          <label for="deployDatastore">Optional UserSpecific datastore</label>
+          <input id="deployDatastore" placeholder="C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific">
+          <label><input id="allowFcRunning" type="checkbox" style="width:auto;min-height:auto"> allow deploy while FluentControl is running</label>
+          <button id="deployXscr" class="danger">Deploy XSCR</button>
+          <div class="status" id="fcStatus"></div>
+        </section>
+        <section>
+          <h2>FluentControl Result</h2>
+          <div class="pre" id="fcResult"></div>
+        </section>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -324,11 +471,12 @@
       deckCoordinates: [],
       deckFrame: {},
       workspaceSource: null,
-      deckBlocks: [],
       commonLabware: [],
       categories: [],
       labwareOptions: [],
-      liquidClasses: []
+      liquidClasses: [],
+      profiles: [],
+      authorSessionId: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -340,12 +488,58 @@
       return data;
     }
 
-    function setStatus(text, error=false) {
-      $('status').className = error ? 'status error' : 'status muted';
-      $('status').textContent = text || '';
+    async function post(path, payload) {
+      return api(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+      });
     }
 
+    function setStatus(id, text, kind) {
+      const el = $(id);
+      el.className = `status ${kind === 'error' ? 'error' : kind === 'ok' ? 'ok' : ''}`;
+      el.textContent = text || '';
+    }
+
+    function showJson(id, value) {
+      $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+
+    async function submitAndPoll(kind, payload, statusId, resultId, done) {
+      setStatus(statusId, `Starting ${kind}...`);
+      const created = await post(`/api/jobs/${kind}`, payload);
+      const jobId = created.job.id;
+      return pollJob(jobId, statusId, resultId, done);
+    }
+
+    async function pollJob(jobId, statusId, resultId, done) {
+      while (true) {
+        const data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
+        const job = data.job;
+        if (job.status === 'queued' || job.status === 'running') {
+          setStatus(statusId, `${job.kind}: ${job.status}`);
+          await sleep(750);
+          continue;
+        }
+        if (job.status === 'failure') {
+          setStatus(statusId, job.error ? job.error.message : 'Job failed', 'error');
+          if (resultId) showJson(resultId, job);
+          return job;
+        }
+        setStatus(statusId, `${job.kind}: complete`, 'ok');
+        if (resultId) showJson(resultId, job.result);
+        if (done) done(job.result);
+        return job;
+      }
+    }
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     async function init() {
+      bindTabs();
+      bindSetup();
+      bindWorkbench();
       try {
         const [configs, workspaces, liquidClasses] = await Promise.all([
           api('/api/configurations'),
@@ -358,110 +552,129 @@
         $('workspaceSelect').innerHTML = workspaces.workspaces.map(w =>
           `<option value="${escapeHtml(w.guid)}">${escapeHtml(w.name)}</option>`
         ).join('');
-        state.liquidClasses = liquidClasses.liquid_classes;
+        state.liquidClasses = liquidClasses.liquid_classes || [];
         $('liquidClass').innerHTML = state.liquidClasses.map(l =>
           `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`
         ).join('');
         await loadProfiles();
+        await loadCatalogInfo();
       } catch (err) {
-        setStatus(err.message, true);
+        setStatus('status', err.message, 'error');
       }
     }
 
+    function bindTabs() {
+      document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+          document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+          btn.classList.add('active');
+          $(`tab-${btn.dataset.tab}`).classList.add('active');
+        });
+      });
+    }
+
+    function bindSetup() {
+      $('loadWorkspace').addEventListener('click', loadWorkspace);
+      $('loadProfile').addEventListener('click', () => loadProfile().catch(err => setStatus('status', err.message, 'error')));
+      $('suggestCommon').addEventListener('click', useDefaults);
+      $('addLabware').addEventListener('click', addSelectedLabware);
+      $('saveProfile').addEventListener('click', saveProfile);
+      $('categorySelect').addEventListener('change', () => refreshLabwareOptions().catch(err => setStatus('status', err.message, 'error')));
+      let searchTimer = null;
+      $('labwareSearch').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => refreshLabwareOptions().catch(err => setStatus('status', err.message, 'error')), 180);
+      });
+    }
+
+    function bindWorkbench() {
+      $('startAuthor').addEventListener('click', startAuthoringSession);
+      $('sendAuthor').addEventListener('click', sendAuthorMessage);
+      $('simulateSource').addEventListener('click', simulateSource);
+      $('compileSource').addEventListener('click', compileSource);
+      $('runDecompile').addEventListener('click', runDecompile);
+      $('loadCatalogInfo').addEventListener('click', loadCatalogInfo);
+      $('catalogSearch').addEventListener('click', searchCatalog);
+      $('catalogRefresh').addEventListener('click', refreshCatalog);
+      $('fcValidate').addEventListener('click', validateFc);
+      $('deployXscr').addEventListener('click', deployXscr);
+    }
+
     async function loadProfiles() {
-      try {
-        const data = await api('/api/profiles');
-        const options = ['<option value="">— new profile —</option>'].concat(
-          (data.profiles || []).map(p =>
-            `<option value="${escapeHtml(p.profile_name)}">${escapeHtml(p.profile_name)}${p.workspace_name ? ` (${escapeHtml(p.workspace_name)})` : ''}</option>`
-          )
-        );
-        $('existingProfile').innerHTML = options.join('');
-      } catch (err) {
-        // Listing profiles is best-effort; an empty/missing dir is not an error.
-        $('existingProfile').innerHTML = '<option value="">— new profile —</option>';
-      }
+      const data = await api('/api/profiles');
+      state.profiles = data.profiles || [];
+      const setupOptions = ['<option value="">- new profile -</option>'].concat(profileOptions());
+      $('existingProfile').innerHTML = setupOptions.join('');
+      const shared = ['<option value="">No profile</option>'].concat(profileOptions());
+      $('authorProfile').innerHTML = shared.join('');
+      $('codeProfile').innerHTML = shared.join('');
+    }
+
+    function profileOptions() {
+      return state.profiles.map(p =>
+        `<option value="${escapeHtml(p.profile_name)}">${escapeHtml(p.profile_name)}${p.workspace_name ? ` (${escapeHtml(p.workspace_name)})` : ''}</option>`
+      );
     }
 
     async function loadProfile() {
       const name = $('existingProfile').value;
       if (!name) {
-        setStatus('Select a saved profile to load first.', true);
+        setStatus('status', 'Select a saved profile to load first.', 'error');
         return;
       }
-      setStatus(`Loading profile "${name}"...`);
-      try {
-        const profile = await api(`/api/profile?name=${encodeURIComponent(name)}`);
-        // Select the saved configuration + workspace, then re-fetch fresh deck
-        // data (slots, source hash) so a re-save validates against the current
-        // workspace file rather than the stored snapshot.
-        if (profile.configuration && profile.configuration.guid) {
-          $('configurationSelect').value = profile.configuration.guid;
-        }
-        if (profile.workspace && profile.workspace.guid) {
-          $('workspaceSelect').value = profile.workspace.guid;
-        }
-        await loadWorkspace();
-        // Overlay the saved selections on top of the fresh workspace defaults.
-        $('profileName').value = profile.profile_name;
-        if (Array.isArray(profile.common_labware)) state.commonLabware = profile.common_labware;
-        if (profile.liquid_class) $('liquidClass').value = profile.liquid_class;
-        renderCommonLabware();
-        renderDeck();
-        setStatus(`Loaded profile "${profile.profile_name}" — edit and Save profile to overwrite.`);
-      } catch (err) {
-        setStatus(err.message, true);
-      }
+      setStatus('status', `Loading profile "${name}"...`);
+      const profile = await api(`/api/profile?name=${encodeURIComponent(name)}`);
+      if (profile.configuration && profile.configuration.guid) $('configurationSelect').value = profile.configuration.guid;
+      if (profile.workspace && profile.workspace.guid) $('workspaceSelect').value = profile.workspace.guid;
+      await loadWorkspace();
+      $('profileName').value = profile.profile_name;
+      if (Array.isArray(profile.common_labware)) state.commonLabware = profile.common_labware;
+      if (profile.liquid_class) $('liquidClass').value = profile.liquid_class;
+      renderCommonLabware();
+      renderDeck();
+      setStatus('status', `Loaded profile "${profile.profile_name}".`, 'ok');
     }
 
     async function loadWorkspace() {
-      setStatus('Loading workspace...');
-      try {
-        const configGuid = $('configurationSelect').value;
-        const guid = $('workspaceSelect').value;
-        const [config, data] = await Promise.all([
-          api(`/api/configuration?guid=${encodeURIComponent(configGuid)}`),
-          api(`/api/workspace?guid=${encodeURIComponent(guid)}`)
-        ]);
-        state.configuration = config.configuration;
-        state.workspace = data.workspace;
-        state.positions = data.positions || [];
-        state.deckCoordinates = data.deck_coordinates || state.positions;
-        state.deckFrame = data.deck_frame || {};
-        state.workspaceSource = data.workspace_source || null;
-        state.deckBlocks = data.deck_blocks || [];
-        state.categories = data.common_labware_categories || [];
-        state.commonLabware = data.default_common_labware || [];
-        $('categorySelect').innerHTML = state.categories.map(c =>
-          `<option value="${escapeHtml(c.name)}">${escapeHtml(c.label)}</option>`
-        ).join('');
-        $('workspaceSummary').textContent = `${data.workspace.name} / ${data.workspace.guid}`;
-        $('configurationSummary').textContent = `${config.configuration.name}: ${config.configuration.device_count} configured device entries`;
-        if (data.liquid_class) $('liquidClass').value = data.liquid_class;
-        await refreshLabwareOptions();
-        renderCommonLabware();
-        renderDeck();
-        $('suggestCommon').disabled = false;
-        $('addLabware').disabled = false;
-        $('saveProfile').disabled = false;
-        setStatus('Workspace loaded.');
-      } catch (err) {
-        setStatus(err.message, true);
-      }
+      setStatus('status', 'Loading workspace...');
+      const configGuid = $('configurationSelect').value;
+      const guid = $('workspaceSelect').value;
+      const [config, data] = await Promise.all([
+        api(`/api/configuration?guid=${encodeURIComponent(configGuid)}`),
+        api(`/api/workspace?guid=${encodeURIComponent(guid)}`)
+      ]);
+      state.configuration = config.configuration;
+      state.workspace = data.workspace;
+      state.positions = data.positions || [];
+      state.deckCoordinates = data.deck_coordinates || state.positions;
+      state.deckFrame = data.deck_frame || {};
+      state.workspaceSource = data.workspace_source || null;
+      state.categories = data.common_labware_categories || [];
+      state.commonLabware = data.default_common_labware || [];
+      $('categorySelect').innerHTML = state.categories.map(c =>
+        `<option value="${escapeHtml(c.name)}">${escapeHtml(c.label)}</option>`
+      ).join('');
+      $('workspaceSummary').textContent = `${data.workspace.name} / ${data.workspace.guid}`;
+      $('configurationSummary').textContent = `${config.configuration.name}: ${config.configuration.device_count} configured device entries`;
+      if (data.liquid_class) $('liquidClass').value = data.liquid_class;
+      await refreshLabwareOptions();
+      renderCommonLabware();
+      renderDeck();
+      $('suggestCommon').disabled = false;
+      $('addLabware').disabled = false;
+      $('saveProfile').disabled = false;
+      setStatus('status', 'Workspace loaded.', 'ok');
     }
 
     async function useDefaults() {
       if (!state.workspace) return;
-      setStatus('Loading default common labware...');
-      try {
-        const data = await api(`/api/suggest-roles?guid=${encodeURIComponent(state.workspace.guid)}`);
-        state.commonLabware = data.common_labware || [];
-        renderCommonLabware();
-        renderDeck();
-        setStatus('Default common labware loaded.');
-      } catch (err) {
-        setStatus(err.message, true);
-      }
+      setStatus('status', 'Loading default common labware...');
+      const data = await api(`/api/suggest-roles?guid=${encodeURIComponent(state.workspace.guid)}`);
+      state.commonLabware = data.common_labware || [];
+      renderCommonLabware();
+      renderDeck();
+      setStatus('status', 'Default common labware loaded.', 'ok');
     }
 
     async function refreshLabwareOptions() {
@@ -478,7 +691,7 @@
       const catalogName = $('labwareSelect').value;
       if (!catalogName) return;
       if (state.commonLabware.some(item => item.catalog_name === catalogName)) {
-        setStatus(`${catalogName} is already in the common list.`);
+        setStatus('status', `${catalogName} is already in the common list.`);
         return;
       }
       const source = state.labwareOptions.find(item => item.name === catalogName) || {};
@@ -491,7 +704,7 @@
         preferred_position: null
       });
       renderCommonLabware();
-      setStatus('Added labware.');
+      setStatus('status', 'Added labware.', 'ok');
     }
 
     function renderCommonLabware() {
@@ -509,7 +722,7 @@
           <div class="common-head">
             <div>
               <div class="common-title">${escapeHtml(item.catalog_name)}</div>
-              <div class="common-meta">${escapeHtml(item.category || '')}${item.python_class ? ` / ${escapeHtml(item.python_class)}` : ''}</div>
+              <div class="small">${escapeHtml(item.category || '')}${item.python_class ? ` / ${escapeHtml(item.python_class)}` : ''}</div>
             </div>
             <button class="mini secondary" data-remove="${index}">Remove</button>
           </div>
@@ -529,17 +742,168 @@
       $('commonList').querySelectorAll('select').forEach(sel => {
         sel.addEventListener('change', () => {
           const item = state.commonLabware[Number(sel.dataset.index)];
-          const field = sel.dataset.field;
-          if (field === 'preferred_position') {
-            item[field] = sel.value ? Number(sel.value) : null;
+          if (sel.dataset.field === 'preferred_position') {
+            item.preferred_position = sel.value ? Number(sel.value) : null;
           } else {
-            item[field] = sel.value || null;
+            item.preferred_location = sel.value || null;
             item.preferred_position = null;
             renderCommonLabware();
           }
           renderDeck();
         });
       });
+    }
+
+    async function saveProfile() {
+      if (!state.workspace) return;
+      setStatus('status', 'Saving profile...');
+      const data = await post('/api/save-profile', {
+        profile_name: $('profileName').value,
+        configuration: state.configuration ? { guid: state.configuration.guid, name: state.configuration.name } : null,
+        workspace: { name: state.workspace.name, guid: state.workspace.guid },
+        workspace_source: state.workspaceSource,
+        common_labware: state.commonLabware,
+        liquid_class: $('liquidClass').value
+      });
+      setStatus('status', `Saved profile: ${data.paths.root}`, 'ok');
+      await loadProfiles();
+      $('existingProfile').value = $('profileName').value;
+      $('authorProfile').value = $('profileName').value;
+      $('codeProfile').value = $('profileName').value;
+    }
+
+    async function startAuthoringSession() {
+      $('startAuthor').disabled = true;
+      try {
+        const payload = {
+          profile_name: $('authorProfile').value,
+          retry_budget: Number($('authorRetry').value || 8),
+          model: $('authorModel').value,
+          lab_scope: $('authorLabScope').value
+        };
+        await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
+          state.authorSessionId = result.session_id;
+          $('sendAuthor').disabled = false;
+        });
+      } catch (err) {
+        setStatus('authorStatus', err.message, 'error');
+      } finally {
+        $('startAuthor').disabled = false;
+      }
+    }
+
+    async function sendAuthorMessage() {
+      if (!state.authorSessionId) {
+        setStatus('authorStatus', 'Start an authoring session first.', 'error');
+        return;
+      }
+      $('sendAuthor').disabled = true;
+      try {
+        await submitAndPoll('authoring-send', {
+          session_id: state.authorSessionId,
+          message: $('authorPrompt').value
+        }, 'authorStatus', 'authorResult', result => {
+          const authored = result.authoring || {};
+          $('generatedCode').value = authored.generated_code || authored.best_draft_code || $('generatedCode').value;
+          if (authored.compiled_xscr) $('fcXscrPath').value = authored.compiled_xscr;
+        });
+      } catch (err) {
+        setStatus('authorStatus', err.message, 'error');
+      } finally {
+        $('sendAuthor').disabled = false;
+      }
+    }
+
+    async function simulateSource() {
+      await runSourceJob('simulate-source');
+    }
+
+    async function compileSource() {
+      await runSourceJob('compile-source');
+    }
+
+    async function runSourceJob(kind) {
+      try {
+        await submitAndPoll(kind, {
+          profile_name: $('codeProfile').value,
+          source_path: $('sourcePath').value,
+          source: $('sourceText').value,
+          strict: true
+        }, 'codeStatus', 'codeResult', result => {
+          const validation = result.validation || {};
+          if (validation.xscr_path) $('fcXscrPath').value = validation.xscr_path;
+        });
+      } catch (err) {
+        setStatus('codeStatus', err.message, 'error');
+      }
+    }
+
+    async function runDecompile() {
+      try {
+        await submitAndPoll('decompile-xscr', {
+          xscr_path: $('decompilePath').value,
+          strict: $('decompileStrict').checked
+        }, 'decompileStatus', 'decompileMeta', result => {
+          $('decompileSource').value = result.source || '';
+          $('sourceText').value = result.source || $('sourceText').value;
+        });
+      } catch (err) {
+        setStatus('decompileStatus', err.message, 'error');
+      }
+    }
+
+    async function loadCatalogInfo() {
+      try {
+        const info = await api('/api/catalog-info');
+        showJson('catalogResult', info);
+        setStatus('catalogStatus', 'Catalog info loaded.', 'ok');
+      } catch (err) {
+        setStatus('catalogStatus', err.message, 'error');
+      }
+    }
+
+    async function searchCatalog() {
+      try {
+        const data = await api(`/api/labware?query=${encodeURIComponent($('catalogQuery').value)}&limit=200`);
+        showJson('catalogResult', data);
+        setStatus('catalogStatus', `Found ${(data.matches || []).length} matches.`, 'ok');
+      } catch (err) {
+        setStatus('catalogStatus', err.message, 'error');
+      }
+    }
+
+    async function refreshCatalog() {
+      try {
+        await submitAndPoll('catalog-refresh', {
+          install_path: $('catalogInstall').value
+        }, 'catalogStatus', 'catalogResult');
+      } catch (err) {
+        setStatus('catalogStatus', err.message, 'error');
+      }
+    }
+
+    async function validateFc() {
+      try {
+        await submitAndPoll('fc-validate', {
+          xscr_path: $('fcXscrPath').value,
+          open_direct: $('fcOpenDirect').checked
+        }, 'fcStatus', 'fcResult');
+      } catch (err) {
+        setStatus('fcStatus', err.message, 'error');
+      }
+    }
+
+    async function deployXscr() {
+      try {
+        await submitAndPoll('deploy-xscr', {
+          xscr_path: $('fcXscrPath').value,
+          object_name: $('deployObjectName').value,
+          datastore_dir: $('deployDatastore').value,
+          allow_fc_running: $('allowFcRunning').checked
+        }, 'fcStatus', 'fcResult');
+      } catch (err) {
+        setStatus('fcStatus', err.message, 'error');
+      }
     }
 
     function renderDeck() {
@@ -554,50 +918,44 @@
       const canvasWidth = Math.ceil((geometry.maxX - geometry.minX) * geometry.scale + geometry.pad * 2);
       const canvasHeight = Math.ceil((geometry.maxY - geometry.minY) * geometry.scale + geometry.pad * 2);
       const frameBox = rectStyle({
-        x: frameOriginX(frame),
+        x: 0,
         y: 0,
         width: Number(frame.width_mm || geometry.maxX),
         height: Number(frame.depth_mm || geometry.maxY)
       }, geometry);
-      const grid = renderGrid(geometry);
-      const segments = renderSegments(geometry);
       const slots = state.deckCoordinates.map(row => {
-          const key = `${row.location}:${row.position}`;
-          const selectedName = selected.get(key);
-          const width = Number(row.width_mm || defaultWidth(row));
-          const depth = Number(row.depth_mm || defaultDepth(row));
-          const style = rectStyle({ x: Number(row.x_mm || 0), y: Number(row.y_mm || 0), width, height: depth }, geometry);
-          const compact = width * geometry.scale < 84 || depth * geometry.scale < 52;
-          return `<div class="slot ${selectedName ? 'selected' : ''} ${compact ? 'compact' : ''}" style="${style}">
-            <div class="pos">${escapeHtml(row.location)} ${row.position}</div>
-            <div class="small coords">x ${escapeHtml(row.x_mm ?? '')} / y ${escapeHtml(row.y_mm ?? '')} mm</div>
-            <div class="small">${escapeHtml(row.occupied_by || 'empty')}</div>
-            ${selectedName ? `<span class="badge">${escapeHtml(selectedName)}</span>` : ''}
-          </div>`;
-        }).join('');
+        const key = `${row.location}:${row.position}`;
+        const selectedName = selected.get(key);
+        const width = Number(row.width_mm || defaultWidth(row));
+        const depth = Number(row.depth_mm || defaultDepth(row));
+        const style = rectStyle({ x: Number(row.x_mm || 0), y: Number(row.y_mm || 0), width, height: depth }, geometry);
+        const compact = width * geometry.scale < 84 || depth * geometry.scale < 52;
+        return `<div class="slot ${selectedName ? 'selected' : ''} ${compact ? 'compact' : ''}" style="${style}">
+          <div class="pos">${escapeHtml(row.location)} ${row.position}</div>
+          <div class="tiny coords">x ${escapeHtml(row.x_mm ?? '')} / y ${escapeHtml(row.y_mm ?? '')} mm</div>
+          <div class="tiny">${escapeHtml(row.occupied_by || 'empty')}</div>
+          ${selectedName ? `<span class="badge">${escapeHtml(selectedName)}</span>` : ''}
+        </div>`;
+      }).join('');
       $('deckMap').innerHTML = `<div class="deck-canvas" style="width:${canvasWidth}px;height:${canvasHeight}px">
         <div class="deck-label">Scaled worktable geometry from FluentControl templates</div>
         <div class="deck-frame" style="${frameBox}"></div>
-        ${grid}
-        ${segments}
+        ${renderGrid(geometry)}
+        ${renderSegments(geometry)}
         ${slots}
       </div>`;
 
       const groups = groupPositions();
       $('slotGroups').innerHTML = Object.entries(groups).map(([location, rows]) => `
-        <div class="location">
-          <h3>${escapeHtml(location)}</h3>
-          <div class="slots-list">
-            ${rows.map(row => `<div class="common-meta">${row.position}: ${escapeHtml(row.occupied_by || 'empty')} (${escapeHtml(row.site_path || '')})</div>`).join('')}
-          </div>
-        </div>
+        <h3>${escapeHtml(location)}</h3>
+        ${rows.map(row => `<div>${row.position}: ${escapeHtml(row.occupied_by || 'empty')} (${escapeHtml(row.site_path || '')})</div>`).join('')}
       `).join('');
     }
 
     function deckGeometry() {
       const frame = state.deckFrame || {};
       const rows = state.deckCoordinates.filter(row => row.x_mm != null && row.y_mm != null);
-      const xs = [frameOriginX(frame), Number(frame.width_mm || 0)].filter(Number.isFinite);
+      const xs = [0, Number(frame.width_mm || 0)].filter(Number.isFinite);
       const ys = [0, Number(frame.depth_mm || 0)].filter(Number.isFinite);
       for (const row of rows) {
         const width = Number(row.width_mm || defaultWidth(row));
@@ -605,6 +963,8 @@
         xs.push(Number(row.x_mm), Number(row.x_mm) + width);
         ys.push(Number(row.y_mm), Number(row.y_mm) + depth);
       }
+      if (!xs.length) xs.push(0, 1200);
+      if (!ys.length) ys.push(0, 700);
       const minX = Math.min(...xs);
       const maxX = Math.max(...xs);
       const minY = Math.min(...ys);
@@ -632,9 +992,7 @@
         const left = geometry.pad + (x - geometry.minX) * geometry.scale;
         const gridNo = Math.round((x - origin) / spacing);
         lines.push(`<div class="grid-line" style="left:${left.toFixed(1)}px"></div>`);
-        if (gridNo >= 0 && gridNo % 2 === 0) {
-          labels.push(`<div class="grid-label" style="left:${left.toFixed(1)}px">${gridNo}</div>`);
-        }
+        if (gridNo >= 0 && gridNo % 2 === 0) labels.push(`<div class="grid-label" style="left:${left.toFixed(1)}px">${gridNo}</div>`);
       }
       return lines.join('') + labels.join('');
     }
@@ -658,10 +1016,6 @@
         const style = rectStyle({ x: seg.minX, y: seg.minY, width: seg.maxX - seg.minX, height: seg.maxY - seg.minY }, geometry);
         return `<div class="segment-band" style="${style}"><span class="segment-label">grid ${escapeHtml(seg.label)}</span></div>`;
       }).join('');
-    }
-
-    function frameOriginX(frame) {
-      return Number(frame.width_mm) ? 0 : 0;
     }
 
     function defaultWidth(row) {
@@ -689,47 +1043,12 @@
       return (groupPositions()[location] || []).map(row => row.position);
     }
 
-    async function saveProfile() {
-      if (!state.workspace) return;
-      setStatus('Saving profile...');
-      try {
-        const data = await api('/api/save-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            profile_name: $('profileName').value,
-            configuration: state.configuration ? { guid: state.configuration.guid, name: state.configuration.name } : null,
-            workspace: { name: state.workspace.name, guid: state.workspace.guid },
-            workspace_source: state.workspaceSource,
-            common_labware: state.commonLabware,
-            liquid_class: $('liquidClass').value
-          })
-        });
-        setStatus(`Saved profile: ${data.paths.root}`);
-        await loadProfiles();
-        $('existingProfile').value = $('profileName').value;
-      } catch (err) {
-        setStatus(err.message, true);
-      }
-    }
-
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[ch]));
     }
 
-    let searchTimer = null;
-    $('loadWorkspace').addEventListener('click', loadWorkspace);
-    $('loadProfile').addEventListener('click', () => loadProfile().catch(err => setStatus(err.message, true)));
-    $('suggestCommon').addEventListener('click', useDefaults);
-    $('addLabware').addEventListener('click', addSelectedLabware);
-    $('saveProfile').addEventListener('click', saveProfile);
-    $('categorySelect').addEventListener('change', () => refreshLabwareOptions().catch(err => setStatus(err.message, true)));
-    $('labwareSearch').addEventListener('input', () => {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => refreshLabwareOptions().catch(err => setStatus(err.message, true)), 180);
-    });
     init();
   </script>
 </body>

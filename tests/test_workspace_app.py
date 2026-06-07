@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from fluentvibe.authoring.grounding import load_current_worktable_snapshot
@@ -163,6 +164,59 @@ def test_load_profile_missing_raises(tmp_path: Path) -> None:
         assert "not found" in str(exc).lower()
     else:
         raise AssertionError("loading a missing profile should raise")
+
+
+def _wait_job(job_id: str) -> dict:
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        job = service.job_status(job_id)["job"]
+        if job["status"] in {"success", "failure"}:
+            return job
+        time.sleep(0.05)
+    raise AssertionError(f"job did not finish: {job_id}")
+
+
+def test_workbench_job_unknown_kind_raises() -> None:
+    try:
+        service.submit_job("nope", {})
+    except ValueError as exc:
+        assert "Unknown job kind" in str(exc)
+    else:
+        raise AssertionError("unknown job kind should raise")
+
+
+def test_workbench_authoring_session_job_finishes_without_model_call() -> None:
+    created = service.submit_job("authoring-session", {"retry_budget": 1})
+    job = _wait_job(created["job"]["id"])
+    # Session creation is local and should not contact the model endpoint.
+    assert job["status"] == "success"
+    assert job["result"]["ok"] is True
+    assert job["result"]["session_id"]
+
+
+def test_workbench_simulate_source_job_reports_structured_result(tmp_path: Path) -> None:
+    source = """
+from fluentvibe import Worktable
+
+def build_worktable():
+    return Worktable(name="empty")
+"""
+    created = service.submit_job("simulate-source", {
+        "source": source,
+        "strict": False,
+        "output_dir": str(tmp_path / "sim"),
+    })
+    job = _wait_job(created["job"]["id"])
+    assert job["status"] == "success"
+    assert "validation" in job["result"]
+    assert isinstance(job["result"]["tool_calls"], list)
+
+
+def test_workbench_decompile_missing_file_is_structured_failure() -> None:
+    created = service.submit_job("decompile-xscr", {"xscr_path": "does-not-exist.xscr"})
+    job = _wait_job(created["job"]["id"])
+    assert job["status"] == "failure"
+    assert "not found" in job["error"]["message"].lower()
 
 
 def test_saved_profile_is_listable_and_loadable(tmp_path: Path) -> None:
