@@ -137,6 +137,69 @@
       overflow-wrap: anywhere;
       font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
     }
+    .chat-log {
+      min-height: 420px;
+      max-height: 620px;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfd;
+    }
+    .msg {
+      max-width: 86%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 10px;
+      background: #fff;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .msg.user {
+      justify-self: end;
+      color: #0f3566;
+      background: var(--accent-soft);
+      border-color: #b7d4f8;
+    }
+    .msg.model { justify-self: start; }
+    .msg.system {
+      justify-self: stretch;
+      max-width: 100%;
+      color: var(--muted);
+      background: #f4f6f8;
+    }
+    .msg.error {
+      justify-self: stretch;
+      max-width: 100%;
+      color: var(--bad);
+      background: #fff7f6;
+      border-color: #f4b5ae;
+    }
+    .msg-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .tool-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .tool-pill {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid #c8d3df;
+      background: #f4f8fc;
+      color: #40566f;
+      font-size: 11px;
+    }
     .common-list { display: grid; gap: 8px; margin-top: 12px; }
     .common-item {
       border: 1px solid var(--line);
@@ -360,8 +423,8 @@
               <input id="authorModel" placeholder="default">
             </div>
           </div>
-          <label for="authorPrompt">Message</label>
-          <textarea id="authorPrompt" placeholder="Author a protocol..."></textarea>
+          <label for="authorPrompt">Next message</label>
+          <textarea id="authorPrompt" placeholder="Ask for a protocol, answer a clarification, approve a checkpoint, or request changes."></textarea>
           <div class="actions">
             <button id="startAuthor">Start session</button>
             <button id="sendAuthor" class="secondary" disabled>Send</button>
@@ -369,7 +432,9 @@
           <div class="status" id="authorStatus"></div>
         </section>
         <section>
-          <h2>Authoring Result</h2>
+          <h2>Conversation</h2>
+          <div class="chat-log" id="authorChat"></div>
+          <h3>Latest structured result</h3>
           <div class="pre" id="authorResult"></div>
           <label for="generatedCode">Generated / best draft code</label>
           <textarea id="generatedCode"></textarea>
@@ -476,7 +541,8 @@
       labwareOptions: [],
       liquidClasses: [],
       profiles: [],
-      authorSessionId: null
+      authorSessionId: null,
+      authorMessages: []
     };
 
     const $ = (id) => document.getElementById(id);
@@ -504,6 +570,71 @@
 
     function showJson(id, value) {
       $(id).textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+
+    function pushAuthorMessage(role, title, text, meta) {
+      state.authorMessages.push({ role, title, text, meta: meta || null });
+      renderAuthorChat();
+    }
+
+    function renderAuthorChat() {
+      const chat = $('authorChat');
+      if (!chat) return;
+      if (!state.authorMessages.length) {
+        chat.innerHTML = '<div class="msg system"><div class="msg-title">Session</div>Start a session, then send a request.</div>';
+        return;
+      }
+      chat.innerHTML = state.authorMessages.map(msg => {
+        const tools = msg.meta && Array.isArray(msg.meta.tool_calls) && msg.meta.tool_calls.length
+          ? `<div class="tool-strip">${msg.meta.tool_calls.slice(-10).map(call =>
+              `<span class="tool-pill">${escapeHtml(call.name || 'tool')}: ${escapeHtml(call.ok === true ? 'ok' : call.ok === false ? 'failed' : 'done')}</span>`
+            ).join('')}</div>`
+          : '';
+        return `<div class="msg ${escapeHtml(msg.role)}">
+          <div class="msg-title">${escapeHtml(msg.title)}</div>
+          ${escapeHtml(msg.text || '')}
+          ${tools}
+        </div>`;
+      }).join('');
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function summarizeAuthoringResult(authoring) {
+      const status = authoring.status || 'unknown';
+      if (status === 'clarification_required') {
+        const questions = (authoring.clarification_questions || []).map(q => q.question).filter(Boolean);
+        return {
+          title: 'Clarification needed',
+          text: questions.length ? questions.join('\n') : 'The model needs more information before drafting.'
+        };
+      }
+      if (status === 'approval_required') {
+        const req = authoring.approval_request || {};
+        const lines = [req.title, req.summary, req.question].filter(Boolean);
+        return {
+          title: 'Approval requested',
+          text: lines.join('\n\n') || 'Approve this checkpoint or request changes.'
+        };
+      }
+      if (status === 'success') {
+        const validation = authoring.validation || {};
+        return {
+          title: 'Protocol authored',
+          text: [
+            authoring.spec && authoring.spec.protocol_name ? authoring.spec.protocol_name : 'Authoring succeeded.',
+            validation.python_path ? `Python: ${validation.python_path}` : '',
+            authoring.compiled_xscr ? `XSCR: ${authoring.compiled_xscr}` : '',
+            `Attempts: ${authoring.attempts || 0}`
+          ].filter(Boolean).join('\n')
+        };
+      }
+      if (status === 'failure') {
+        return {
+          title: 'Authoring failed',
+          text: `[${authoring.failure_category || 'unknown'}] ${authoring.failure_message || 'No failure message.'}`
+        };
+      }
+      return { title: 'Authoring update', text: JSON.stringify(authoring, null, 2) };
     }
 
     async function submitAndPoll(kind, payload, statusId, resultId, done) {
@@ -775,6 +906,8 @@
     async function startAuthoringSession() {
       $('startAuthor').disabled = true;
       try {
+        state.authorMessages = [];
+        renderAuthorChat();
         const payload = {
           profile_name: $('authorProfile').value,
           retry_budget: Number($('authorRetry').value || 8),
@@ -784,9 +917,15 @@
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
           $('sendAuthor').disabled = false;
+          pushAuthorMessage(
+            'system',
+            'Session started',
+            `Profile: ${result.profile_name || 'none'}\nOutput: ${result.output_dir}\nSession: ${result.session_id}`
+          );
         });
       } catch (err) {
         setStatus('authorStatus', err.message, 'error');
+        pushAuthorMessage('error', 'Session error', err.message);
       } finally {
         $('startAuthor').disabled = false;
       }
@@ -797,18 +936,33 @@
         setStatus('authorStatus', 'Start an authoring session first.', 'error');
         return;
       }
+      const message = $('authorPrompt').value.trim();
+      if (!message) {
+        setStatus('authorStatus', 'Type a message first.', 'error');
+        return;
+      }
       $('sendAuthor').disabled = true;
       try {
+        pushAuthorMessage('user', 'You', message);
+        $('authorPrompt').value = '';
         await submitAndPoll('authoring-send', {
           session_id: state.authorSessionId,
-          message: $('authorPrompt').value
+          message
         }, 'authorStatus', 'authorResult', result => {
           const authored = result.authoring || {};
+          const summary = summarizeAuthoringResult(authored);
+          pushAuthorMessage(
+            authored.status === 'failure' ? 'error' : 'model',
+            summary.title,
+            summary.text,
+            { tool_calls: authored.tool_calls || [] }
+          );
           $('generatedCode').value = authored.generated_code || authored.best_draft_code || $('generatedCode').value;
           if (authored.compiled_xscr) $('fcXscrPath').value = authored.compiled_xscr;
         });
       } catch (err) {
         setStatus('authorStatus', err.message, 'error');
+        pushAuthorMessage('error', 'Send error', err.message);
       } finally {
         $('sendAuthor').disabled = false;
       }
@@ -1049,6 +1203,7 @@
       }[ch]));
     }
 
+    renderAuthorChat();
     init();
   </script>
 </body>
