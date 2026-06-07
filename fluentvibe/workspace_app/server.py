@@ -67,11 +67,16 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
                 ))
             elif parsed.path == "/api/liquid-classes":
                 self._json(service.list_liquid_classes())
+            elif parsed.path == "/api/catalog-info":
+                self._json(service.catalog_info())
             elif parsed.path == "/api/profiles":
                 self._json(service.list_profiles())
             elif parsed.path == "/api/profile":
                 qs = parse_qs(parsed.query)
                 self._json(service.load_profile(_first(qs, "name") or ""))
+            elif parsed.path == "/api/job":
+                qs = parse_qs(parsed.query)
+                self._json(service.job_status(_first(qs, "id") or ""))
             elif parsed.path == "/api/suggest-roles":
                 qs = parse_qs(parsed.query)
                 self._json(service.suggest_roles(
@@ -88,6 +93,9 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/save-profile":
                 self._json(service.save_profile(self._read_json()))
+            elif parsed.path.startswith("/api/jobs/"):
+                kind = parsed.path.rsplit("/", 1)[-1]
+                self._json(service.submit_job(kind, self._read_json()))
             else:
                 self._json({"ok": False, "message": "Not found"}, status=404)
         except Exception as exc:

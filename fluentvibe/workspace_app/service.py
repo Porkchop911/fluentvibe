@@ -9,6 +9,9 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+import threading
+import time
+import uuid
 import xml.etree.ElementTree as ET
 from functools import lru_cache
 from dataclasses import dataclass
@@ -38,6 +41,7 @@ from ..catalog.catalog import (
 
 PROFILE_SCHEMA_VERSION = 1
 PROFILES_BASE_DIR = Path("build") / "workspaces"
+WORKBENCH_BASE_DIR = Path("build") / "workbench"
 DEFAULT_FC_INSTALL = Path(r"C:\ProgramData\Tecan\VisionX\DataBase")
 DEFAULT_INSTRUMENT_CONFIG_DIR = Path(r"C:\ProgramData\Tecan\VisionX\InstrumentConfigurations")
 COMMON_LABWARE_CATEGORIES: tuple[dict[str, Any], ...] = (
@@ -49,6 +53,11 @@ COMMON_LABWARE_CATEGORIES: tuple[dict[str, Any], ...] = (
     {"name": "tube_rack", "label": "Tube racks"},
     {"name": "waste_chute", "label": "Waste chutes"},
 )
+
+_JOB_LOCK = threading.RLock()
+_JOBS: dict[str, dict[str, Any]] = {}
+_SESSIONS: dict[str, Any] = {}
+_JOB_HANDLERS: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -187,6 +196,292 @@ def list_liquid_classes() -> dict[str, Any]:
             for row in rows
         ],
     }
+
+
+def catalog_info() -> dict[str, Any]:
+    from ..catalog.catalog import category_counts, index_exists, install_info
+
+    if not index_exists():
+        return {"ok": True, "index_exists": False, "install": None, "category_counts": {}}
+    return {
+        "ok": True,
+        "index_exists": True,
+        "install": install_info(),
+        "category_counts": category_counts(),
+    }
+
+
+def submit_job(kind: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = dict(payload or {})
+    handler = _job_handlers().get(kind)
+    if handler is None:
+        raise ValueError(f"Unknown job kind: {kind!r}")
+    job_id = str(uuid.uuid4())
+    now = time.time()
+    job = {
+        "id": job_id,
+        "kind": kind,
+        "status": "queued",
+        "created_at": now,
+        "started_at": None,
+        "finished_at": None,
+        "result": None,
+        "error": None,
+    }
+    with _JOB_LOCK:
+        _JOBS[job_id] = job
+    thread = threading.Thread(
+        target=_run_job,
+        args=(job_id, handler, payload),
+        name=f"fluentvibe-workbench-{kind}",
+        daemon=True,
+    )
+    thread.start()
+    return {"ok": True, "job": _public_job(job)}
+
+
+def job_status(job_id: str) -> dict[str, Any]:
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise ValueError(f"Job not found: {job_id!r}")
+        return {"ok": True, "job": _public_job(job)}
+
+
+def _run_job(job_id: str, handler: Any, payload: dict[str, Any]) -> None:
+    with _JOB_LOCK:
+        job = _JOBS[job_id]
+        job["status"] = "running"
+        job["started_at"] = time.time()
+    try:
+        result = handler(payload)
+    except Exception as exc:
+        with _JOB_LOCK:
+            job = _JOBS[job_id]
+            job["status"] = "failure"
+            job["error"] = {"message": str(exc), "type": type(exc).__name__}
+            job["finished_at"] = time.time()
+    else:
+        with _JOB_LOCK:
+            job = _JOBS[job_id]
+            job["status"] = "success"
+            job["result"] = result
+            job["finished_at"] = time.time()
+
+
+def _public_job(job: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": job["id"],
+        "kind": job["kind"],
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "started_at": job["started_at"],
+        "finished_at": job["finished_at"],
+        "result": job["result"],
+        "error": job["error"],
+    }
+
+
+def _job_handlers() -> dict[str, Any]:
+    global _JOB_HANDLERS
+    if not _JOB_HANDLERS:
+        _JOB_HANDLERS = {
+            "authoring-session": _job_authoring_session,
+            "authoring-send": _job_authoring_send,
+            "simulate-source": _job_simulate_source,
+            "compile-source": _job_compile_source,
+            "decompile-xscr": _job_decompile_xscr,
+            "catalog-refresh": _job_catalog_refresh,
+            "fc-validate": _job_fc_validate,
+            "deploy-xscr": _job_deploy_xscr,
+        }
+    return _JOB_HANDLERS
+
+
+def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..authoring import PromptAuthoringSession
+    from ..authoring.lm_client import DEFAULT_LM_STUDIO_MODEL
+    from ..authoring.profile import resolve_profile
+
+    output_dir = _workbench_path(payload.get("output_dir"), "authored")
+    profile_name = str(payload.get("profile_name") or "").strip()
+    profile_dir = _profile_dir(profile_name) if profile_name else None
+    workspace_name = None
+    workspace_guid = None
+    if profile_dir is not None:
+        profile = resolve_profile(profile_dir)
+        workspace_name = profile.workspace_name
+        workspace_guid = profile.workspace_guid
+    session = PromptAuthoringSession(
+        output_dir=output_dir,
+        retry_budget=int(payload.get("retry_budget") or 8),
+        workspace_name=workspace_name,
+        workspace_guid=workspace_guid,
+        model=str(payload.get("model") or "") or DEFAULT_LM_STUDIO_MODEL,
+        lab_scope=str(payload.get("lab_scope") or "skills"),
+        profile_dir=profile_dir,
+    )
+    session_id = str(uuid.uuid4())
+    with _JOB_LOCK:
+        _SESSIONS[session_id] = session
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "profile_name": profile_name or None,
+        "output_dir": str(output_dir),
+    }
+
+
+def _job_authoring_send(payload: dict[str, Any]) -> dict[str, Any]:
+    session_id = str(payload.get("session_id") or "").strip()
+    message = str(payload.get("message") or "").strip()
+    if not session_id:
+        raise ValueError("session_id is required")
+    if not message:
+        raise ValueError("message is required")
+    with _JOB_LOCK:
+        session = _SESSIONS.get(session_id)
+    if session is None:
+        raise ValueError(f"Authoring session not found: {session_id!r}")
+    result = session.send(message)
+    return {"ok": True, "session_id": session_id, "authoring": result.to_dict()}
+
+
+def _job_simulate_source(payload: dict[str, Any]) -> dict[str, Any]:
+    registry = _registry_for_payload(payload, "simulate")
+    source = _source_from_payload(payload)
+    result = registry.simulate_python_draft(
+        source,
+        strict=bool(payload.get("strict", True)),
+    )
+    return {"ok": bool(result.get("ok")), "validation": result, "tool_calls": registry.calls}
+
+
+def _job_compile_source(payload: dict[str, Any]) -> dict[str, Any]:
+    registry = _registry_for_payload(payload, "compile")
+    source = _source_from_payload(payload)
+    result = registry.compile_and_simulate(source)
+    return {"ok": bool(result.get("ok")), "validation": result, "tool_calls": registry.calls}
+
+
+def _job_decompile_xscr(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..decompiler import emit_python, parse_xscr
+    from ..ir.schema import GenericStep
+
+    xscr = Path(str(payload.get("xscr_path") or "")).expanduser()
+    if not xscr.exists():
+        raise ValueError(f"XSCR file not found: {xscr}")
+    proto = parse_xscr(xscr)
+    source = emit_python(proto, source_xscr=str(xscr))
+    out_dir = WORKBENCH_BASE_DIR / "decompiled"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output = out_dir / f"{xscr.stem}_decompiled.py"
+    output.write_text(source, encoding="utf-8")
+
+    def walk(steps: Any):
+        for step in steps:
+            yield step
+            for attr in ("steps", "then_steps", "else_steps"):
+                nested = getattr(step, attr, None)
+                if nested:
+                    yield from walk(nested)
+
+    all_steps = [step for group in proto.groups for step in walk(group.steps)]
+    generic = [step for step in all_steps if isinstance(step, GenericStep)]
+    return {
+        "ok": not (payload.get("strict") and generic),
+        "python_path": str(output),
+        "source": source,
+        "groups": len(proto.groups),
+        "steps": len(all_steps),
+        "generic_steps": len(generic),
+        "generic_step_names": sorted({step.name for step in generic}),
+    }
+
+
+def _job_catalog_refresh(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..catalog.indexer import build_index
+
+    install = payload.get("install_path") or None
+    counts = build_index(install_path=Path(install) if install else None)
+    return {"ok": True, "counts": counts, "catalog_info": catalog_info()}
+
+
+def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..authoring.tools import AuthoringToolRegistry
+
+    registry = AuthoringToolRegistry(output_dir=_workbench_path(payload.get("output_dir"), "fc_validate"))
+    result = registry.validate_fluentcontrol_shell(
+        source=str(payload.get("source") or "") or None,
+        xscr_path=str(payload.get("xscr_path") or "") or None,
+        shell_xscr=str(payload.get("shell_xscr") or "") or None,
+        restore_shell=bool(payload.get("restore_shell", False)),
+        backup=bool(payload.get("backup", False)),
+        open_direct=bool(payload.get("open_direct", False)),
+    )
+    return {"ok": bool(result.get("ok")), "validation": result}
+
+
+def _job_deploy_xscr(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..deployer import DEFAULT_DATASTORE_DIR, deploy_xscr
+
+    xscr = Path(str(payload.get("xscr_path") or "")).expanduser()
+    datastore_raw = payload.get("datastore_dir")
+    datastore = Path(str(datastore_raw)).expanduser() if datastore_raw else DEFAULT_DATASTORE_DIR
+    result = deploy_xscr(
+        xscr,
+        datastore_dir=datastore,
+        new_object_name=str(payload.get("object_name") or "") or None,
+        new_workspace_delta_id=not bool(payload.get("keep_delta_id", False)),
+        require_fc_closed=not bool(payload.get("allow_fc_running", False)),
+    )
+    return {"ok": True, "deploy": result.to_dict()}
+
+
+def _registry_for_payload(payload: dict[str, Any], leaf: str):
+    from ..authoring.profile import resolve_profile
+    from ..authoring.tools import AuthoringToolRegistry
+
+    workspace_name = str(payload.get("workspace_name") or "").strip() or None
+    workspace_guid = str(payload.get("workspace_guid") or "").strip() or None
+    profile_name = str(payload.get("profile_name") or "").strip()
+    if profile_name:
+        profile = resolve_profile(_profile_dir(profile_name))
+        workspace_name = workspace_name or profile.workspace_name
+        workspace_guid = workspace_guid or profile.workspace_guid
+    return AuthoringToolRegistry(
+        output_dir=_workbench_path(payload.get("output_dir"), leaf),
+        workspace_name=workspace_name,
+        workspace_guid=workspace_guid,
+    )
+
+
+def _source_from_payload(payload: dict[str, Any]) -> str:
+    source = str(payload.get("source") or "")
+    source_path = str(payload.get("source_path") or "").strip()
+    if source:
+        return source
+    if source_path:
+        path = Path(source_path).expanduser()
+        if not path.exists():
+            raise ValueError(f"Python source file not found: {path}")
+        return path.read_text(encoding="utf-8")
+    raise ValueError("source or source_path is required")
+
+
+def _workbench_path(raw: Any, leaf: str) -> Path:
+    if raw:
+        path = Path(str(raw)).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    path = WORKBENCH_BASE_DIR / leaf
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _profile_dir(profile_name: str) -> Path:
+    safe = _safe_profile_name(profile_name)
+    return PROFILES_BASE_DIR / safe
 
 
 def suggest_common_labware(
