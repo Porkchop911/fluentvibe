@@ -527,6 +527,7 @@ class Simulator:
             for tip in self._mca_tips:
                 self._aspirate_one(target, wells[0], volume, tip)
             return
+        wells = self._select_mca_columns(wells, getattr(step, "columns", None))
         for tip, well in zip(self._mca_tips, wells):
             self._aspirate_one(target, well, volume, tip)
 
@@ -542,6 +543,7 @@ class Simulator:
             )
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
         wells = self._iter_aspirate_wells(target)
+        wells = self._select_mca_columns(wells, getattr(step, "columns", None))
         for tip, well in zip(self._mca_tips, wells):
             self._dispense_one(target, well, volume, tip)
 
@@ -1042,6 +1044,24 @@ class Simulator:
         if labware.wells:
             return list(labware.wells.values())
         return []
+
+    @staticmethod
+    def _select_mca_columns(wells: list, columns: Optional[list[int]]) -> list:
+        """Restrict addressed wells to the requested 1-based plate columns.
+
+        Wells are column-major (A1..H1, A2..H2, …); a column is the trailing
+        number of the well address. ``columns`` of ``None`` addresses every
+        well (full-plate, current behavior)."""
+        if not columns:
+            return wells
+        wanted = {int(c) for c in columns}
+        selected = []
+        for well in wells:
+            addr = getattr(well, "address", "") or ""
+            digits = "".join(ch for ch in addr if ch.isdigit())
+            if digits and int(digits) in wanted:
+                selected.append(well)
+        return selected
 
     def _liha_channels(self, tip_index: int | None = None) -> list[int]:
         if tip_index is None:
