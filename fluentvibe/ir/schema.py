@@ -164,6 +164,13 @@ class AspirateStep(BaseStep):
     liquid_class: Optional[str] = None  # Uses default if not specified
     device_alias: Optional[str] = None
     available_id: Optional[str] = None
+    columns: Optional[list[int]] = Field(
+        default=None,
+        description=(
+            "1-based MCA plate columns to address for partial-column pipetting "
+            "(e.g. [1, 2, 3] or [1, 3, 5]). None addresses the full plate."
+        ),
+    )
 
 
 class DispenseStep(BaseStep):
@@ -174,6 +181,13 @@ class DispenseStep(BaseStep):
     liquid_class: Optional[str] = None
     device_alias: Optional[str] = None
     available_id: Optional[str] = None
+    columns: Optional[list[int]] = Field(
+        default=None,
+        description=(
+            "1-based MCA plate columns to address for partial-column pipetting "
+            "(e.g. [1, 2, 3] or [1, 3, 5]). None addresses the full plate."
+        ),
+    )
 
 
 class RgaTransferLabwareStep(BaseStep):

@@ -8,7 +8,7 @@ contents) from scratch — head methods themselves don't mutate twin state.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from ..ir.schema import (
     GetHeadAdapterStep, DropHeadAdapterStep,
@@ -67,12 +67,39 @@ class MCA96Head:
     def _label(self, labware: Union[Labware, str]) -> str:
         return labware.label if isinstance(labware, Labware) else labware
 
-    def pick_up(self, tip_box: Union[Labware, str]) -> None:
-        self._wt._emit(PickUpTipsStep(labware_name=self._label(tip_box)))
+    def pick_up(
+        self,
+        tip_box: Union[Labware, str],
+        *,
+        columns: Optional[int] = None,
+        rows: Optional[int] = None,
+    ) -> None:
+        """Pick up tips, optionally on only a partial block of the head.
 
-    def return_tips(self, tip_box: Optional[Union[Labware, str]] = None) -> None:
+        `columns`/`rows` request a partial-tip pickup of that many columns/rows
+        (a contiguous block from the head origin). Omit both for a full pickup.
+        """
+        step = PickUpTipsStep(labware_name=self._label(tip_box))
+        if columns is not None:
+            step.partial_columns = columns
+        if rows is not None:
+            step.partial_rows = rows
+        self._wt._emit(step)
+
+    def return_tips(
+        self,
+        tip_box: Optional[Union[Labware, str]] = None,
+        *,
+        columns: Optional[int] = None,
+        rows: Optional[int] = None,
+    ) -> None:
         labware_name = self._label(tip_box) if tip_box is not None else None
-        self._wt._emit(SetTipsBackStep(labware_name=labware_name))
+        step = SetTipsBackStep(labware_name=labware_name)
+        if columns is not None:
+            step.partial_columns = columns
+        if rows is not None:
+            step.partial_rows = rows
+        self._wt._emit(step)
 
     # ── Pipetting ───────────────────────────────────────────────────
 
@@ -82,16 +109,22 @@ class MCA96Head:
         volume_ul: Union[float, int, str],
         *,
         liquid_class: str,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
         """Aspirate from `target` (auto-parallel over the labware's wells).
 
         `liquid_class` is required and must be the exact FluentControl
         liquid-class name. No defaults are pulled from elsewhere.
+
+        `columns` selects 1-based plate columns for partial-column pipetting
+        (e.g. `[1, 2, 3]` or sparse `[1, 3, 5]`); omit it to address the full
+        plate.
         """
         self._wt._emit(AspirateStep(
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
+            columns=list(columns) if columns is not None else None,
         ))
 
     def dispense(
@@ -100,11 +133,13 @@ class MCA96Head:
         volume_ul: Union[float, int, str],
         *,
         liquid_class: str,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
         self._wt._emit(DispenseStep(
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
+            columns=list(columns) if columns is not None else None,
         ))
 
     def mix(

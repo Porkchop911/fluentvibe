@@ -678,10 +678,50 @@ class Renderer:
         lines = "\n".join(parts).split("\n")
         return "\n".join("                        " + line for line in lines)
 
+    def _post_process_partial_columns_xml(self, xml: str, step: Step) -> str:
+        """Inject MCA partial-column well-selection into an aspirate/dispense.
+
+        FluentControl encodes a partial-column selection on the
+        ``Mca384ScriptCommandUsingWellSelectionBaseDataV6`` block:
+        ``FirstTipXPosition``/``LastTipXPosition`` bound the addressed columns,
+        and a non-contiguous set is enumerated in ``SelectedRowsOrColumns``.
+        When ``step.columns`` is ``None`` this is a no-op, so full-plate output
+        stays byte-identical.
+        """
+        columns = getattr(step, "columns", None)
+        if not columns:
+            return xml
+        cols = sorted({int(c) for c in columns})
+        first, last = cols[0], cols[-1]
+        contiguous = cols == list(range(first, last + 1))
+        xml = re.sub(
+            r"<FirstTipXPosition>.*?</FirstTipXPosition>",
+            lambda _: f"<FirstTipXPosition>{first}</FirstTipXPosition>",
+            xml, count=1, flags=re.DOTALL,
+        )
+        xml = re.sub(
+            r"<LastTipXPosition>.*?</LastTipXPosition>",
+            lambda _: f"<LastTipXPosition>{last}</LastTipXPosition>",
+            xml, count=1, flags=re.DOTALL,
+        )
+        if not contiguous:
+            csv = ",".join(str(c) for c in cols)
+            replacement = f"<SelectedRowsOrColumns>{csv}</SelectedRowsOrColumns>"
+            xml = re.sub(r"<SelectedRowsOrColumns\s*/>", lambda _: replacement, xml, count=1)
+            xml = re.sub(
+                r"<SelectedRowsOrColumns>.*?</SelectedRowsOrColumns>",
+                lambda _: replacement,
+                xml, count=1, flags=re.DOTALL,
+            )
+        return xml
+
     def _post_process_step_xml(self, xml: str, step: Step, params: dict) -> str:
         stype = self._step_type_name(step)
         if "LiquidClassName" in params:
             xml = self._post_process_liquid_class_xml(xml, str(params.get("LiquidClassName") or ""))
+
+        if stype in {"aspirate", "dispense"}:
+            xml = self._post_process_partial_columns_xml(xml, step)
 
         if stype in {"export_variable", "import_variable"}:
             xml = re.sub(
