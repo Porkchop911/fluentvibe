@@ -7,97 +7,120 @@
   <style>
     :root {
       color-scheme: light;
-      --bg: #f4f6f8;
-      --panel: #fff;
-      --line: #d8dee6;
-      --text: #1f2933;
-      --muted: #697586;
-      --accent: #1667c7;
-      --accent-soft: #e8f1ff;
-      --bad: #b42318;
-      --good: #137333;
-      --deck: #e7ebef;
-      --code: #111827;
+      --bg: #fafafa;
+      --panel: #ffffff;
+      --line: #e4e4e7;
+      --line-strong: #d4d4d8;
+      --text: #18181b;
+      --muted: #71717a;
+      --accent: #5b5bd6;
+      --accent-soft: #eeeefb;
+      --accent-border: #c7c7f1;
+      --bad: #dc2626;
+      --good: #16a34a;
+      --deck: #f4f4f5;
+      --code: #18181b;
+      --radius: 6px;
+      --radius-sm: 4px;
+      --shadow: 0 1px 2px rgba(24,24,27,.06);
+      --ring: 0 0 0 3px rgba(91,91,214,.14);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif;
+      font: 13px/1.45 system-ui, -apple-system, Segoe UI, sans-serif;
       color: var(--text);
       background: var(--bg);
+      -webkit-font-smoothing: antialiased;
     }
     header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 12px 16px;
+      padding: 10px 16px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
       position: sticky;
       top: 0;
       z-index: 10;
     }
-    h1 { font-size: 18px; margin: 0; }
-    h2 { font-size: 15px; margin: 0 0 12px; }
-    h3 { font-size: 13px; margin: 10px 0 6px; }
+    h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+    h2 { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 10px; }
+    h3 { font-size: 12px; font-weight: 600; margin: 10px 0 6px; }
     label {
       display: block;
-      font-size: 12px;
+      font-size: 11px;
+      font-weight: 500;
       color: var(--muted);
+      letter-spacing: .02em;
       margin: 10px 0 4px;
     }
     input, select, textarea, button {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 7px 8px;
+      border-radius: var(--radius);
+      padding: 6px 8px;
       font: inherit;
-      background: #fff;
+      color: var(--text);
+      background: var(--panel);
+      transition: border-color .12s, box-shadow .12s;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: var(--ring);
     }
     textarea {
-      min-height: 260px;
+      min-height: 240px;
       resize: vertical;
-      font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
     }
     button {
-      min-height: 34px;
+      min-height: 30px;
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
       cursor: pointer;
-      font-weight: 650;
+      font-weight: 600;
     }
+    button:hover { filter: brightness(1.06); }
+    button:focus-visible { outline: none; box-shadow: var(--ring); }
     button.secondary {
-      background: var(--accent-soft);
-      color: var(--accent);
-      border-color: #b7d4f8;
+      background: var(--panel);
+      color: var(--text);
+      border-color: var(--line-strong);
     }
+    button.secondary:hover { background: #f4f4f5; filter: none; }
     button.danger {
-      background: #fff1f0;
+      background: #fef2f2;
       color: var(--bad);
-      border-color: #f4b5ae;
+      border-color: #fecaca;
     }
-    button:disabled { opacity: .48; cursor: not-allowed; }
-    main { padding: 14px; }
+    button.danger:hover { background: #fee2e2; filter: none; }
+    button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
+    main { padding: 12px; }
     .tabs {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
       margin-bottom: 12px;
     }
     .tab {
       width: auto;
-      min-height: 32px;
-      padding: 5px 10px;
-      color: var(--text);
-      background: #fff;
+      min-height: 28px;
+      padding: 4px 10px;
+      font-weight: 500;
+      color: var(--muted);
+      background: var(--panel);
       border-color: var(--line);
     }
+    .tab:hover { color: var(--text); background: #f4f4f5; }
     .tab.active {
       color: var(--accent);
       background: var(--accent-soft);
-      border-color: #b7d4f8;
+      border-color: var(--accent-border);
+      font-weight: 600;
     }
     .panel { display: none; }
     .panel.active { display: block; }
@@ -109,12 +132,13 @@
     .wide-grid {
       display: grid;
       grid-template-columns: minmax(340px, 520px) minmax(0, 1fr);
-      gap: 14px;
+      gap: 12px;
     }
     section {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
       padding: 14px;
     }
     .stack { display: grid; gap: 12px; }
@@ -122,7 +146,7 @@
     .triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
     .muted { color: var(--muted); }
     .small { font-size: 12px; color: var(--muted); }
-    .status { min-height: 22px; margin-top: 10px; color: var(--muted); white-space: pre-wrap; }
+    .status { min-height: 20px; margin-top: 10px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
     .status.error { color: var(--bad); }
     .status.ok { color: var(--good); }
     .pre {
@@ -130,12 +154,13 @@
       max-height: 520px;
       overflow: auto;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: var(--radius);
       padding: 10px;
-      background: #fbfcfd;
+      background: #fafafa;
+      color: var(--text);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
     }
     .chat-log {
       min-height: 420px;
@@ -145,44 +170,48 @@
       align-content: start;
       gap: 10px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 12px;
-      background: #fbfcfd;
+      background: #fafafa;
     }
     .msg {
       max-width: 86%;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 9px 10px;
-      background: #fff;
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
     .msg.user {
       justify-self: end;
-      color: #0f3566;
+      color: var(--text);
       background: var(--accent-soft);
-      border-color: #b7d4f8;
+      border-color: var(--accent-border);
     }
     .msg.model { justify-self: start; }
     .msg.system {
       justify-self: stretch;
       max-width: 100%;
       color: var(--muted);
-      background: #f4f6f8;
+      background: #f4f4f5;
+      box-shadow: none;
     }
     .msg.error {
       justify-self: stretch;
       max-width: 100%;
       color: var(--bad);
-      background: #fff7f6;
-      border-color: #f4b5ae;
+      background: #fef2f2;
+      border-color: #fecaca;
+      box-shadow: none;
     }
     .msg-title {
-      font-size: 11px;
-      font-weight: 800;
+      font-size: 10px;
+      font-weight: 700;
       color: var(--muted);
       text-transform: uppercase;
+      letter-spacing: .04em;
       margin-bottom: 5px;
     }
     .tool-strip {
@@ -193,19 +222,19 @@
     }
     .tool-pill {
       display: inline-block;
-      padding: 2px 6px;
-      border-radius: 999px;
-      border: 1px solid #c8d3df;
-      background: #f4f8fc;
-      color: #40566f;
+      padding: 1px 7px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #f4f4f5;
+      color: var(--muted);
       font-size: 11px;
     }
     .common-list { display: grid; gap: 8px; margin-top: 12px; }
     .common-item {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 10px;
-      background: #fbfcfd;
+      background: #fafafa;
       display: grid;
       gap: 8px;
     }
@@ -215,10 +244,10 @@
       justify-content: space-between;
       gap: 8px;
     }
-    .common-title { font-weight: 750; overflow-wrap: anywhere; }
+    .common-title { font-weight: 600; overflow-wrap: anywhere; }
     .mini {
       width: auto;
-      min-height: 28px;
+      min-height: 26px;
       padding: 3px 8px;
       font-size: 12px;
     }
@@ -231,7 +260,7 @@
       position: relative;
       min-height: 620px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: var(--radius);
       background: var(--deck);
       overflow: auto;
     }
@@ -239,7 +268,7 @@
       position: relative;
       min-width: 100%;
       min-height: 600px;
-      background: linear-gradient(to bottom, rgba(255,255,255,.48), rgba(255,255,255,.18)), var(--deck);
+      background: var(--deck);
     }
     .deck-label {
       position: absolute;
@@ -247,7 +276,7 @@
       top: 8px;
       color: var(--muted);
       font-size: 12px;
-      background: rgba(255,255,255,.82);
+      background: rgba(255,255,255,.9);
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 3px 8px;
@@ -255,49 +284,49 @@
     }
     .deck-frame {
       position: absolute;
-      border: 2px solid #8c98a6;
-      background: rgba(255,255,255,.24);
-      box-shadow: inset 0 -18px 0 rgba(255,255,255,.44);
+      border: 2px solid var(--line-strong);
+      background: rgba(255,255,255,.3);
+      box-shadow: inset 0 -18px 0 rgba(255,255,255,.5);
     }
     .grid-line {
       position: absolute;
       top: 0;
       bottom: 0;
       width: 1px;
-      background: rgba(91, 105, 121, .24);
+      background: rgba(113, 113, 122, .18);
       z-index: 1;
     }
     .grid-label {
       position: absolute;
       bottom: 2px;
       transform: translateX(-50%);
-      color: #718096;
+      color: var(--muted);
       font-size: 10px;
       z-index: 2;
     }
     .segment-band {
       position: absolute;
-      border: 1px dashed rgba(91, 105, 121, .35);
-      background: rgba(255,255,255,.16);
+      border: 1px dashed rgba(113, 113, 122, .3);
+      background: rgba(255,255,255,.2);
       z-index: 1;
     }
     .segment-label {
       position: absolute;
       left: 4px;
       top: 3px;
-      color: #5f6f82;
+      color: var(--muted);
       font-size: 10px;
-      font-weight: 750;
+      font-weight: 600;
     }
     .slot {
       position: absolute;
       min-width: 46px;
       min-height: 34px;
-      border: 1px solid #b9c2cc;
-      border-radius: 5px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
       padding: 4px 5px;
-      background: rgba(255,255,255,.94);
-      box-shadow: 0 1px 2px rgba(31,41,51,.08);
+      background: var(--panel);
+      box-shadow: var(--shadow);
       font-size: 10px;
       overflow: hidden;
       z-index: 3;
@@ -305,20 +334,114 @@
     .slot.selected {
       border-color: var(--accent);
       background: var(--accent-soft);
-      box-shadow: 0 0 0 2px rgba(22,103,199,.16);
+      box-shadow: 0 0 0 2px rgba(91,91,214,.18);
     }
-    .slot .pos { font-weight: 800; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .slot .pos { font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .slot .tiny { color: var(--muted); overflow-wrap: anywhere; }
     .slot.compact .coords { display: none; }
     .badge {
       display: inline-block;
       margin-top: 5px;
       padding: 2px 6px;
-      border-radius: 999px;
-      background: #dcecff;
-      color: #114c91;
+      border-radius: var(--radius-sm);
+      background: var(--accent-soft);
+      color: var(--accent);
       font-size: 10px;
-      font-weight: 750;
+      font-weight: 600;
+    }
+    /* --- Author chat (Author tab only; new class names) --- */
+    .author-shell {
+      display: grid;
+      grid-template-rows: auto 1fr auto auto;
+      gap: 10px;
+      height: calc(100vh - 150px);
+      min-height: 520px;
+    }
+    .author-sessionbar {
+      display: grid;
+      gap: 6px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 12px 14px;
+    }
+    .author-sb-fields {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr .8fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .author-sb-fields label { margin-top: 0; }
+    .author-sb-action button { white-space: nowrap; }
+    .author-chat {
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: #fafafa;
+    }
+    .author-composer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: end;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 8px;
+      transition: border-color .12s, box-shadow .12s;
+    }
+    .author-composer:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+    .author-composer textarea {
+      min-height: 44px;
+      max-height: 168px;
+      resize: none;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+      font: 13px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+    }
+    .author-composer textarea:focus { outline: none; box-shadow: none; }
+    .author-composer button { width: auto; min-width: 92px; align-self: stretch; }
+    .author-pending { opacity: .65; }
+    .author-pending .msg-title::after {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      margin-left: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: author-blink 1s infinite;
+    }
+    @keyframes author-blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+    .author-extras {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      background: var(--panel);
+    }
+    .author-extras > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+    .author-extras textarea { min-height: 160px; }
+    .author-chat::-webkit-scrollbar, .pre::-webkit-scrollbar, .deck-map::-webkit-scrollbar { width: 10px; height: 10px; }
+    .author-chat::-webkit-scrollbar-thumb, .pre::-webkit-scrollbar-thumb, .deck-map::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    .author-chat::-webkit-scrollbar-thumb:hover, .pre::-webkit-scrollbar-thumb:hover, .deck-map::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+      background-clip: padding-box;
+    }
+    @media (max-width: 980px) {
+      .author-sb-fields { grid-template-columns: 1fr 1fr; }
+      .author-shell { height: auto; }
     }
     @media (max-width: 980px) {
       .grid, .wide-grid { grid-template-columns: 1fr; }
@@ -399,12 +522,13 @@
     </div>
 
     <div class="panel" id="tab-author">
-      <div class="wide-grid">
-        <section>
-          <h2>Prompt Authoring</h2>
-          <label for="authorProfile">Profile</label>
-          <select id="authorProfile"></select>
-          <div class="triple">
+      <div class="author-shell">
+        <div class="author-sessionbar">
+          <div class="author-sb-fields">
+            <div>
+              <label for="authorProfile">Profile</label>
+              <select id="authorProfile"></select>
+            </div>
             <div>
               <label for="authorLabScope">Lab scope</label>
               <select id="authorLabScope">
@@ -422,23 +546,28 @@
               <label for="authorModel">Model</label>
               <input id="authorModel" placeholder="default">
             </div>
+            <div class="author-sb-action">
+              <label>&nbsp;</label>
+              <button id="startAuthor">Start session</button>
+            </div>
           </div>
-          <label for="authorPrompt">Next message</label>
-          <textarea id="authorPrompt" placeholder="Ask for a protocol, answer a clarification, approve a checkpoint, or request changes."></textarea>
-          <div class="actions">
-            <button id="startAuthor">Start session</button>
-            <button id="sendAuthor" class="secondary" disabled>Send</button>
-          </div>
-          <div class="status" id="authorStatus"></div>
-        </section>
-        <section>
-          <h2>Conversation</h2>
-          <div class="chat-log" id="authorChat"></div>
-          <h3>Latest structured result</h3>
-          <div class="pre" id="authorResult"></div>
+          <div class="status" id="authorStatus" aria-live="polite"></div>
+        </div>
+
+        <div class="author-chat" id="authorChat" role="log" aria-live="polite"></div>
+
+        <div class="author-composer">
+          <textarea id="authorPrompt" rows="1" placeholder="Message the author…  (Enter to send, Shift+Enter for newline)" disabled></textarea>
+          <button id="sendAuthor" disabled>Send</button>
+        </div>
+
+        <details class="author-extras">
+          <summary>Generated code &amp; raw result</summary>
           <label for="generatedCode">Generated / best draft code</label>
           <textarea id="generatedCode"></textarea>
-        </section>
+          <label>Latest structured result</label>
+          <div class="pre" id="authorResult"></div>
+        </details>
       </div>
     </div>
 
@@ -542,7 +671,8 @@
       liquidClasses: [],
       profiles: [],
       authorSessionId: null,
-      authorMessages: []
+      authorMessages: [],
+      authorPending: false
     };
 
     const $ = (id) => document.getElementById(id);
@@ -580,11 +710,7 @@
     function renderAuthorChat() {
       const chat = $('authorChat');
       if (!chat) return;
-      if (!state.authorMessages.length) {
-        chat.innerHTML = '<div class="msg system"><div class="msg-title">Session</div>Start a session, then send a request.</div>';
-        return;
-      }
-      chat.innerHTML = state.authorMessages.map(msg => {
+      const parts = state.authorMessages.map(msg => {
         const tools = msg.meta && Array.isArray(msg.meta.tool_calls) && msg.meta.tool_calls.length
           ? `<div class="tool-strip">${msg.meta.tool_calls.slice(-10).map(call =>
               `<span class="tool-pill">${escapeHtml(call.name || 'tool')}: ${escapeHtml(call.ok === true ? 'ok' : call.ok === false ? 'failed' : 'done')}</span>`
@@ -595,7 +721,14 @@
           ${escapeHtml(msg.text || '')}
           ${tools}
         </div>`;
-      }).join('');
+      });
+      if (state.authorPending) {
+        parts.push('<div class="msg model author-pending"><div class="msg-title">Author</div>thinking</div>');
+      }
+      if (!parts.length) {
+        parts.push('<div class="msg system"><div class="msg-title">Session</div>Start a session, then send a message below.</div>');
+      }
+      chat.innerHTML = parts.join('');
       chat.scrollTop = chat.scrollHeight;
     }
 
@@ -722,6 +855,12 @@
     function bindWorkbench() {
       $('startAuthor').addEventListener('click', startAuthoringSession);
       $('sendAuthor').addEventListener('click', sendAuthorMessage);
+      $('authorPrompt').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendAuthorMessage();
+        }
+      });
       $('simulateSource').addEventListener('click', simulateSource);
       $('compileSource').addEventListener('click', compileSource);
       $('runDecompile').addEventListener('click', runDecompile);
@@ -917,11 +1056,13 @@
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
           $('sendAuthor').disabled = false;
+          $('authorPrompt').disabled = false;
           pushAuthorMessage(
             'system',
             'Session started',
             `Profile: ${result.profile_name || 'none'}\nOutput: ${result.output_dir}\nSession: ${result.session_id}`
           );
+          $('authorPrompt').focus();
         });
       } catch (err) {
         setStatus('authorStatus', err.message, 'error');
@@ -929,6 +1070,11 @@
       } finally {
         $('startAuthor').disabled = false;
       }
+    }
+
+    function setComposerBusy(busy) {
+      $('sendAuthor').disabled = busy || !state.authorSessionId;
+      $('authorPrompt').disabled = busy || !state.authorSessionId;
     }
 
     async function sendAuthorMessage() {
@@ -941,16 +1087,19 @@
         setStatus('authorStatus', 'Type a message first.', 'error');
         return;
       }
-      $('sendAuthor').disabled = true;
+      setComposerBusy(true);
       try {
         pushAuthorMessage('user', 'You', message);
         $('authorPrompt').value = '';
+        state.authorPending = true;
+        renderAuthorChat();
         await submitAndPoll('authoring-send', {
           session_id: state.authorSessionId,
           message
         }, 'authorStatus', 'authorResult', result => {
           const authored = result.authoring || {};
           const summary = summarizeAuthoringResult(authored);
+          state.authorPending = false;
           pushAuthorMessage(
             authored.status === 'failure' ? 'error' : 'model',
             summary.title,
@@ -964,7 +1113,10 @@
         setStatus('authorStatus', err.message, 'error');
         pushAuthorMessage('error', 'Send error', err.message);
       } finally {
-        $('sendAuthor').disabled = false;
+        state.authorPending = false;
+        setComposerBusy(false);
+        renderAuthorChat();
+        if (state.authorSessionId) $('authorPrompt').focus();
       }
     }
 
