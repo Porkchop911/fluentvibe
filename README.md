@@ -41,6 +41,9 @@ automation community. It is not a production release.
   workspaces, sites, and liquid classes.
 - CLI entry points for compile, simulate, decompile, catalog, and prompt
   authoring flows.
+- A local workspace setup web app (`fluentvibe workspace-app`) for choosing a
+  workspace, laying out labware, saving a profile, and driving the authoring,
+  simulate/compile, decompile, catalog, and deploy flows from one browser tab.
 
 ## What Needs Review
 
@@ -124,6 +127,7 @@ fluentvibe catalog refresh
 - [Reviewer guide](docs/reviewer-guide.md)
 - [Architecture](docs/architecture.md)
 - [Authoring API](docs/authoring.md)
+- [Workspace app](docs/workspace-app.md)
 - [Catalog system](docs/catalog.md)
 - [Simulator](docs/simulator.md)
 - [Compile path](docs/compile-path.md)

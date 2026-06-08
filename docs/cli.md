@@ -233,6 +233,17 @@ restriction), `cheatsheet` (inject the cheatsheet only), `off`
 floor; pair a scoped run with `--retry-budget 2` so a clean compile
 terminates instead of grinding to the floor.
 
+## `workspace-app` (local setup & authoring web UI)
+
+```
+fluentvibe workspace-app [--host 127.0.0.1] [--port 8765]
+```
+
+Starts a local web app (stdlib HTTP server) that bundles the setup, authoring,
+simulate/compile, decompile, catalog, and FluentControl-deploy flows behind one
+browser tab. Defaults to loopback `127.0.0.1:8765`; `Ctrl+C` stops it. See
+[workspace-app.md](workspace-app.md) for the full tour.
+
 ## Environment variables
 
 | Variable | Default | Purpose |
