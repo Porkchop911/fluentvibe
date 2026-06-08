@@ -57,8 +57,10 @@ RAW_PRESERVE_COMMAND_IDS = {
     "ApplicationDriverMacro",
     "Mca384PickUpTips",
     "Mca384SetTipsBack",
-    "Mca384Aspirate",
-    "Mca384Dispense",
+    # Mca384Aspirate / Mca384Dispense are NOT raw-preserved: they route to the
+    # modeled ASPIRATE/DISPENSE branches, which recover a partial-column
+    # selection where present and otherwise fall back to raw (see
+    # `_mca_partial_columns`).
     "Mca384Mix",
     "Mca384EmptyTips",
     "Mca384GetTips",
@@ -291,16 +293,25 @@ def _parse_step_object(obj: ET.Element) -> Optional[Step]:
             labware_name=_extract_field(obj, "LabwareName"),
         )
     if step_type == StepType.ASPIRATE:
+        cols = _mca_partial_columns(obj)
+        if cols is None:
+            # Full-plate or non-column selection: preserve raw bytes as before.
+            return _raw_step(command_id, type_attr, obj)
         return AspirateStep(
             labware_name=_extract_field(obj, "LabwareName") or "",
             volume=_parse_volume(_extract_field(obj, "Volume")),
             liquid_class=_extract_field(obj, "LiquidClassName"),
+            columns=cols,
         )
     if step_type == StepType.DISPENSE:
+        cols = _mca_partial_columns(obj)
+        if cols is None:
+            return _raw_step(command_id, type_attr, obj)
         return DispenseStep(
             labware_name=_extract_field(obj, "LabwareName") or "",
             volume=_parse_volume(_extract_field(obj, "Volume")),
             liquid_class=_extract_field(obj, "LiquidClassName"),
+            columns=cols,
         )
     if step_type == StepType.RGA_TRANSFER_LABWARE:
         return _parse_rga_transfer(obj)
@@ -492,6 +503,53 @@ def _liha_get_tips_requires_raw(obj: ET.Element) -> bool:
     if diti_type and diti_type != "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 1000ul SBS":
         return True
     return False
+
+
+def _mca_partial_columns(obj: ET.Element) -> Optional[list[int]]:
+    """Recover a partial-column selection from an MCA384 pipetting command.
+
+    FluentControl encodes the addressed wells on the
+    ``Mca384ScriptCommandUsingWellSelectionBaseDataV6`` block:
+    ``FirstTipXPosition``/``LastTipXPosition`` bound a contiguous column span,
+    and a non-contiguous set is listed in ``SelectedRowsOrColumns``.
+
+    Returns the 1-based plate columns when the command addresses a strict
+    subset of *whole* columns; returns ``None`` for a full-plate selection or
+    anything we cannot losslessly model as columns (a shifted/partial row
+    range, or a sparse per-well pick) so those keep their raw bytes.
+    """
+    first_y = _parse_int(_extract_field(obj, "FirstTipYPosition"), default=1)
+    last_y = _parse_int(_extract_field(obj, "LastTipYPosition"), default=0)
+    # Only whole-column selections are modeled; a shifted row start is not.
+    if first_y not in (0, 1):
+        return None
+
+    sroc = (_extract_field(obj, "SelectedRowsOrColumns") or "").strip()
+    if sroc:
+        try:
+            cols = sorted({int(x) for x in sroc.split(",") if x.strip()})
+        except ValueError:
+            return None
+        if not cols:
+            return None
+    else:
+        first_x = _parse_int(_extract_field(obj, "FirstTipXPosition"), default=0)
+        last_x = _parse_int(_extract_field(obj, "LastTipXPosition"), default=0)
+        if first_x < 1 or last_x < first_x:
+            return None
+        # A full span from column 1 is the whole plate — keep it raw/unchanged.
+        if first_x == 1 and last_x in (12, 24):
+            return None
+        cols = list(range(first_x, last_x + 1))
+
+    # Guard against sparse per-well picks: when explicit well indexes are
+    # present they must enumerate exactly the whole selected columns.
+    well_indexes = _list_int_values(obj, "SelectedWellIndexes")
+    if well_indexes:
+        rows = (last_y - first_y + 1) if last_y >= max(first_y, 1) else 8
+        if rows < 1 or len(well_indexes) != len(cols) * rows:
+            return None
+    return cols
 
 
 def _liha_pipette_requires_raw(obj: ET.Element) -> bool:

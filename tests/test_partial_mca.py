@@ -21,6 +21,8 @@ from fluentvibe import (  # noqa: E402
     FCA1000Box, Plate96, Reagent, Worktable,
 )
 from fluentvibe.compiler.renderer import Renderer  # noqa: E402
+from fluentvibe.decompiler.xscr_parser import parse_xscr  # noqa: E402
+from fluentvibe.ir.schema import AspirateStep  # noqa: E402
 
 
 def _mca_worktable() -> tuple[Worktable, object, object, object]:
@@ -139,3 +141,60 @@ def test_full_plate_compile_has_default_well_selection() -> None:
     assert "<FirstTipXPosition>1</FirstTipXPosition>" in xml
     # No explicit column list is injected for a full-plate aspirate.
     assert "<SelectedRowsOrColumns>" not in xml.replace("<SelectedRowsOrColumns />", "")
+
+
+# ── Render → decompile round-trip (closes the loop) ─────────────────
+
+def _roundtrip_aspirate_columns(columns: list[int], tmp_path: Path) -> list[AspirateStep]:
+    wt, src, dst, tip_box = _mca_worktable()
+    wt.group("Transfer")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tip_box)
+    head.aspirate(src, 15.0, liquid_class="Water Free Single", columns=columns)
+    head.return_tips()
+
+    protocol = wt.to_protocol()
+    protocol.worktable_guid = "00000000-0000-0000-0000-000000000000"
+    protocol.worktable_name = "TestWorkspace"
+    out = tmp_path / "rt.xscr"
+    out.write_text(Renderer().render(protocol), encoding="utf-8")
+
+    parsed = parse_xscr(out)
+    return [
+        step
+        for group in parsed.groups
+        for step in group.steps
+        if isinstance(step, AspirateStep)
+    ]
+
+
+def test_roundtrip_recovers_contiguous_columns(tmp_path: Path) -> None:
+    aspirates = _roundtrip_aspirate_columns([7, 8, 9, 10, 11, 12], tmp_path)
+    assert any(step.columns == [7, 8, 9, 10, 11, 12] for step in aspirates)
+
+
+def test_roundtrip_recovers_sparse_columns(tmp_path: Path) -> None:
+    aspirates = _roundtrip_aspirate_columns([1, 3, 5, 7, 9, 11], tmp_path)
+    assert any(step.columns == [1, 3, 5, 7, 9, 11] for step in aspirates)
+
+
+def test_roundtrip_full_plate_stays_raw(tmp_path: Path) -> None:
+    """A full-plate aspirate must not be promoted to a modeled columns= step."""
+    wt, src, dst, tip_box = _mca_worktable()
+    wt.group("Transfer")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tip_box)
+    head.aspirate(src, 15.0, liquid_class="Water Free Single")  # no columns
+    head.return_tips()
+
+    protocol = wt.to_protocol()
+    protocol.worktable_guid = "00000000-0000-0000-0000-000000000000"
+    protocol.worktable_name = "TestWorkspace"
+    out = tmp_path / "rt_full.xscr"
+    out.write_text(Renderer().render(protocol), encoding="utf-8")
+
+    parsed = parse_xscr(out)
+    modeled = [s for g in parsed.groups for s in g.steps if isinstance(s, AspirateStep)]
+    assert modeled == []  # full-plate aspirate stays raw-preserved

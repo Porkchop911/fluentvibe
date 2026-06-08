@@ -563,6 +563,8 @@ def _emit_aspirate(step: AspirateStep, label_to_var: dict[str, str]) -> str:
     parts = [target, repr(step.volume)]
     if step.liquid_class:
         parts.append(f"liquid_class={step.liquid_class!r}")
+    if step.columns:
+        parts.append(f"columns={list(step.columns)!r}")
     return f"head.aspirate({', '.join(parts)})"
 
 
@@ -571,6 +573,8 @@ def _emit_dispense(step: DispenseStep, label_to_var: dict[str, str]) -> str:
     parts = [target, repr(step.volume)]
     if step.liquid_class:
         parts.append(f"liquid_class={step.liquid_class!r}")
+    if step.columns:
+        parts.append(f"columns={list(step.columns)!r}")
     return f"head.dispense({', '.join(parts)})"
 
 
