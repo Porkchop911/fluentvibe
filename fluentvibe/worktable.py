@@ -39,6 +39,7 @@ from .ir.schema import (
     WorklistColumnMapping,
     WorklistImportStep,
 )
+from .ir.source_pos import capture_source_pos
 from .labware.base import Labware
 
 if TYPE_CHECKING:
@@ -970,6 +971,8 @@ class Worktable:
                 )
 
     def _emit(self, step: Step) -> None:
+        if step.source_pos is None:
+            step.source_pos = capture_source_pos()
         if self._emit_target_stack:
             self._emit_target_stack[-1].append(step)
             return
