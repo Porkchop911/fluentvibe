@@ -136,10 +136,14 @@ With `step.source_pos` in place, mapping is trivial: `SimulationFailure.step_ind
 
 ## 5. Phased plan & milestones
 
-**Phase 0 — Source mapping spike (½–1 day).** Add optional `source_pos` to `Step`;
-populate via frame inspection (mechanism A) at the emit points; prove a known-bad
-example (`examples/…`) yields the correct line for an overdraw. *Exit: a test maps
-a seeded `OverdrawError` to the exact authoring line.*
+**Phase 0 — Source mapping spike. ✅ SHIPPED.** `SourcePos` +
+`capture_source_pos()` (`fluentvibe/ir/source_pos.py`); `Worktable._emit` tags
+every step; the simulator forwards the failing step's position onto
+`SimulationFailure.source_pos`. Editor-only field, excluded from serialization, so
+round-trip/parity are unaffected. Proven by `tests/test_source_pos.py` (capture
+accuracy, framework-frame skipping, serialization exclusion, end-to-end
+failure→line). *Mechanism A; container-step (group/loop) attribution via contextlib
+is best-effort — revisit with mechanism B if needed.*
 
 **Phase 1 — Headless analysis core (2–3 days).** A `fluentvibe/lsp/analyzer.py`
 that takes a source string and returns a list of structured diagnostics (build +
