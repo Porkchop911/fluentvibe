@@ -125,8 +125,10 @@ fluentvibe catalog refresh
 
 `fluentvibe check <protocol.py>` analyzes a protocol and prints diagnostics —
 Python build errors and simulator failures — positioned at the authoring line
-that caused them, each with a repair hint. Add `--json` for machine-readable
-output. It is the headless core of the editor copilot (see
+that caused them, each with a repair hint and, where mechanical, a suggested
+fix. Add `--json` for machine-readable output, or `--explain` for a
+plain-language LLM explanation per diagnostic (needs a reachable LM endpoint;
+see `FLUENTVIBE_LM_ENDPOINT`). It is the headless core of the editor copilot (see
 [docs/copilot-design.md](docs/copilot-design.md)). Example:
 
 ```text

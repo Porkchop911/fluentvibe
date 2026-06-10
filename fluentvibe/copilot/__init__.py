@@ -9,5 +9,6 @@ language server both call. See ``docs/copilot-design.md``.
 from __future__ import annotations
 
 from .analyzer import Diagnostic, analyze_file, analyze_source
+from .explain import explain_diagnostic
 
-__all__ = ["Diagnostic", "analyze_file", "analyze_source"]
+__all__ = ["Diagnostic", "analyze_file", "analyze_source", "explain_diagnostic"]
