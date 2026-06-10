@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 import urllib.request
@@ -11,9 +12,13 @@ from typing import Any
 
 from .trace import ModelTraceRecorder
 
-
-DEFAULT_LM_STUDIO_ENDPOINT = "http://192.168.0.126:1234/v1/chat/completions"
-DEFAULT_LM_STUDIO_MODEL = "qwen3.6-27b"
+# The authoring loop talks to any OpenAI-compatible chat endpoint (LM Studio,
+# Ollama, vLLM, …). Defaults target a local server; override per-machine with
+# FLUENTVIBE_LM_ENDPOINT / FLUENTVIBE_LM_MODEL or the `fluentvibe author` flags.
+DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get(
+    "FLUENTVIBE_LM_ENDPOINT", "http://localhost:1234/v1/chat/completions"
+)
+DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.6-27b")
 
 
 @dataclass(frozen=True)

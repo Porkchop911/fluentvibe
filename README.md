@@ -122,6 +122,21 @@ fluentvibe catalog find magnet
 fluentvibe catalog refresh
 ```
 
+### Prompt authoring
+
+The `author` and `chat` flows talk to any OpenAI-compatible chat endpoint
+(LM Studio, Ollama, vLLM, …). Point them at your local server with environment
+variables or per-command flags:
+
+```bash
+export FLUENTVIBE_LM_ENDPOINT="http://localhost:1234/v1/chat/completions"
+export FLUENTVIBE_LM_MODEL="your-model-name"
+fluentvibe author "Transfer 20 uL from a source to a dest 96-well plate"
+
+# or override per run:
+fluentvibe author "..." --endpoint http://localhost:1234/v1/chat/completions --model your-model-name
+```
+
 ## Documentation
 
 - [Reviewer guide](docs/reviewer-guide.md)
