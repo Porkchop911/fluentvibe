@@ -44,11 +44,13 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   client = new LanguageClient("fluentvibe", "fluentvibe", serverOptions, clientOptions);
-  context.subscriptions.push({ dispose: () => client?.stop() });
   context.subscriptions.push(
     vscode.commands.registerCommand("fluentvibe.inlineEdit", inlineEdit)
   );
-  client.start();
+  context.subscriptions.push({ dispose: () => client?.stop() });
+  client.start().catch((err) => {
+    vscode.window.showErrorMessage(`fluentvibe language server failed to start: ${err}`);
+  });
 }
 
 async function inlineEdit(): Promise<void> {
@@ -71,7 +73,7 @@ async function inlineEdit(): Promise<void> {
     { location: vscode.ProgressLocation.Notification, title: "fluentvibe: editing…" },
     () =>
       client!.sendRequest(ExecuteCommandRequest.type, {
-        command: "fluentvibe.inlineEdit",
+        command: "fluentvibe.applyInlineEdit",
         arguments: [
           { uri: editor.document.uri.toString(), start_line: startLine, end_line: endLine, instruction },
         ],
