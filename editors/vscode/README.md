@@ -36,9 +36,15 @@ Development Host. Open a fluentvibe protocol `.py` and save it to see diagnostic
   `python`). Point this at the venv where you installed fluentvibe.
 - `fluentvibe.enable` — turn the language server on/off.
 
-## Scope (current)
+## Features (current)
 
-- Diagnostics on **open and save**. Live-as-you-type and quick-fixes (code
-  actions) are planned next — see the phased plan in the design doc.
-- The server only analyzes files that import `fluentvibe` and define
+- **Diagnostics** on open and save: build errors + simulator failures on the
+  exact line, with repair hints.
+- **Quick-fixes** (lightbulb 💡): e.g. pipetting before mounting the adapter →
+  one-click insert of `head.mount_adapter()`.
+- **Autocomplete**: real FluentControl catalog names inside `catalog="..."`, and
+  the fluentvibe API after `head.` / `wt.` / `gripper.` etc.
+- The server only touches files that import `fluentvibe` and define
   `build_worktable()`, so ordinary Python files are left alone.
+
+Planned: live-as-you-type diagnostics, LLM "explain/edit" actions in the editor.

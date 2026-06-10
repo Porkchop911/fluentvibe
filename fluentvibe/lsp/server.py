@@ -17,7 +17,8 @@ import sys
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
-from .convert import code_actions_for, to_lsp_diagnostics
+from ..copilot.complete import complete_at
+from .convert import code_actions_for, to_completion_items, to_lsp_diagnostics
 
 logger = logging.getLogger("fluentvibe.lsp")
 
@@ -81,6 +82,23 @@ def create_server() -> LanguageServer:
         ls: LanguageServer, params: lsp.CodeActionParams
     ) -> list[lsp.CodeAction]:
         return code_actions_for(params.text_document.uri, params.context.diagnostics)
+
+    @server.feature(
+        lsp.TEXT_DOCUMENT_COMPLETION,
+        lsp.CompletionOptions(trigger_characters=[".", '"', "'"]),
+    )
+    def _completion(
+        ls: LanguageServer, params: lsp.CompletionParams
+    ) -> list[lsp.CompletionItem] | None:
+        doc = ls.workspace.get_text_document(params.text_document.uri)
+        if not _looks_like_protocol(doc.source):
+            return None
+        completions = complete_at(doc.source, params.position.line, params.position.character)
+        return to_completion_items(
+            [c.to_dict() for c in completions],
+            params.position.line,
+            params.position.character,
+        )
 
     return server
 

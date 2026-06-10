@@ -70,6 +70,33 @@ def _text_edit_for_fix(fix: dict[str, Any]) -> lsp.TextEdit | None:
     return None
 
 
+_COMPLETION_KIND = {
+    "catalog": lsp.CompletionItemKind.Value,
+    "method": lsp.CompletionItemKind.Method,
+}
+
+
+def to_completion_items(
+    completions: list[dict[str, Any]], line: int, cursor_char: int
+) -> list[lsp.CompletionItem]:
+    """Map analyzer completions (dict form) to LSP items with precise edits."""
+    items: list[lsp.CompletionItem] = []
+    for c in completions:
+        rng = lsp.Range(
+            start=lsp.Position(line=line, character=int(c.get("replace_start") or 0)),
+            end=lsp.Position(line=line, character=cursor_char),
+        )
+        items.append(
+            lsp.CompletionItem(
+                label=c["label"],
+                kind=_COMPLETION_KIND.get(c.get("kind"), lsp.CompletionItemKind.Text),
+                detail=c.get("detail") or None,
+                text_edit=lsp.TextEdit(range=rng, new_text=c.get("insert_text") or c["label"]),
+            )
+        )
+    return items
+
+
 def code_actions_for(uri: str, diagnostics: list[lsp.Diagnostic]) -> list[lsp.CodeAction]:
     """Build quick-fix code actions from diagnostics carrying analyzer fix data."""
     actions: list[lsp.CodeAction] = []
