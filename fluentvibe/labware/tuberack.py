@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import Labware, Well, well_grid_addresses
+from .base import Labware
 
 
 class TubeRack(Labware):

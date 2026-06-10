@@ -29,14 +29,13 @@ domain (main loop falls through to live lookups, same as today).
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Iterable
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from .lc_tools import make_lc_tools
 from .tools import PARALLEL_SAFE_TOOLS, AuthoringToolRegistry

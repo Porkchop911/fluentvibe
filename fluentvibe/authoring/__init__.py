@@ -1,7 +1,7 @@
 """Prompt-to-protocol authoring API."""
 
-from .session import PromptAuthoringSession
 from .service import PromptAuthoringService, author_protocol
+from .session import PromptAuthoringSession
 from .trace import ModelTraceConfig, ModelTraceRecorder
 
 __all__ = [

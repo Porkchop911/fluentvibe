@@ -6,9 +6,9 @@ file with a ``build_worktable()`` factory that, when executed, re-emits
 the same .xscr (codegen).
 """
 
-from .xscr_parser import parse_xscr
 from .codegen import emit_python
 from .corpus import CorpusResult, run_decompiled_corpus, summarize_corpus_results
+from .xscr_parser import parse_xscr
 
 __all__ = [
     "parse_xscr",

@@ -6,15 +6,15 @@ wrapper and tests exercise the same catalog/profile behavior.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import re
 import threading
 import time
 import uuid
 import xml.etree.ElementTree as ET
-from functools import lru_cache
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,6 @@ from ..catalog.catalog import (
     resolve_workspace_by_guid,
     resolve_workspace_by_name,
 )
-
 
 PROFILE_SCHEMA_VERSION = 1
 PROFILES_BASE_DIR = Path("build") / "workspaces"

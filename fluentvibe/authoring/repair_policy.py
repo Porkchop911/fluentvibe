@@ -11,9 +11,7 @@ the *mechanics* of the fluentvibe API and simulator constraints.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-
+from dataclasses import dataclass
 
 # ── Category → (repair options, human-readable guidance) ────────────
 

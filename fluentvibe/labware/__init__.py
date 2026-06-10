@@ -11,17 +11,21 @@ v1.1 hierarchy (10 behavioral families):
 - `Adapter` (with `EvaAdapter`)
 """
 
-from .base import (
-    ExternalLabware, Labware, Layer, Well, BeadPhase,
-    CatalogIndexMissing,
-)
-from .plates import Plate, Plate96, Plate96Deep, Plate384
-from .troughs import Trough, Trough25mL, Trough100mL, Waste
-from .tipboxes import TipBox, MCA100Box, MCA200Box, MCA500Box, FCA50Box, FCA200Box, FCA1000Box
 from .adapters import Adapter, EvaAdapter
+from .base import (
+    BeadPhase,
+    CatalogIndexMissing,
+    ExternalLabware,
+    Labware,
+    Layer,
+    Well,
+)
+from .deckitems import FixedDeck, Hotel, WashStation, WasteChute
 from .magnet import MagnetRack
+from .plates import Plate, Plate96, Plate96Deep, Plate384
+from .tipboxes import FCA50Box, FCA200Box, FCA1000Box, MCA100Box, MCA200Box, MCA500Box, TipBox
+from .troughs import Trough, Trough25mL, Trough100mL, Waste
 from .tuberack import TubeRack
-from .deckitems import WashStation, WasteChute, Hotel, FixedDeck
 
 __all__ = [
     "Labware", "ExternalLabware", "Layer", "Well", "BeadPhase", "CatalogIndexMissing",

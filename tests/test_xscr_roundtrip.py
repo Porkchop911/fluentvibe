@@ -29,7 +29,6 @@ from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 from fluentvibe.decompiler import emit_python, parse_xscr  # noqa: E402
 from tests._module_loader import load_module  # noqa: E402
 
-
 _GUID_RE = re.compile(r"(&lt;Identifier&gt;)[0-9a-f-]{36}(&lt;/Identifier&gt;)")
 _CHK_RE = re.compile(r"<Checksum>[0-9A-F]+</Checksum>")
 

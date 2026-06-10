@@ -18,7 +18,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import (  # noqa: E402
-    FCA1000Box, MCA100Box, Plate96, Reagent, Worktable,
+    FCA1000Box,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 from fluentvibe.compiler.renderer import Renderer  # noqa: E402
 from fluentvibe.decompiler.xscr_parser import parse_xscr  # noqa: E402

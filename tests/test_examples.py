@@ -106,7 +106,7 @@ def test_loop_conditional_dispatches_correctly() -> None:
     assert waste_a1.volume_ul == pytest.approx(45.0)
 
     # The IR contains a single LoopStep with a nested ConditionalStep.
-    from fluentvibe.ir.schema import LoopStep, ConditionalStep
+    from fluentvibe.ir.schema import ConditionalStep, LoopStep
     proto = wt.to_protocol()
     pipetting = next(g for g in proto.groups if g.name == "Wash")
     loop_step = next(s for s in pipetting.steps if isinstance(s, LoopStep))

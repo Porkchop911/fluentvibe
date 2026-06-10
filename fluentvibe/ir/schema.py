@@ -5,9 +5,10 @@ This module defines Pydantic models that represent protocol steps
 in a structured, validated format before rendering to XML.
 """
 
-from typing import Optional, Literal, Union, Annotated
-from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from typing import Literal, Optional, Union
+
+from pydantic import BaseModel, Field
 
 
 class StepType(str, Enum):
@@ -756,7 +757,7 @@ STEP_TO_COMMAND_ID = {
     StepType.SET_VARIABLE: "SetVariable",
     # CalculateVariable uses SetVariable with Expression in Tecan, but let's assume we map to something
     # For now map to SetVariable, Renderer will handle the specifics
-    StepType.CALCULATE_VARIABLE: "SetVariable", 
+    StepType.CALCULATE_VARIABLE: "SetVariable",
     # Wait/Timer command
     StepType.WAIT: "Wait",  # Uses Timer command
     # Annotation and control

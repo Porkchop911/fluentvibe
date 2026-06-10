@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-
 DEFAULT_SHELL_XSCR = Path(
     r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\b010c60d-813d-40cf-848a-584d0432f789.xscr"
 )

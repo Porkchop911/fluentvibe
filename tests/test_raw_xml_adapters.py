@@ -16,7 +16,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import Plate96, Reagent, SimulationError, Worktable  # noqa: E402
 
-
 # ── Helper to build a raw XML aspirate/dispense fixture ─────────────
 
 def _raw_liha_aspirate(labware: str, volume: float) -> str:
@@ -193,7 +192,7 @@ def test_raw_liha_dispense_adapted() -> None:
     wt = Worktable(name="raw liha dispense")
     wt.group("Setup")
     src = wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
-    dst = wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
+    wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
     src.fill_all(Reagent("Buffer"), 50.0)
 
     wt.group("Raw")
@@ -231,7 +230,7 @@ def test_raw_liha_empty_tips_adapted() -> None:
     wt = Worktable(name="raw liha empty")
     wt.group("Setup")
     src = wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
-    dst = wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
+    wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
     src.fill_all(Reagent("Buffer"), 50.0)
 
     wt.group("Raw")
@@ -318,7 +317,7 @@ def test_raw_mca384_empty_tips_adapted() -> None:
     wt = Worktable(name="raw mca384 empty")
     wt.group("Setup")
     src = wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
-    dst = wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
+    wt.place(Plate96("Dest", catalog="96 Well Flat"), "Nest", 2)
     src.fill_all(Reagent("Buffer"), 50.0)
 
     # Mount adapter (required by structured AspirateStep)

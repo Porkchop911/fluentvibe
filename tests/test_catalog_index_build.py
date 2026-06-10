@@ -14,11 +14,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fluentvibe.catalog.indexer import build_index, install_path_default  # noqa: E402
 from fluentvibe.catalog.catalog import (  # noqa: E402
-    DEFAULT_INDEX_PATH, category_counts, install_info, resolve_by_name,
-    resolve_workspace_by_guid, resolve_workspace_by_name,
+    category_counts,
+    install_info,
+    resolve_by_name,
+    resolve_workspace_by_guid,
+    resolve_workspace_by_name,
 )
+from fluentvibe.catalog.indexer import build_index, install_path_default  # noqa: E402
 from fluentvibe.catalog.xcmp import load_xwsp  # noqa: E402
 
 

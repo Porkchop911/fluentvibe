@@ -7,8 +7,8 @@ import pytest
 
 import fluentvibe.authoring.grounding as grounding
 from fluentvibe.authoring.models import AuthoringResult, AuthoringStatus
-from fluentvibe.authoring.tools import AuthoringToolRegistry
 from fluentvibe.authoring.session import PromptAuthoringSession
+from fluentvibe.authoring.tools import AuthoringToolRegistry
 from tests.test_prompt_authoring import _valid_draft
 
 
@@ -457,7 +457,7 @@ def test_session_resumes_after_clarification_and_compiles() -> None:
 
 
 def test_session_pushes_to_draft_after_sufficient_grounding() -> None:
-    draft = _valid_draft()
+    _valid_draft()
     grounding_calls = [
         ("lookup_workspace", {"name_or_guid": "SAT_Fluent_780_Rev3"}),
         ("search_labware", {"query": "ABgene"}),

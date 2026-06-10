@@ -21,21 +21,26 @@ from .graph import (
     adapt_client,
     build_authoring_graph,
 )
+from .grounding import CURRENT_WORKTABLE_ENV
+from .lab_scope import load_lab_scope
 from .lm_client import (
     DEFAULT_LM_STUDIO_ENDPOINT,
     DEFAULT_LM_STUDIO_MODEL,
     LMStudioChatClient,
-    make_chat_client,
 )
-from .models import ApprovalRequest, AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
+from .models import (
+    ApprovalRequest,
+    AuthoringResult,
+    AuthoringStatus,
+    ClarificationQuestion,
+    FailureCategory,
+)
 from .service import (
     SYSTEM_PROMPT,
     PromptAuthoringService,
     _intent_axis_message,
     _missing_intent_axes,
 )
-from .grounding import CURRENT_WORKTABLE_ENV
-from .lab_scope import load_lab_scope
 from .tools import AuthoringToolRegistry
 from .trace import ModelTraceConfig, ModelTraceRecorder
 from .validator import AuthoringValidator

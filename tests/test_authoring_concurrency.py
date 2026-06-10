@@ -11,42 +11,37 @@ Covers:
 
 from __future__ import annotations
 
-import json
 import threading
 import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from fluentvibe.authoring.category_agents import (
+    DEFAULT_CATEGORIES,
+    CategoryAgent,
+    _select,
+    run_category_agents,
+)
 from fluentvibe.authoring.graph import (
     AuthoringConcurrencyConfig,
     GraphState,
     build_authoring_graph,
 )
+from fluentvibe.authoring.grounding_coordinator import GroundingCoordinator
 from fluentvibe.authoring.prefetch import (
     GroundingPrefetcher,
     PrefetchConfig,
     _extract_search_terms,
     _parse_subagent_json,
 )
-from fluentvibe.authoring.grounding_coordinator import GroundingCoordinator
-from fluentvibe.authoring.category_agents import (
-    DEFAULT_CATEGORIES,
-    CategoryAgent,
-    CategoryAgentResult,
-    _select,
-    run_category_agents,
-)
 from fluentvibe.authoring.tools import (
-    PARALLEL_SAFE_TOOLS,
     AuthoringToolRegistry,
     _freeze_arguments,
 )
-
 
 # ── helpers ─────────────────────────────────────────────────────────
 
@@ -398,8 +393,8 @@ class TestCategoryAgentRunner:
                 return _FakeBound(names[0])
 
         # Stub _dispatch_pure so we don't hit the real catalog.
-        from unittest.mock import patch
         from concurrent.futures import ThreadPoolExecutor
+        from unittest.mock import patch
 
         def fake_pure(name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return {"ok": True, "tool": name, "echo": payload}
@@ -467,8 +462,8 @@ class TestCategoryAgentRunner:
             def bind_tools(self, tools: list[Any]) -> _FakeBound:
                 return _FakeBound()
 
-        from unittest.mock import patch
         from concurrent.futures import ThreadPoolExecutor
+        from unittest.mock import patch
 
         def fake_pure(name: str, payload: dict[str, Any]) -> dict[str, Any]:
             return {"ok": True, "tool": name}

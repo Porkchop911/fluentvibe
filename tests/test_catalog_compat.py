@@ -9,34 +9,32 @@ Covers:
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
 
 from fluentvibe.catalog import (
-    CatalogSchemaOutOfDate,
     INDEX_SCHEMA_VERSION,
+    CatalogSchemaOutOfDate,
     find_grip_modes,
     find_labware_for_site,
     find_legal_stacks,
     find_sites_for,
     find_workspaces_using,
-    liquid_classes_for_head,
     index_exists,
+    liquid_classes_for_head,
     open_index,
     resolve_by_name,
 )
 from fluentvibe.catalog.catalog import _check_schema
 from fluentvibe.catalog.indexer import _canonical_catalog_name, build_index
 from fluentvibe.catalog.xcmp import (
+    WorkspaceOccupant,
     XcmpArrangement,
     XcmpComponent,
     XcmpPipettable,
     XwspWorkspace,
-    WorkspaceOccupant,
 )
-
 
 # ── 1. Schema guard ────────────────────────────────────────────────
 

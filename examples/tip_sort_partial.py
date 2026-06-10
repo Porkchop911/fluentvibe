@@ -22,7 +22,7 @@ into target columns 1,4,7,10; the use phase grabs all four sorted columns in one
 go.
 """
 
-from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
+from fluentvibe import MCA100Box, Plate96, Reagent, Worktable
 
 SORT = ((1, 1), (2, 4), (3, 7), (4, 10))  # (source box col, target box col)
 SORTED_COLS = [tgt for _, tgt in SORT]    # [1, 4, 7, 10]

@@ -12,8 +12,10 @@ Verifies:
 """
 
 from fluentvibe import (
-    Worktable, Reagent,
-    Plate96, MCA100Box,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

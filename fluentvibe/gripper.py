@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, Union
 
 from .ir.schema import (
-    CgaGetFingersStep, CgaDropFingersStep, RgaTransferLabwareStep,
+    CgaDropFingersStep,
+    CgaGetFingersStep,
+    RgaTransferLabwareStep,
 )
 from .labware.base import Labware
 

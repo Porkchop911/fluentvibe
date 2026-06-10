@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_prompt_authoring import _valid_draft
 from fluentvibe.authoring.fluentcontrol_shell import (
     DEFAULT_SHELL_XSCR,
     classify_dialog_text,
@@ -13,6 +12,7 @@ from fluentvibe.authoring.fluentcontrol_shell import (
     replace_comment_to_payload_region,
 )
 from fluentvibe.authoring.tools import AuthoringToolRegistry
+from tests.test_prompt_authoring import _valid_draft
 
 
 def test_shell_region_replace_preserves_backslashes() -> None:

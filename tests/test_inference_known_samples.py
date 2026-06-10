@@ -14,7 +14,6 @@ from fluentvibe.catalog.indexer import install_path_default  # noqa: E402
 from fluentvibe.catalog.inference import infer_category  # noqa: E402
 from fluentvibe.catalog.xcmp import load_xcmp  # noqa: E402
 
-
 _INSTALL = install_path_default() / "SystemSpecific" / "Worktable" / "Components"
 
 

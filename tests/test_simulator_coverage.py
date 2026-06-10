@@ -8,7 +8,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fluentvibe import FCA1000Box, MagnetRack, Plate96, Reagent, SimulationError, Worktable  # noqa: E402
+from fluentvibe import FCA1000Box, Plate96, Reagent, SimulationError, Worktable  # noqa: E402
 
 
 def test_authored_protocol_gets_coverage_report() -> None:
@@ -163,7 +163,7 @@ def test_report_arithmetic_mixed_protocol() -> None:
     """Mixed protocol: modeled + validation-only + opaque steps."""
     wt = Worktable(name="mixed")
     wt.group("Setup")
-    src = wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
+    wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
 
     # fully simulated (AddLabwareStep → LABWARE_MOVEMENT)
     # validation-only (WaitStep)

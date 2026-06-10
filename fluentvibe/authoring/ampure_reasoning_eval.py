@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 LOOKUP_TOOLS = {"search_labware", "get_labware"}
 OBJECT_DRAFT_NUDGE = "call present_object_draft"
 FCA_PATTERNS = re.compile(r"\b(fca\s*96|fca96|fca\s*tip|fca.*labware|fca.*box)\b", re.I)

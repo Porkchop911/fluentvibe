@@ -11,13 +11,12 @@ Currently uses SQLite for simplicity (no server required).
 Can migrate to PostgreSQL for multi-user scenarios.
 """
 
-import sqlite3
 import json
+import sqlite3
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-from contextlib import contextmanager
-
+from typing import Any, Dict, List, Optional
 
 # Database path — bundled inside the catalog package.
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "tecan.db"

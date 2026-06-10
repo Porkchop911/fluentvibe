@@ -223,7 +223,9 @@ def main() -> int:
         return print(f"[mine] bucket {args.bucket}: no pending protocols.") or 0
 
     from fluentvibe.authoring.lm_client import (
-        DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL, LMStudioChatClient,
+        DEFAULT_LM_STUDIO_ENDPOINT,
+        DEFAULT_LM_STUDIO_MODEL,
+        LMStudioChatClient,
     )
     client = LMStudioChatClient(
         endpoint=args.endpoint or DEFAULT_LM_STUDIO_ENDPOINT,

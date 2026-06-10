@@ -14,7 +14,6 @@ import sys
 
 from fluentvibe.catalog import get_database
 
-
 RULES: list[dict] = [
     {
         "name": "ampure_keep_plate_on_magnet_during_washes",

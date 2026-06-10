@@ -9,16 +9,30 @@ compatibility but is not used by v1.1's catalog-driven labware construction.
 """
 
 from .catalog import (
-    CatalogEntry, WorkspaceEntry, LiquidClassEntry, CompatibleSite,
-    CatalogSchemaOutOfDate, INDEX_SCHEMA_VERSION,
     DEFAULT_INDEX_PATH,
-    open_index, index_exists,
-    resolve_by_name, find_components, find_components_by_metadata, list_by_category,
-    category_counts, resolve_workspace_by_name, resolve_liquid_class_by_name,
-    liquid_class_supports_section,
+    INDEX_SCHEMA_VERSION,
+    CatalogEntry,
+    CatalogSchemaOutOfDate,
+    CompatibleSite,
+    LiquidClassEntry,
+    WorkspaceEntry,
+    category_counts,
+    find_components,
+    find_components_by_metadata,
+    find_grip_modes,
+    find_labware_for_site,
+    find_legal_stacks,
+    find_sites_for,
+    find_workspaces_using,
+    index_exists,
     install_info,
-    find_sites_for, find_labware_for_site, find_grip_modes,
-    find_legal_stacks, find_workspaces_using, liquid_classes_for_head,
+    liquid_class_supports_section,
+    liquid_classes_for_head,
+    list_by_category,
+    open_index,
+    resolve_by_name,
+    resolve_liquid_class_by_name,
+    resolve_workspace_by_name,
 )
 from .database import TecanDatabase, get_database
 from .dsl_recipes import (
@@ -28,13 +42,19 @@ from .dsl_recipes import (
     seed_curated_dsl_recipes,
 )
 from .fc_install import default_install_bundle, rewrite_checksum_in_place
-from .indexer import build_index, install_path_default, fingerprint_matches
+from .indexer import build_index, fingerprint_matches, install_path_default
 from .inference import CATEGORIES, infer_category
 from .xcmp import (
-    XcmpComponent, XcmpArrangement, XcmpPipettable, XcmpCavity,
+    WorkspaceOccupant,
+    XcmpArrangement,
+    XcmpCavity,
+    XcmpComponent,
+    XcmpPipettable,
     XsitSite,
-    XwspWorkspace, WorkspaceOccupant,
-    load_xcmp, load_xsit, load_xwsp,
+    XwspWorkspace,
+    load_xcmp,
+    load_xsit,
+    load_xwsp,
 )
 from .xlqc import XlqcLiquidClass, load_xlqc
 

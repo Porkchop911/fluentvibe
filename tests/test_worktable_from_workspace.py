@@ -12,7 +12,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fluentvibe import FixedDeck, Plate96, Worktable, InvalidSlotError  # noqa: E402
+from fluentvibe import FixedDeck, InvalidSlotError, Plate96, Worktable  # noqa: E402
 from fluentvibe.catalog.catalog import (  # noqa: E402
     WorkspaceEntry,
     index_exists,
@@ -326,6 +326,7 @@ def test_protocol_carries_workspace_guid_and_name() -> None:
 
 def _find_workspace_with_min_sites(min_sites: int) -> str | None:
     import sqlite3
+
     from fluentvibe.catalog.catalog import DEFAULT_INDEX_PATH
 
     conn = sqlite3.connect(str(DEFAULT_INDEX_PATH))

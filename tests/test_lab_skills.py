@@ -23,7 +23,6 @@ from fluentvibe.authoring.lab_scope import (  # noqa: E402
     resolve_lab_scope_mode,
 )
 from fluentvibe.authoring.lab_skills import (  # noqa: E402
-    Skill,
     apply_profile_deck,
     assemble_context,
     build_initial_scope_message,

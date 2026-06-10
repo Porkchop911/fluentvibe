@@ -18,7 +18,6 @@ from pydantic import BaseModel, ConfigDict, create_model
 
 from .tools import AuthoringToolRegistry, tool_definitions
 
-
 # ── JSON-schema → Pydantic type mapping ───────────────────────────────
 
 _JSON_PRIMITIVE: dict[str, type] = {

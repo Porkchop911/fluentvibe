@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
-
 from fluentvibe.authoring.repair_policy import (
     _REPAIR_POLICIES,
     assert_no_domain_vocabulary,
     get_repair_options,
     resolve_repair_policy,
 )
-
 
 # ── Category-driven lookup ────────────────────────────────────────
 
@@ -231,6 +228,7 @@ class TestToolsIntegration:
 
     def test_simulate_draft_uses_policy_guidance(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         draft = '''"""Tip capacity failure fixture."""
@@ -273,6 +271,7 @@ def build_worktable() -> Worktable:
 
     def test_simulate_draft_source_short_uses_policy(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         draft = '''"""Source volume short fixture."""

@@ -11,7 +11,12 @@ from fluentvibe.ir.schema import (
     WorklistColumnMapping,
     WorklistImportStep,
 )
-from fluentvibe.worklists import Gwl, WorklistFormatError, infer_csv_well_positions, infer_gwl_well_positions
+from fluentvibe.worklists import (
+    Gwl,
+    WorklistFormatError,
+    infer_csv_well_positions,
+    infer_gwl_well_positions,
+)
 from fluentvibe.worktable import Worktable
 
 

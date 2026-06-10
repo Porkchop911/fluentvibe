@@ -11,15 +11,19 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from ..ir.schema import (
-    GetHeadAdapterStep, DropHeadAdapterStep,
-    PickUpTipsStep, SetTipsBackStep,
-    AspirateStep, DispenseStep, Mca384EmptyTipsStep, Mca384MixStep,
+    AspirateStep,
+    DispenseStep,
+    DropHeadAdapterStep,
+    GetHeadAdapterStep,
+    Mca384EmptyTipsStep,
+    Mca384MixStep,
+    PickUpTipsStep,
+    SetTipsBackStep,
 )
 from ..labware.adapters import EvaAdapter
 from ..labware.base import Labware
 
 if TYPE_CHECKING:
-    from ..reagent import Reagent
     from ..worktable import Worktable
 
 

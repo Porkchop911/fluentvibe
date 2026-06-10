@@ -11,7 +11,6 @@ from urllib.parse import parse_qs, urlparse
 
 from . import service
 
-
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 

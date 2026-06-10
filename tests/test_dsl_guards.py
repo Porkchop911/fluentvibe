@@ -22,9 +22,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import (  # noqa: E402
-    FCA1000Box, MCA200Box, MissingFCATipBoxError, Plate96, TipBox,
-    Trough, TroughPlacementError, Worktable,
-    LihaTipMismatchError, LiquidClassSectionError,
+    LihaTipMismatchError,
+    LiquidClassSectionError,
+    MCA200Box,
+    MissingFCATipBoxError,
+    Plate96,
+    TipBox,
+    Trough,
+    TroughPlacementError,
+    Worktable,
 )
 from fluentvibe.catalog import index_exists  # noqa: E402
 
@@ -86,7 +92,9 @@ def test_profile_deck_rules_drive_trough_guard(tmp_path: Path, monkeypatch) -> N
     then enforces that deck's trough family (proves the rules are data-driven,
     not hardcoded to 780)."""
     import json
+
     import yaml as _yaml
+
     from fluentvibe.authoring.profile import PROFILE_DIR_ENV
 
     name = "Profile_Deck_Q"

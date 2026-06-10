@@ -21,6 +21,9 @@ dependencies = [
 dev = [
   "build>=1,<2",
   "pytest>=8,<9",
+  "pytest-cov>=5,<8",
+  "ruff>=0.6,<1",
+  "mypy>=1.10,<3",
 ]
 
 [project.scripts]
@@ -52,4 +55,47 @@ addopts = "-m 'not live_lm and not fluentcontrol_shell'"
 markers = [
   "live_lm: requires LM Studio at the configured authoring endpoint",
   "fluentcontrol_shell: requires a running FluentControl UI and shell XSCR",
+  "slow: deselect with '-m \"not slow\"' to skip longer-running tests",
+  "integration: exercises multiple layers end-to-end",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["build", "node_modules", "current_worktable.py"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import-sort. A pyupgrade (UP) + bugbear (B)
+# modernization sweep is deferred to its own pass; see docs/development.md.
+select = ["E", "F", "W", "I"]
+# E501 (line length) is handled by the formatter; E741 (ambiguous names like
+# l/O) is stylistic and pervasive in the domain math — defer both.
+ignore = ["E501", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# The package __init__ builds the catalog index before re-exporting the public
+# API, so those imports deliberately follow a statement (E402).
+"fluentvibe/__init__.py" = ["E402"]
+# Tests and scripts insert the repo root on sys.path before importing the
+# package, so module-level imports legitimately follow statements (E402).
+"tests/**" = ["E402"]
+"scripts/**" = ["E402"]
+"examples/**" = ["E402"]
+# Vendored fluentdsl parity fixture intentionally uses a star import.
+"tests/fixtures/simple_transfer_fluentdsl_reference.py" = ["F403", "F405"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+# Baseline is non-strict; tighten incrementally. See docs/development.md.
+check_untyped_defs = false
+
+[tool.coverage.run]
+source = ["fluentvibe"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

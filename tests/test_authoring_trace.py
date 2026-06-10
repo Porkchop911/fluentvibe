@@ -175,7 +175,11 @@ def test_cli_author_model_trace_propagates(capsys, monkeypatch, tmp_path: Path) 
     class FakeService:
         def author(self, prompt, *, output_dir, retry_budget, workspace_name=None, workspace_guid=None, trace_config=None):
             seen["trace_config"] = trace_config
-            from fluentvibe.authoring.models import AuthoringResult, AuthoringStatus, ValidationReport
+            from fluentvibe.authoring.models import (
+                AuthoringResult,
+                AuthoringStatus,
+                ValidationReport,
+            )
 
             xscr = output_dir / "fake.xscr"
             return AuthoringResult(

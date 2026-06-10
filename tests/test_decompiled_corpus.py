@@ -12,7 +12,6 @@ from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 from fluentvibe.catalog.indexer import build_index, install_path_default  # noqa: E402
 from fluentvibe.decompiler import run_decompiled_corpus, summarize_corpus_results  # noqa: E402
 
-
 CORPUS_DIR = REPO_ROOT / "tests" / "fixtures" / "decompiled_corpus"
 PRODUCTION_XSCR = Path(
     r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\ec51eed2-b428-48fd-bf81-581743e7f93b.xscr"

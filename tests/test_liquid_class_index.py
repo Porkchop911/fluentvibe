@@ -27,6 +27,7 @@ from fluentvibe.catalog import (  # noqa: E402
 def test_liquid_classes_table_populated() -> None:
     """The indexer wrote at least one liquid_classes row."""
     import sqlite3
+
     from fluentvibe.catalog import DEFAULT_INDEX_PATH
 
     conn = sqlite3.connect(str(DEFAULT_INDEX_PATH))

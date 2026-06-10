@@ -9,34 +9,67 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from ..heads.mca96 import Tip
 from ..ir.schema import (
-    AddLabwareStep, RemoveLabwareStep,
-    GetHeadAdapterStep, DropHeadAdapterStep,
-    PickUpTipsStep, SetTipsBackStep,
-    AspirateStep, DispenseStep,
-    RgaTransferLabwareStep, CgaGetFingersStep, CgaDropFingersStep,
-    LoopStep, ConditionalStep, Mca384EmptyTipsStep, Mca384MixStep,
-    SetLocationStep, SetVariableStep, SubRoutineStep,
-    CommentStep, DelayStep, ExecuteApplicationStep, ExportVariableStep,
-    GenericStep, ImportVariableStep, LihaAspirateStep, LihaDispenseStep,
-    LihaDropTipsStep, LihaEmptyTipsStep, LihaGetTipsStep, LihaMixStep,
-    Mca384DropTipsStep, Mca384GetTipsStep, Mca384MoveArmStep,
-    QueryVariableStep, ScriptGroupStep, StartTimerStep, UserPromptStep,
-    WaitForTimerStep, WaitStep, WorklistImportStep, LoadWorklistStep,
-    ExecuteWorklistStep, LegacyDriverMacroStep,
+    AddLabwareStep,
+    AspirateStep,
+    CgaDropFingersStep,
+    CgaGetFingersStep,
+    CommentStep,
+    ConditionalStep,
+    DelayStep,
+    DispenseStep,
+    DropHeadAdapterStep,
+    ExecuteApplicationStep,
+    ExecuteWorklistStep,
+    ExportVariableStep,
+    GenericStep,
+    GetHeadAdapterStep,
+    ImportVariableStep,
+    LegacyDriverMacroStep,
+    LihaAspirateStep,
+    LihaDispenseStep,
+    LihaDropTipsStep,
+    LihaEmptyTipsStep,
+    LihaGetTipsStep,
+    LihaMixStep,
+    LoadWorklistStep,
+    LoopStep,
+    Mca384DropTipsStep,
+    Mca384EmptyTipsStep,
+    Mca384GetTipsStep,
+    Mca384MixStep,
+    Mca384MoveArmStep,
+    PickUpTipsStep,
+    QueryVariableStep,
+    RemoveLabwareStep,
+    RgaTransferLabwareStep,
+    ScriptGroupStep,
+    SetLocationStep,
+    SetTipsBackStep,
+    SetVariableStep,
+    StartTimerStep,
+    SubRoutineStep,
+    UserPromptStep,
+    WaitForTimerStep,
+    WaitStep,
+    WorklistImportStep,
 )
 from ..labware.base import Labware, Layer
 from ..labware.tipboxes import TipBox
 from .invariants import (
-    CannotAspirateError, InsufficientVolumeError,
-    InvalidSlotError, MissingAdapterError, MissingSimValueError,
-    MissingTipsError, OccupiedSlotError, OverdrawError,
+    CannotAspirateError,
+    InsufficientVolumeError,
+    InvalidSlotError,
+    MissingAdapterError,
+    MissingSimValueError,
+    MissingTipsError,
+    OccupiedSlotError,
+    OverdrawError,
+    SimulationError,
 )
-from .snapshots import Snapshot, take_snapshot
 from .report import EffectKind, SimulationFailure, SimulationReport, StepCoverage
-from .invariants import SimulationError
+from .snapshots import take_snapshot
 
 if TYPE_CHECKING:
-    from ..reagent import Reagent
     from ..worktable import Worktable
 
 
