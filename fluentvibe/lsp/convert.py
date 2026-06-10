@@ -40,8 +40,51 @@ def to_lsp_diagnostic(d: dict[str, Any]) -> lsp.Diagnostic:
         severity=_SEVERITY.get(d.get("severity", "error"), lsp.DiagnosticSeverity.Error),
         code=d.get("code"),
         source="fluentvibe",
+        # Carry the analyzer's quick-fixes so the code-action handler can build
+        # edits without re-running analysis.
+        data={"fixes": d.get("fixes") or []},
     )
 
 
 def to_lsp_diagnostics(diags: list[dict[str, Any]]) -> list[lsp.Diagnostic]:
     return [to_lsp_diagnostic(d) for d in diags]
+
+
+def _text_edit_for_fix(fix: dict[str, Any]) -> lsp.TextEdit | None:
+    line = int(fix.get("line") or 0)
+    if line < 1:
+        return None
+    text = fix.get("text") or ""
+    kind = fix.get("kind")
+    if kind == "insert_before":
+        pos = lsp.Position(line=line - 1, character=0)
+        return lsp.TextEdit(range=lsp.Range(start=pos, end=pos), new_text=text + "\n")
+    if kind == "replace_line":
+        return lsp.TextEdit(
+            range=lsp.Range(
+                start=lsp.Position(line=line - 1, character=0),
+                end=lsp.Position(line=line, character=0),
+            ),
+            new_text=text + "\n",
+        )
+    return None
+
+
+def code_actions_for(uri: str, diagnostics: list[lsp.Diagnostic]) -> list[lsp.CodeAction]:
+    """Build quick-fix code actions from diagnostics carrying analyzer fix data."""
+    actions: list[lsp.CodeAction] = []
+    for diag in diagnostics:
+        data = getattr(diag, "data", None) or {}
+        for fix in data.get("fixes", []):
+            edit = _text_edit_for_fix(fix)
+            if edit is None:
+                continue
+            actions.append(
+                lsp.CodeAction(
+                    title=fix.get("title", "Apply fix"),
+                    kind=lsp.CodeActionKind.QuickFix,
+                    diagnostics=[diag],
+                    edit=lsp.WorkspaceEdit(changes={uri: [edit]}),
+                )
+            )
+    return actions

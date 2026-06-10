@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..authoring.repair_policy import resolve_repair_policy
+from .fixes import Fix, compute_fixes
 
 Severity = str  # "error" | "warning" | "info"
 
@@ -36,6 +37,7 @@ class Diagnostic:
     col: Optional[int] = None
     hint: str = ""
     repair_options: list[str] = field(default_factory=list)
+    fixes: list[Fix] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -49,6 +51,7 @@ class Diagnostic:
             "source": self.source,
             "hint": self.hint,
             "repair_options": list(self.repair_options),
+            "fixes": [f.to_dict() for f in self.fixes],
         }
 
 
@@ -68,9 +71,9 @@ def analyze_source(source: str, path: str | Path) -> list[Diagnostic]:
     path = Path(path)
     wt, build_diag = _load_worktable(source, path)
     if build_diag is not None:
-        return [build_diag]
-    if wt is None:
-        return [
+        diagnostics = [build_diag]
+    elif wt is None:
+        diagnostics = [
             Diagnostic(
                 line=1,
                 severity="error",
@@ -81,7 +84,13 @@ def analyze_source(source: str, path: str | Path) -> list[Diagnostic]:
                 hint=resolve_repair_policy(category="python_build_failure").guidance,
             )
         ]
-    return _simulate_diagnostics(wt, path)
+    else:
+        diagnostics = _simulate_diagnostics(wt, path)
+
+    lines = source.splitlines()
+    for d in diagnostics:
+        d.fixes = compute_fixes(d.code, d.line, d.source, lines)
+    return diagnostics
 
 
 # ── module loading ─────────────────────────────────────────────────
