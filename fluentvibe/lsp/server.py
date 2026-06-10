@@ -15,6 +15,7 @@ files that import fluentvibe and define ``build_worktable()``.
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 
 from lsprotocol import types as lsp
@@ -150,7 +151,25 @@ def create_server() -> LanguageServer:
 
 def main() -> None:
     """Start the language server over stdio (entry point for `fluentvibe lsp`)."""
-    create_server().start_io()
+    import os
+    from pathlib import Path
+
+    log_path = os.environ.get("FLUENTVIBE_LSP_LOG") or str(Path.home() / "fluentvibe-lsp.log")
+    logging.basicConfig(
+        filename=log_path,
+        filemode="w",
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    logger.info("fluentvibe LSP starting (pid=%s, python=%s, cwd=%s)", os.getpid(), sys.executable, os.getcwd())
+    try:
+        create_server().start_io()
+        logger.info("start_io() returned normally - the client closed stdin")
+    except BaseException:
+        logger.exception("start_io() raised")
+        raise
+    finally:
+        logger.info("fluentvibe LSP exiting")
 
 
 if __name__ == "__main__":  # pragma: no cover
