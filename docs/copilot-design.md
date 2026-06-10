@@ -174,9 +174,14 @@ insert `<head>.pick_up(...)`. Tested by `tests/test_copilot_fixes.py` + code-act
 tests in `tests/test_lsp.py`. *Still to add: unknown catalog name → closest
 `find_components` matches (catalog-gated), and `runtime_variable` → `set_sim_value`.*
 
-**Phase 4 — LLM assistance (3–5 days).** "Explain error" + "edit-with-prompt"
-backed by the existing authoring service and re-validated before offer. *Exit:
-"add a return-tips step" produces an accepted edit that simulates clean.*
+**Phase 4 — LLM assistance. ✅ STARTED.** `fluentvibe/copilot/explain.py`
+(`explain_diagnostic`) turns a structured diagnostic + code snippet into a plain-
+language explanation via an injectable OpenAI-compatible client (offline-testable;
+defaults to the env endpoint). Surfaced as `fluentvibe check --explain`
+(`--endpoint`/`--model` overrides). Tested by `tests/test_copilot_explain.py` with
+a fake client + a monkeypatched CLI integration test. *Still to add: "edit-with-
+prompt" via the authoring stack (re-validated before offer), and an LSP surface
+(hover/command) for explanations.*
 
 **Phase 5 — Completions/hover (stretch).** AST mapping (mechanism B) powers
 catalog-name and API-method completion from the real catalog + public API surface.

@@ -69,6 +69,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_check.add_argument("input", type=Path)
     p_check.add_argument("--json", dest="as_json", action="store_true",
                          help="emit diagnostics as JSON")
+    p_check.add_argument("--explain", action="store_true",
+                         help="add a plain-language LLM explanation per diagnostic "
+                              "(needs a reachable LM endpoint; see FLUENTVIBE_LM_ENDPOINT)")
+    p_check.add_argument("--endpoint", default=None,
+                         help="LM endpoint for --explain (default: env FLUENTVIBE_LM_ENDPOINT)")
+    p_check.add_argument("--model", default=None,
+                         help="model name for --explain (default: env FLUENTVIBE_LM_MODEL)")
     p_check.set_defaults(func=_cmd_check)
 
     p_lsp = sub.add_parser(
@@ -312,19 +319,57 @@ def _cmd_check(args) -> int:
     from .copilot import analyze_file
 
     diagnostics = analyze_file(args.input)
+
+    explanations: dict[int, str] = {}
+    if getattr(args, "explain", False) and diagnostics:
+        explanations = _explain_diagnostics(args, diagnostics)
+
     if args.as_json:
-        print(json.dumps([d.to_dict() for d in diagnostics], indent=2))
+        out = []
+        for i, d in enumerate(diagnostics):
+            item = d.to_dict()
+            if i in explanations:
+                item["explanation"] = explanations[i]
+            out.append(item)
+        print(json.dumps(out, indent=2))
     else:
-        for d in diagnostics:
+        for i, d in enumerate(diagnostics):
             location = f"{args.input}:{d.line}" + (f":{d.col}" if d.col else "")
             print(f"{location}: [{d.severity}] {d.message}", file=sys.stderr)
             if d.hint:
                 print(f"    hint: {d.hint}", file=sys.stderr)
             for fix in d.fixes:
                 print(f"    fix: {fix.title}", file=sys.stderr)
+            if i in explanations:
+                print(f"    explain: {explanations[i]}", file=sys.stderr)
         if not diagnostics:
             print(f"{args.input}: no problems found")
     return 1 if any(d.severity == "error" for d in diagnostics) else 0
+
+
+def _explain_diagnostics(args, diagnostics) -> dict[int, str]:
+    """Attach LLM explanations to diagnostics, degrading gracefully on failure."""
+    from .copilot import explain_diagnostic
+
+    client = None
+    if getattr(args, "endpoint", None) or getattr(args, "model", None):
+        from .authoring.lm_client import (
+            DEFAULT_LM_STUDIO_ENDPOINT,
+            DEFAULT_LM_STUDIO_MODEL,
+            LMStudioChatClient,
+        )
+        client = LMStudioChatClient(
+            endpoint=args.endpoint or DEFAULT_LM_STUDIO_ENDPOINT,
+            model=args.model or DEFAULT_LM_STUDIO_MODEL,
+        )
+    source = Path(args.input).read_text(encoding="utf-8")
+    out: dict[int, str] = {}
+    for i, d in enumerate(diagnostics):
+        try:
+            out[i] = explain_diagnostic(d.to_dict(), source, client=client)
+        except Exception as exc:  # noqa: BLE001 - explanation is best-effort
+            out[i] = f"(explanation unavailable: {exc})"
+    return out
 
 
 def _cmd_lsp(args) -> int:
