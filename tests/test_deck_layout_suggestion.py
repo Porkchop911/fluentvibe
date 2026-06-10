@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
-from fluentvibe.authoring.tools import AuthoringToolRegistry, suggest_deck_layout
+from fluentvibe.authoring.tools import AuthoringToolRegistry
 
 
 class TestSuggestDeckLayoutBasic:

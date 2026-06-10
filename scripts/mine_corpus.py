@@ -22,7 +22,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from triage_corpus import BUCKET_TARGET, LEDGER  # type: ignore
+from triage_corpus import LEDGER  # type: ignore
 
 HERE = Path(__file__).resolve().parent
 MINE = HERE / "mine_bucket.py"

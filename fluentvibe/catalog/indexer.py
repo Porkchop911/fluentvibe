@@ -23,7 +23,6 @@ from .catalog import DEFAULT_INDEX_PATH, INDEX_SCHEMA_VERSION, open_index
 from .inference import component_taxonomy, infer_category
 from .xcmp import load_xcmp, load_xwsp, site_footprint
 
-
 # FluentControl appends a positional suffix like "[001]" to placed labware
 # names. Strip it so workspace_components rows join cleanly to components.name.
 _POSITION_SUFFIX = re.compile(r"\[\d+\]\s*$")

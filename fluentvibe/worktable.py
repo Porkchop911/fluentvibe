@@ -13,18 +13,37 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
 
 from .ir.schema import (
-    AddLabwareStep, CommentStep, ConditionalStep, ExecuteApplicationStep,
-    ExecuteWorklistStep, ExportVariableStep, GenericStep, Group,
-    ImportVariableStep, LegacyDriverMacroStep, LoadWorklistStep, LoopStep,
-    Protocol, QueryVariableStep, RemoveLabwareStep, ScriptGroupStep,
-    SetLocationStep, SetVariableStep, StartTimerStep, Step, UserPromptStep,
-    WaitForTimerStep, WaitStep, WorklistColumnMapping, WorklistImportStep,
+    AddLabwareStep,
+    CommentStep,
+    ConditionalStep,
+    ExecuteApplicationStep,
+    ExecuteWorklistStep,
+    ExportVariableStep,
+    GenericStep,
+    Group,
+    ImportVariableStep,
+    LegacyDriverMacroStep,
+    LoadWorklistStep,
+    LoopStep,
+    Protocol,
+    QueryVariableStep,
+    RemoveLabwareStep,
+    ScriptGroupStep,
+    SetLocationStep,
+    SetVariableStep,
+    StartTimerStep,
+    Step,
+    UserPromptStep,
+    WaitForTimerStep,
+    WaitStep,
+    WorklistColumnMapping,
+    WorklistImportStep,
 )
 from .labware.base import Labware
 
 if TYPE_CHECKING:
-    from .simulator.snapshots import Snapshot
     from .simulator.report import SimulationReport
+    from .simulator.snapshots import Snapshot
 
 
 class Worktable:
@@ -76,8 +95,8 @@ class Worktable:
         self.simulation_report: Optional["SimulationReport"] = None
 
         # Devices.
-        from .heads import LiHa, MCA96Head
         from .gripper import Gripper
+        from .heads import LiHa, MCA96Head
         self.mca96: MCA96Head = MCA96Head(self)
         self.liha: LiHa = LiHa(self)
         self.gripper: Gripper = Gripper(self)
@@ -105,7 +124,9 @@ class Worktable:
         The catalog index must be built; raises if not.
         """
         from .catalog.catalog import (
-            index_exists, resolve_by_name, resolve_workspace_by_guid,
+            index_exists,
+            resolve_by_name,
+            resolve_workspace_by_guid,
             resolve_workspace_by_name,
         )
         from .catalog.xcmp import load_xwsp
@@ -429,7 +450,6 @@ class Worktable:
         from .worklists import (
             infer_csv_well_positions,
             infer_gwl_well_positions,
-            normalize_columns,
         )
 
         source = Path(source_path)
@@ -749,8 +769,8 @@ class Worktable:
 
     def compile(self, out_path: Union[str, Path]) -> Path:
         """Render the protocol to a `.xscr` file at `out_path`."""
-        from .compiler import render_protocol
         from .catalog import rewrite_checksum_in_place
+        from .compiler import render_protocol
 
         self._require_bound_workspace()
         self._validate_liha_tipbox_presence()

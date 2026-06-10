@@ -6,8 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from fluentvibe import FCA1000Box, Plate96, Reagent, Trough100mL, Worktable, MagnetRack
-from fluentvibe.compiler.renderer import RenderError
+from fluentvibe import FCA1000Box, MagnetRack, Plate96, Reagent, Trough100mL, Worktable
 from fluentvibe.ir.schema import StepType
 
 

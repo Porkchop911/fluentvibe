@@ -14,8 +14,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe.authoring.profile import (  # noqa: E402
     PROFILE_DIR_ENV,
-    resolve_profile,
     profile_from_env,
+    resolve_profile,
 )
 
 WS_NAME = "Test_Deck_X"

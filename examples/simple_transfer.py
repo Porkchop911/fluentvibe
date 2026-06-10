@@ -5,8 +5,10 @@ Authoring is purely OO: Worktable, Plate96, MCA100Box, EvaAdapter, Reagent.
 """
 
 from fluentvibe import (
-    Worktable, Reagent,
-    Plate96, MCA100Box,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

@@ -12,15 +12,15 @@ behavior contract this preserves.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Any, Callable, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import (
     AIMessage,
@@ -29,13 +29,18 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import Command
 
 from .lc_tools import make_lc_tools
-from .models import ApprovalRequest, AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
+from .models import (
+    ApprovalRequest,
+    AuthoringResult,
+    AuthoringStatus,
+    ClarificationQuestion,
+    FailureCategory,
+)
 from .repair_lock import RepairLockState
 from .tools import PARALLEL_SAFE_TOOLS, AuthoringToolRegistry
 from .trace import ModelTraceRecorder

@@ -28,8 +28,10 @@ either (a) or (b) is built.
 import random
 
 from fluentvibe import (
-    Worktable, Reagent,
-    Plate96, MCA100Box,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

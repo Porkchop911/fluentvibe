@@ -6,8 +6,9 @@ dispatch — same return dicts, same `registry.calls` log, same error categories
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from fluentvibe.authoring.lc_tools import (
     _args_model_for_tool,
@@ -15,7 +16,6 @@ from fluentvibe.authoring.lc_tools import (
     make_lc_tools,
 )
 from fluentvibe.authoring.tools import AuthoringToolRegistry, tool_definitions
-
 
 # ── JSON-schema → Python type mapping ────────────────────────────────
 

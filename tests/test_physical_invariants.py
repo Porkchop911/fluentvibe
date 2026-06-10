@@ -14,9 +14,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import (  # noqa: E402
-    CannotAspirateError, InsufficientVolumeError, MissingAdapterError,
-    MissingTipsError, OccupiedSlotError, OverdrawError,
-    MCA100Box, MagnetRack, Plate96, Reagent, Worktable,
+    InsufficientVolumeError,
+    MagnetRack,
+    MCA100Box,
+    MissingAdapterError,
+    MissingTipsError,
+    OverdrawError,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

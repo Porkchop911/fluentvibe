@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from ..heads.mca96 import Tip
     from ..ir.schema import Step
     from ..labware.base import Labware
-    from ..heads.mca96 import Tip
 
 
 @dataclass

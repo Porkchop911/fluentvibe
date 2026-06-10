@@ -12,8 +12,8 @@ import tempfile
 
 import pytest
 
-from fluentvibe.authoring.tools import AuthoringToolRegistry, reconcile_tool_args
 from fluentvibe.authoring.repair_lock import RepairLockState
+from fluentvibe.authoring.tools import AuthoringToolRegistry, reconcile_tool_args
 from fluentvibe.catalog.catalog import index_exists, suggest_names
 
 

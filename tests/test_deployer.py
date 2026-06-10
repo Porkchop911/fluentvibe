@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURE_XSCR = REPO_ROOT / "simple_transfer.xscr"
 

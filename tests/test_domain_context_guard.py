@@ -7,15 +7,15 @@ lookup_rules().
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from fluentvibe.authoring.service import (
-    SYSTEM_PROMPT,
     _SYSTEM_PROMPT_FORBIDDEN_TOKENS,
+    SYSTEM_PROMPT,
     assert_no_domain_vocabulary_in_prompt,
 )
-
 
 # ── Forbidden-token list sanity ────────────────────────────────────────
 
@@ -115,6 +115,7 @@ class TestTroughPatternRetrievableViaLookupRules:
 
     def test_lookup_rules_transfer_returns_trough_to_plate_pattern(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
@@ -127,6 +128,7 @@ class TestTroughPatternRetrievableViaLookupRules:
 
     def test_trough_pattern_includes_anti_patterns(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
@@ -206,6 +208,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_returns_ok_with_keys(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
@@ -217,6 +220,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_with_category(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(
@@ -228,6 +232,7 @@ class TestLookupRulesReturnsStructuredData:
 
     def test_lookup_rules_with_both_params(self):
         from pathlib import Path
+
         from fluentvibe.authoring.tools import AuthoringToolRegistry
 
         tools = AuthoringToolRegistry(

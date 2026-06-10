@@ -6,7 +6,6 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-
 _CATEGORY_ALLOWED_TOOLS: dict[str, set[str]] = {
     "source_volume_short": {"plan_protocol_resources", "simulate_python_draft", "compile_and_simulate"},
     "well_overflow": {"plan_protocol_resources", "simulate_python_draft", "compile_and_simulate"},

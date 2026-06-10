@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from .graph import AuthoringConcurrencyConfig
+
+from .lab_scope import load_lab_scope
 from .lm_client import (
     DEFAULT_LM_STUDIO_ENDPOINT,
     DEFAULT_LM_STUDIO_MODEL,
     LMStudioChatClient,
     LMStudioError,
 )
-from .lab_scope import load_lab_scope
 from .models import AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
-from .repair_lock import RepairLockState
+from .tools import AuthoringToolRegistry
 from .trace import ModelTraceConfig, ModelTraceRecorder
-from .tools import AuthoringToolRegistry, tool_definitions
 from .validator import AuthoringValidator
-
 
 SYSTEM_PROMPT = """You are authoring executable Python protocols for fluentvibe.
 

@@ -10,11 +10,11 @@ for the SQL catalog.
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
-import xml.etree.ElementTree as ET
 
 from .xcmp import _find, _local, _text
 

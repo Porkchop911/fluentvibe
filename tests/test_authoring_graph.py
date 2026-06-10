@@ -7,9 +7,7 @@ the LangGraph port surfaces immediately rather than only via end-to-end tests.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -18,13 +16,12 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from fluentvibe.authoring.graph import (
     GraphState,
-    build_authoring_graph,
-    run_graph,
     _looks_like_question,
     _to_lc_message,
+    build_authoring_graph,
+    run_graph,
 )
 from fluentvibe.authoring.models import (
-    AuthoringResult,
     AuthoringStatus,
     FailureCategory,
     ValidationReport,
@@ -32,7 +29,6 @@ from fluentvibe.authoring.models import (
 from fluentvibe.authoring.repair_lock import RepairLockState
 from fluentvibe.authoring.tools import AuthoringToolRegistry
 from tests.test_prompt_authoring import _valid_draft
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 
@@ -162,7 +158,7 @@ class TestExtractPythonBranch:
         # Grounded so we don't bounce back to model_call before extract_python runs.
         registry.calls = _grounded_calls()
         _set_workflow(registry)
-        graph = _build(
+        _build(
             registry=registry,
             responses=[AIMessage(content="Which plate should I target?")],
         )
@@ -198,7 +194,7 @@ class TestExtractPythonBranch:
         registry.calls = _grounded_calls()
         _set_workflow(registry)
         code_block = "```python\ndef build_worktable():\n    pass\n```"
-        result = run_graph(
+        run_graph(
             prompt="something",
             output_dir=registry.output_dir,
             retry_budget=2,

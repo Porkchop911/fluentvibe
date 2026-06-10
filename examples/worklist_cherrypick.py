@@ -13,7 +13,7 @@ variable (resolved to its value at author time — the worklist renders a litera
 class name, not an FC variable reference).
 """
 
-from fluentvibe import Worktable, Plate96, TipBox
+from fluentvibe import Plate96, TipBox, Worktable
 
 
 def build_worktable() -> Worktable:

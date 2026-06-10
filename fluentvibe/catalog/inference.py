@@ -28,7 +28,6 @@ from typing import Iterable
 
 from .xcmp import XcmpComponent
 
-
 # ── Public API ─────────────────────────────────────────────────────
 
 

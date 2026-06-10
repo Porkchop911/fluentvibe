@@ -18,7 +18,9 @@ from fluentvibe.compiler import render_protocol  # noqa: E402
 from fluentvibe.decompiler import emit_python  # noqa: E402
 from fluentvibe.decompiler.xscr_parser import _parse_step_object  # noqa: E402
 from fluentvibe.ir.schema import (  # noqa: E402
-    Group, LegacyDriverMacroStep, Protocol,
+    Group,
+    LegacyDriverMacroStep,
+    Protocol,
 )
 from fluentvibe.worktable import Worktable  # noqa: E402
 

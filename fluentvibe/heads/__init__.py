@@ -5,7 +5,7 @@ the chassis end-to-end on simple_transfer). The others are sized to the
 existing IR step types and will be filled in as protocols demand.
 """
 
-from .mca96 import MCA96Head, Tip
 from .liha import LiHa
+from .mca96 import MCA96Head, Tip
 
 __all__ = ["MCA96Head", "Tip", "LiHa"]

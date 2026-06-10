@@ -24,8 +24,12 @@ Tracked in the gap log.
 """
 
 from fluentvibe import (
-    Worktable, Reagent, Layer,
-    Plate96, MCA100Box, MagnetRack,
+    Layer,
+    MagnetRack,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

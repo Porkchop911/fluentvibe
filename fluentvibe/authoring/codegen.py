@@ -9,7 +9,6 @@ from .models import (
     LiquidAction,
     LoopStep,
     MoveLabwareAction,
-    ProtocolGroup,
     ProtocolSpec,
     TransferAction,
 )

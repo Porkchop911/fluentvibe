@@ -11,8 +11,10 @@ The loop count and conditional predicate read from runtime variables;
 """
 
 from fluentvibe import (
-    Worktable, Reagent,
-    Plate96, MCA100Box,
+    MCA100Box,
+    Plate96,
+    Reagent,
+    Worktable,
 )
 
 

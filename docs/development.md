@@ -1,5 +1,28 @@
 # Development
 
+## Toolchain
+
+Install the dev extras, then lint, type-check, and test:
+
+```
+python -m pip install -e ".[dev]"
+python -m ruff check .          # lint (E/F/W/I); must pass
+python -m mypy fluentvibe       # type-check (non-blocking baseline, see below)
+python -m pytest -q             # offline test suite
+```
+
+Ruff config lives in `pyproject.toml` (`[tool.ruff]`). The enforced rule set is
+deliberately scoped to real-bug and import-hygiene rules (`E`, `F`, `W`, `I`); a
+pyupgrade/bugbear (`UP`/`B`) modernization sweep is a deferred follow-up. CI runs
+`ruff check .` as a blocking gate.
+
+Mypy is **non-blocking** today: the baseline is ~1.5k errors across 21 files
+(mostly missing annotations and dict-vs-dataclass attribute access in `cli.py`).
+The goal is to drive this count down incrementally — new code should type-check
+clean. CI runs mypy with `continue-on-error` so the count is visible without
+blocking merges. `ruff format` has **not** been applied repo-wide yet, so it is
+not part of the CI gate.
+
 ## Test baseline
 
 The default offline suite requires no FluentControl install or local LM and is
@@ -7,7 +30,7 @@ deterministic across runs:
 
 ```
 python -m pytest -q
-# 533 passed, 7 skipped, 6 deselected
+# 555 passed, 7 skipped, 6 deselected
 ```
 
 Live and shell tests are deselected by default (see `addopts` in
@@ -253,17 +276,16 @@ know what's already been thought through.
   and the renderer handles them — but fluentvibe doesn't expose authoring
   methods for them yet. v1.2: add `MCA384Head`, `FCAHead`, `LiHaHead`
   classes with the same emit-IR pattern.
-- **Partial-column tip pickup** isn't modelled. `TipBox.is_full` is a
-  bool, not a per-column / per-tip availability. The MCA simulator
-  assumes full pickup of 96 tips. Partial pickup is a v2 refinement.
+- **Partial-column tip pickup** — *shipped.* `TipBox` tracks per-column
+  occupancy; `MCA96Head.pick_up(box, columns=[...])` / `return_tips(...)`
+  support partial-column pickup and tip sorting, with the simulator
+  enforcing the physical peel-edge rule. See `examples/tip_sort_partial.py`.
 
 ### Tests / CI
 
 - The parity test depends on an out-of-tree path (`D:\python\fluentdsl`).
   CI would need to either install fluentdsl as a sibling repo or pin the
   expected XML as a fixture (with the GUID-normalized form).
-- No `.gitignore` in the repo today. `fluentvibe/catalog/install_index.db`,
-  `build/`, `simple_transfer.xscr`, and `__pycache__/` should be ignored.
 
 ## Quick recipes
 

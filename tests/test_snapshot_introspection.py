@@ -15,7 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import (  # noqa: E402
-    MagnetRack, Plate96, Reagent, Worktable,
+    MagnetRack,
+    Plate96,
+    Worktable,
 )
 from fluentvibe.catalog.catalog import index_exists  # noqa: E402
 

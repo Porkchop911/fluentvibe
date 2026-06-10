@@ -17,7 +17,6 @@ from pathlib import Path
 from fluentvibe.authoring.models import AuthoringStatus
 from fluentvibe.authoring.session import PromptAuthoringSession
 
-
 AMPURE_PROMPT = """AMPure XP Beads Protocol for PCR Cleanup. Process a full 96-well plate.
 Use 20 uL PCR samples; bind with 1.8x AMPure XP beads (36 uL per well), incubate
 5 min, capture on a magnet rack 2 min, remove supernatant leaving 5 uL behind,
@@ -78,7 +77,7 @@ def main() -> int:
                 kind = result.approval_request.kind
                 title = result.approval_request.title
                 log(f"APPROVAL #{approval_count} kind={kind} title={title!r}")
-            log(f"REPLY: approve")
+            log("REPLY: approve")
             result = session.send("approve")
             continue
         break

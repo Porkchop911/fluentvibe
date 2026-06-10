@@ -8,7 +8,31 @@ using templates and command definitions from the reference.
 import difflib
 import re
 import uuid
+from pathlib import Path
+from typing import Dict, Optional
+
 import yaml
+
+from ..catalog.fc_install import rewrite_checksum_in_place
+from ..ir.schema import (
+    STEP_TO_COMMAND_ID,
+    AddLabwareStep,
+    ConditionalStep,
+    ExecuteWorklistStep,
+    GenericStep,
+    Group,
+    LoadWorklistStep,
+    LoopStep,
+    Protocol,
+    ScriptGroupStep,
+    SetVariableStep,
+    Step,
+    StepType,
+    VariableMapping,
+    WorklistImportStep,
+)
+
+
 def sanitize_text(text: str) -> str:
     """Sanitize text for XML - replace problematic characters."""
     if not text:
@@ -18,29 +42,6 @@ def sanitize_text(text: str) -> str:
     # Replace angle brackets with alternatives
     text = text.replace("<", "(").replace(">", ")")
     return text
-from pathlib import Path
-from typing import Optional, Dict
-
-from ..catalog.fc_install import rewrite_checksum_in_place
-from ..ir.schema import (
-    Protocol, Group, Step, StepType, STEP_TO_COMMAND_ID,
-    AddLabwareStep, RemoveLabwareStep,
-    GetHeadAdapterStep, DropHeadAdapterStep,
-    PickUpTipsStep, SetTipsBackStep,
-    AspirateStep, DispenseStep,
-    RgaTransferLabwareStep, CgaGetFingersStep, CgaDropFingersStep,
-    Mca384MixStep, WaitStep, LoopStep,
-    ConditionalStep,
-    SetVariableStep, CalculateVariableStep,
-    Mca384EmptyTipsStep,
-    Mca384GetTipsStep, Mca384DropTipsStep, Mca384MoveArmStep,
-    LihaAspirateStep, LihaDispenseStep, LihaMixStep,
-    LihaGetTipsStep, LihaDropTipsStep, LihaEmptyTipsStep,
-    ExportVariableStep, ImportVariableStep, QueryVariableStep,
-    ExecuteApplicationStep, DelayStep, SetLocationStep, SubRoutineStep,
-    VariableMapping, GenericStep, ScriptGroupStep,
-    WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep
-)
 
 
 _EVA_CONFIG = {
@@ -566,8 +567,8 @@ class Renderer:
                 inner_steps_xml.append(trimmed)
 
         # Indent inner steps for loop nesting (one level deeper than group statements)
-        loop_statements = "\n".join("                              " + line 
-                                   for step_xml in inner_steps_xml 
+        loop_statements = "\n".join("                              " + line
+                                   for step_xml in inner_steps_xml
                                    for line in step_xml.split("\n"))
 
         # Use the loop variable name from the step so FC makes it available in-scope.
@@ -604,7 +605,7 @@ class Renderer:
         }
 
         xml = self._fill_template(template, params)
-        
+
         # Indent the loop group itself to align with other steps in the group
         lines = xml.strip().split("\n")
         indented = "\n".join("                        " + line for line in lines)
@@ -1190,7 +1191,6 @@ class Renderer:
         liha_config = self.config.get("liha_device", {})
         liha_device = liha_config.get("alias", "Instrument=1/Device=LIHA:1")
         liha_available_id = liha_config.get("available_id", liha_device)
-        liha_diti_type = liha_config.get("diti_type", "TOOLTYPE:LiHa.TecanDiTi/TOOLNAME:FCA, 1000ul SBS")
         liha_waste_labware = liha_config.get("waste_labware", "FCA Thru Deck Waste Chute_1")
 
         params = {

@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fluentvibe.authoring import PromptAuthoringSession
 
-
 DEFAULT_PROMPT = Path(r"C:\Users\Niko\Desktop\ampure protocol.txt")
 DEFAULT_OUTPUT_DIR = Path("build") / "ampure_authoring_live"
 DEFAULT_ANSWERS = (

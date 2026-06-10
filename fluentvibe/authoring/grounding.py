@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-import runpy
 import re
+import runpy
 from dataclasses import dataclass
 from functools import lru_cache
-from pprint import pformat
 from pathlib import Path
+from pprint import pformat
 from typing import Any
 
 import yaml
@@ -26,7 +26,6 @@ from ..catalog import (
 from ..catalog.catalog import resolve_workspace_by_guid, resolve_workspace_by_name
 from ..catalog.xcmp import load_xwsp
 from .models import FailureCategory, WorkspaceBinding
-
 
 CURRENT_WORKTABLE_SCHEMA_VERSION = 1
 CURRENT_WORKTABLE_ENV = "FLUENTVIBE_CURRENT_WORKTABLE_PATH"

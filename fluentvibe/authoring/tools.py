@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..catalog import (
+    CatalogSchemaOutOfDate,
     find_components,
     find_components_by_metadata,
     find_grip_modes,
@@ -22,22 +23,27 @@ from ..catalog import (
     find_sites_for,
     find_workspaces_using,
     get_database,
-    liquid_classes_for_head,
-    load_xlqc,
     load_xcmp,
+    load_xlqc,
     open_index,
-    retrieve_dsl_recipes,
     resolve_by_name,
     resolve_liquid_class_by_name,
-    CatalogSchemaOutOfDate,
+    retrieve_dsl_recipes,
 )
 from ..catalog.inference import component_taxonomy
 from ..reagent import ROLES as _REAGENT_ROLES
+from .fluentcontrol_shell import (
+    DEFAULT_SHELL_XSCR,
+    validate_generated_xscr_via_shell,
+    validate_xscr_direct,
+)
 from .grounding import (
+    GroundingBundle,
     GroundingError,
     load_current_worktable_snapshot,
     load_grounding_bundle,
 )
+from .lab_scope import LabScope
 from .models import (
     FailureCategory,
     FunctionalGroupPlan,
@@ -45,15 +51,8 @@ from .models import (
     ProtocolWorkflowPlan,
     VariableBinding,
 )
-from .lab_scope import LabScope
 from .repair_policy import resolve_repair_policy
 from .validator import AuthoringValidator
-from .fluentcontrol_shell import (
-    DEFAULT_SHELL_XSCR,
-    validate_generated_xscr_via_shell,
-    validate_xscr_direct,
-)
-
 
 ToolFn = Callable[..., dict[str, Any]]
 
@@ -641,7 +640,6 @@ def _category_preferred_locations(category: str | None) -> list[str]:
 
 def _resource_fits_location(res: _DeckResource, location: str) -> bool:
     catalog = (res.catalog_name or "").strip().lower()
-    role = (res.role or "").strip().lower()
     category = (res.category or "").strip().lower()
     if location == "Nest61mm_Pos":
         if catalog in {"100ml trough 156mm"}:

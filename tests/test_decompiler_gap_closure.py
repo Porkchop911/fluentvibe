@@ -10,13 +10,10 @@ from fluentvibe import FCA1000Box, Plate96, Reagent, Worktable
 from fluentvibe.catalog.catalog import index_exists, list_by_category
 from fluentvibe.decompiler import emit_python, parse_xscr
 from fluentvibe.ir.schema import (
-    ConditionalStep,
     ExecuteApplicationStep,
     ExportVariableStep,
     GenericStep,
     ImportVariableStep,
-    Mca384EmptyTipsStep,
-    Mca384MixStep,
     QueryVariableStep,
     SetLocationStep,
     SetVariableStep,

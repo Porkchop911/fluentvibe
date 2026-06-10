@@ -7,14 +7,12 @@ fluentvibe that needs to resolve a catalog name to a file path.
 
 from __future__ import annotations
 
-import sqlite3
 import json
+import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Iterator, Optional
-
 
 DEFAULT_INDEX_PATH = Path(__file__).resolve().parent / "install_index.db"
 
@@ -551,7 +549,6 @@ def find_legal_stacks(
             return {"above": [], "below": []}
         footprint = target["footprint"]
         target_is_lid = bool(target["is_lid"])
-        target_category = target["category"]
         # If the target is itself a lid/adapter/magnet_rack, the question
         # of "what stacks above/below" is less interesting — return empty
         # so we don't recommend nonsense like "a lid above this lid".
