@@ -33,6 +33,7 @@ DEFAULT_DATASTORE_DIR = Path(r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecifi
 # is plain XML inside `<Payload>`; the `<VxWorkspaceDelta><Identifier>` block is
 # HTML-entity-encoded inside a `<d2p1:string>` element.
 _OBJECT_NAME_RE = re.compile(r"<ObjectName>([^<]*)</ObjectName>")
+_SUBFOLDER_RE = re.compile(r"<ObjectSubfolderPath>([^<]*)</ObjectSubfolderPath>")
 _DELTA_IDENT_RE = re.compile(
     r"&lt;Identifier&gt;([0-9a-fA-F-]{36})&lt;/Identifier&gt;"
 )
@@ -51,6 +52,7 @@ class DeployResult:
     workspace_delta_id: str | None
     checksum: str
     datastore_dir: Path
+    subfolder_path: str | None = None
     inspect: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -61,6 +63,7 @@ class DeployResult:
             "workspace_delta_id": self.workspace_delta_id,
             "checksum": self.checksum,
             "datastore_dir": str(self.datastore_dir),
+            "subfolder_path": self.subfolder_path,
             "inspect": dict(self.inspect),
         }
 
@@ -70,6 +73,7 @@ def deploy_xscr(
     *,
     datastore_dir: Path = DEFAULT_DATASTORE_DIR,
     new_object_name: str | None = None,
+    new_subfolder_path: str | None = None,
     new_workspace_delta_id: bool = True,
     require_fc_closed: bool = True,
 ) -> DeployResult:
@@ -119,6 +123,7 @@ def deploy_xscr(
 
     text = src.read_text(encoding="utf-8")
     text, applied_object_name = _maybe_rewrite_object_name(text, new_object_name)
+    text, applied_subfolder = _maybe_set_subfolder_path(text, new_subfolder_path)
     text, applied_delta_id = _maybe_rewrite_delta_identifier(text, enabled=new_workspace_delta_id)
     target.write_text(text, encoding="utf-8")
 
@@ -136,6 +141,7 @@ def deploy_xscr(
         workspace_delta_id=applied_delta_id,
         checksum=str(inspect.get("calculated_checksum") or inspect.get("stored_checksum") or ""),
         datastore_dir=target_dir,
+        subfolder_path=applied_subfolder,
         inspect=inspect,
     )
 
@@ -149,6 +155,33 @@ def _maybe_rewrite_object_name(text: str, new_name: str | None) -> tuple[str, st
     if n == 0:
         raise DeploymentError("Could not find <ObjectName> in source XSCR.")
     return replaced, new_name
+
+
+def _maybe_set_subfolder_path(text: str, new_path: str | None) -> tuple[str, str | None]:
+    """Set the script's FluentControl tree folder (``<ObjectSubfolderPath>``).
+
+    If ``new_path`` is None, leave the file untouched and return whatever path
+    it already carries. Otherwise replace the existing element, or — when the
+    renderer omitted it — insert one immediately after the first
+    ``</ObjectName>`` (the script's own name, not the ``<Reference>`` ones),
+    mirroring the field order FluentControl writes.
+    """
+    if new_path is None:
+        match = _SUBFOLDER_RE.search(text)
+        return text, match.group(1) if match else None
+    safe = _xml_escape(new_path)
+    if _SUBFOLDER_RE.search(text):
+        replaced = _SUBFOLDER_RE.sub(f"<ObjectSubfolderPath>{safe}</ObjectSubfolderPath>", text, count=1)
+        return replaced, new_path
+    replaced, n = re.subn(
+        r"</ObjectName>",
+        f"</ObjectName><ObjectSubfolderPath>{safe}</ObjectSubfolderPath>",
+        text,
+        count=1,
+    )
+    if n == 0:
+        raise DeploymentError("Could not find <ObjectName> to anchor <ObjectSubfolderPath>.")
+    return replaced, new_path
 
 
 def _maybe_rewrite_delta_identifier(text: str, *, enabled: bool) -> tuple[str, str | None]:
