@@ -18,12 +18,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+lsp = [
+  "pygls>=2,<3",
+]
 dev = [
   "build>=1,<2",
   "pytest>=8,<9",
   "pytest-cov>=5,<8",
   "ruff>=0.6,<1",
   "mypy>=1.10,<3",
+  "pygls>=2,<3",
 ]
 
 [project.scripts]

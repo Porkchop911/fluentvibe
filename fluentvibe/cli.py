@@ -71,6 +71,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                          help="emit diagnostics as JSON")
     p_check.set_defaults(func=_cmd_check)
 
+    p_lsp = sub.add_parser(
+        "lsp",
+        help="start the fluentvibe language server over stdio (for editors)",
+    )
+    p_lsp.set_defaults(func=_cmd_lsp)
+
     p_decompile = sub.add_parser(
         "decompile",
         help="parse a .xscr and emit a fluentvibe Python protocol",
@@ -317,6 +323,20 @@ def _cmd_check(args) -> int:
         if not diagnostics:
             print(f"{args.input}: no problems found")
     return 1 if any(d.severity == "error" for d in diagnostics) else 0
+
+
+def _cmd_lsp(args) -> int:
+    try:
+        from .lsp import main as lsp_main
+    except ImportError:
+        print(
+            "The language server needs the optional 'lsp' extra. Install it with:\n"
+            "  python -m pip install -e \".[lsp]\"",
+            file=sys.stderr,
+        )
+        return 1
+    lsp_main()
+    return 0
 
 
 def _cmd_decompile(args) -> int:
