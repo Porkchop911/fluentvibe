@@ -154,9 +154,15 @@ volume / syntax error / unknown method / missing factory / source==file parity).
 *Deferred to later phases: eager catalog-name checks before simulate, and
 opaque/coverage info diagnostics.*
 
-**Phase 2 — VS Code extension + LSP server (3–4 days).** `pygls` server wrapping
-the analyzer; thin TS extension publishing diagnostics on save/change. *Exit:
-editing a protocol shows live squiggles on the right lines.*
+**Phase 2 — VS Code extension + LSP server. ✅ SHIPPED.** `fluentvibe/lsp/`
+(pygls 2.x server + pure dict→LSP `convert`), launched by `fluentvibe lsp` over
+stdio and `python -m fluentvibe`. Analysis runs in an **isolated subprocess**
+(reuses `fluentvibe check --json`) with a 30 s timeout, so a malformed/non-
+terminating buffer can't hang the editor; the server only touches files that
+import fluentvibe and define `build_worktable()`. Thin TS client scaffold under
+`editors/vscode/`. Optional `[lsp]` extra (pygls). Tested by `tests/test_lsp.py`
+(convert mapping, heuristic, server construction, real subprocess analysis).
+*Diagnostics fire on open/save; live-on-change is deferred (needs debounce).*
 
 **Phase 3 — Deterministic fix-its (2–3 days).** Code actions for the mechanical
 repairs in 4b, driven by `_REPAIR_POLICIES` + `find_components`. *Exit: unknown
@@ -184,9 +190,8 @@ catalog-name and API-method completion from the real catalog + public API surfac
 - **Re-sim cost on large protocols.** Snapshot deepcopy is linear per step
   (noted in `docs/development.md`); for very large protocols, debounce + cache the
   last good IR and only re-sim on meaningful change.
-- **Two packages to ship.** The TS extension is a separate release artifact from
-  the Python package; decide whether it lives in this repo (`editors/vscode/`) or
-  its own. Recommend in-repo under `editors/` to keep them in lockstep.
+- **Two packages to ship.** *Resolved:* the TS extension lives in-repo under
+  `editors/vscode/` to stay in lockstep with the Python server.
 
 ## 7. Recommended first move
 

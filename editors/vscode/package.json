@@ -1,0 +1,48 @@
+{
+  "name": "fluentvibe",
+  "displayName": "fluentvibe",
+  "description": "Live diagnostics for fluentvibe protocol authoring (build errors + simulator failures).",
+  "version": "0.1.0",
+  "publisher": "fluentvibe",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:python"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "fluentvibe",
+      "properties": {
+        "fluentvibe.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python interpreter used to launch the fluentvibe language server (must have fluentvibe installed with the [lsp] extra)."
+        },
+        "fluentvibe.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the fluentvibe language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}
