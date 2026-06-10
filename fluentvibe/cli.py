@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-
 # ── Entry point ────────────────────────────────────────────────────
 
 
@@ -84,6 +83,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                           help="workspace-app profile dir (build/workspaces/<name>); "
                                "drives the workspace, grounding snapshot, deck skill, "
                                "and labware/liquid whitelist for this run")
+    p_author.add_argument("--endpoint", default=None,
+                          help="OpenAI-compatible chat endpoint (default: "
+                               "env FLUENTVIBE_LM_ENDPOINT or http://localhost:1234)")
+    p_author.add_argument("--model", default=None,
+                          help="model name (default: env FLUENTVIBE_LM_MODEL)")
     p_author.add_argument("--json", dest="as_json", action="store_true",
                           help="emit a JSON summary of the authoring result")
     p_author.add_argument("--model-trace", action="store_true",
@@ -336,8 +340,8 @@ def _activate_profile(args):
     profile_dir = getattr(args, "profile", None)
     if profile_dir is None:
         return None
-    from .authoring.profile import resolve_profile, PROFILE_DIR_ENV
     from .authoring.grounding import CURRENT_WORKTABLE_ENV
+    from .authoring.profile import PROFILE_DIR_ENV, resolve_profile
 
     rp = resolve_profile(profile_dir)
     os.environ[PROFILE_DIR_ENV] = str(rp.root)
@@ -355,6 +359,14 @@ def _cmd_author(args) -> int:
 
     _activate_profile(args)
     prompt = " ".join(args.prompt).strip()
+    # Only forward overrides when given; the service constructor already falls
+    # back to the env-driven FLUENTVIBE_LM_ENDPOINT / FLUENTVIBE_LM_MODEL defaults.
+    service_kwargs: dict[str, Any] = {}
+    if args.endpoint:
+        service_kwargs["endpoint"] = args.endpoint
+    if args.model:
+        service_kwargs["model"] = args.model
+    service = PromptAuthoringService(**service_kwargs)
     kwargs: dict[str, Any] = dict(
         output_dir=args.output_dir,
         retry_budget=args.retry_budget,
@@ -371,7 +383,7 @@ def _cmd_author(args) -> int:
     _scope_mode = resolve_lab_scope_mode(args.lab_scope)
     if _scope_mode != "off":
         print(f"Lab scope: {_scope_mode}", file=sys.stderr)
-    result = PromptAuthoringService().author(
+    result = service.author(
         prompt,
         **kwargs,
     )
@@ -406,12 +418,12 @@ def _cmd_author(args) -> int:
 
 
 def _cmd_lookup_eval(args) -> int:
-    from .authoring.lookup_eval import run_lookup_eval, write_lookup_eval_report
     from .authoring.lm_client import (
         DEFAULT_LM_STUDIO_ENDPOINT,
         DEFAULT_LM_STUDIO_MODEL,
         make_chat_client,
     )
+    from .authoring.lookup_eval import run_lookup_eval, write_lookup_eval_report
 
     client = None
     if args.live:
@@ -734,7 +746,7 @@ def _cmd_catalog_refresh(args) -> int:
 
 
 def _cmd_catalog_info(args) -> int:
-    from .catalog.catalog import install_info, category_counts, index_exists
+    from .catalog.catalog import category_counts, index_exists, install_info
     if not index_exists():
         print("Catalog index is empty. Run `fluentvibe catalog refresh`.")
         return 1
