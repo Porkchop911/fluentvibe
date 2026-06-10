@@ -8,7 +8,8 @@ line, each with a repair hint.
 
 It is a thin LSP client: it launches `python -m fluentvibe lsp`, which runs the
 headless analyzer (`fluentvibe/copilot`) in an isolated subprocess per file. All
-the analysis logic lives in Python — see [`docs/copilot-design.md`](../../docs/copilot-design.md).
+the analysis logic lives in Python — see `docs/copilot-design.md` in the
+fluentvibe repository.
 
 ## Prerequisites
 
