@@ -21,7 +21,9 @@ venv/
 env/
 
 # IDE / OS
-.vscode/
+# Only ignore the repo-root editor settings; the VS Code extension under
+# editors/vscode/ ships its own tracked .vscode/ (launch + build tasks).
+/.vscode/
 .idea/
 *.swp
 .DS_Store
