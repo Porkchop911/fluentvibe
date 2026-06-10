@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from .analyzer import Diagnostic, analyze_file, analyze_source
 from .complete import Completion, complete_at
+from .edit import EditResult, edit_region
 from .explain import explain_diagnostic
 
 __all__ = [
@@ -19,4 +20,6 @@ __all__ = [
     "explain_diagnostic",
     "Completion",
     "complete_at",
+    "EditResult",
+    "edit_region",
 ]

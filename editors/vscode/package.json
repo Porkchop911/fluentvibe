@@ -16,6 +16,19 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "fluentvibe.inlineEdit",
+        "title": "fluentvibe: Edit selection with AI"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "fluentvibe.inlineEdit",
+        "key": "ctrl+i",
+        "when": "editorTextFocus && editorLangId == python"
+      }
+    ],
     "configuration": {
       "title": "fluentvibe",
       "properties": {

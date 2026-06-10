@@ -100,6 +100,21 @@ def create_server() -> LanguageServer:
             params.position.character,
         )
 
+    @server.command("fluentvibe.inlineEdit")
+    def _inline_edit(ls: LanguageServer, args: list) -> dict:
+        from ..copilot.edit import edit_region
+
+        params = args[0] if args else {}
+        doc = ls.workspace.get_text_document(params["uri"])
+        result = edit_region(
+            doc.source,
+            int(params["start_line"]),
+            int(params["end_line"]),
+            params.get("instruction", ""),
+            path=doc.path,
+        )
+        return result.to_dict()
+
     return server
 
 

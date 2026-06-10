@@ -44,7 +44,12 @@ Development Host. Open a fluentvibe protocol `.py` and save it to see diagnostic
   one-click insert of `head.mount_adapter()`.
 - **Autocomplete**: real FluentControl catalog names inside `catalog="..."`, and
   the fluentvibe API after `head.` / `wt.` / `gripper.` etc.
+- **Inline edit (Ctrl+I)**: select lines, describe a change ("add a return-tips
+  step", "use 200 uL tips"), and the model rewrites them — re-validated by the
+  simulator, with a warning if the edit introduces an error. Needs a reachable
+  LM endpoint (set `fluentvibe.pythonPath` to an interpreter whose
+  `FLUENTVIBE_LM_ENDPOINT` points at your model).
 - The server only touches files that import `fluentvibe` and define
   `build_worktable()`, so ordinary Python files are left alone.
 
-Planned: live-as-you-type diagnostics, LLM "explain/edit" actions in the editor.
+Planned: live-as-you-type diagnostics, an "explain error" hover.
