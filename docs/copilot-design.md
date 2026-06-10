@@ -183,8 +183,15 @@ a fake client + a monkeypatched CLI integration test. *Still to add: "edit-with-
 prompt" via the authoring stack (re-validated before offer), and an LSP surface
 (hover/command) for explanations.*
 
-**Phase 5 — Completions/hover (stretch).** AST mapping (mechanism B) powers
-catalog-name and API-method completion from the real catalog + public API surface.
+**Phase 5 — Completions. ✅ STARTED.** `fluentvibe/copilot/complete.py`
+(`complete_at`) offers deterministic completions: real catalog names inside
+`catalog="..."` (from the index, filtered by what's typed) and public API methods
+after a known receiver dot (`head.`/`wt.`/`wt.mca96.`/`gripper.`/`<liha>.`, by
+class introspection). Wired as the LSP `textDocument/completion` provider (trigger
+chars `.` `"` `'`) and as `fluentvibe complete <file> --line --col` for headless
+use. Tested by `tests/test_copilot_complete.py` + mapping tests in
+`tests/test_lsp.py`. *Next: infer the labware category from the class on the line
+to narrow catalog suggestions; hover docs.*
 
 ## 6. Open questions / risks
 

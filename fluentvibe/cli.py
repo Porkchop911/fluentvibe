@@ -78,6 +78,17 @@ def main(argv: Optional[list[str]] = None) -> int:
                          help="model name for --explain (default: env FLUENTVIBE_LM_MODEL)")
     p_check.set_defaults(func=_cmd_check)
 
+    p_complete = sub.add_parser(
+        "complete",
+        help="list authoring completions at a position (catalog names + API)",
+    )
+    p_complete.add_argument("input", type=Path)
+    p_complete.add_argument("--line", type=int, required=True, help="1-based line")
+    p_complete.add_argument("--col", type=int, required=True, help="1-based column")
+    p_complete.add_argument("--json", dest="as_json", action="store_true",
+                            help="emit completions as JSON")
+    p_complete.set_defaults(func=_cmd_complete)
+
     p_lsp = sub.add_parser(
         "lsp",
         help="start the fluentvibe language server over stdio (for editors)",
@@ -370,6 +381,22 @@ def _explain_diagnostics(args, diagnostics) -> dict[int, str]:
         except Exception as exc:  # noqa: BLE001 - explanation is best-effort
             out[i] = f"(explanation unavailable: {exc})"
     return out
+
+
+def _cmd_complete(args) -> int:
+    from .copilot import complete_at
+
+    source = Path(args.input).read_text(encoding="utf-8")
+    completions = complete_at(source, args.line - 1, args.col - 1)
+    if args.as_json:
+        print(json.dumps([c.to_dict() for c in completions], indent=2))
+    else:
+        for c in completions:
+            detail = f"  ({c.detail})" if c.detail else ""
+            print(f"  {c.label}{detail}")
+        if not completions:
+            print("(no completions)")
+    return 0
 
 
 def _cmd_lsp(args) -> int:

@@ -22,6 +22,7 @@ from lsprotocol import types as lsp  # noqa: E402
 from fluentvibe.lsp import server as lsp_server  # noqa: E402
 from fluentvibe.lsp.convert import (  # noqa: E402
     code_actions_for,
+    to_completion_items,
     to_lsp_diagnostic,
     to_lsp_diagnostics,
 )
@@ -125,6 +126,38 @@ def test_code_actions_builds_insert_edit() -> None:
 def test_code_actions_empty_when_no_fixes() -> None:
     diag = to_lsp_diagnostic(_diag_dict(code="source_volume_short", fixes=[]))
     assert code_actions_for("file:///x.py", [diag]) == []
+
+
+def test_to_completion_items_builds_precise_edit() -> None:
+    comp = {
+        "label": "aspirate",
+        "kind": "method",
+        "insert_text": "aspirate",
+        "replace_start": 9,
+        "detail": "MCA96Head",
+    }
+    items = to_completion_items([comp], line=3, cursor_char=11)
+    assert len(items) == 1
+    item = items[0]
+    assert item.label == "aspirate"
+    assert item.kind == lsp.CompletionItemKind.Method
+    assert item.detail == "MCA96Head"
+    assert item.text_edit.new_text == "aspirate"
+    assert item.text_edit.range.start.line == 3
+    assert item.text_edit.range.start.character == 9
+    assert item.text_edit.range.end.character == 11
+
+
+def test_to_completion_items_catalog_kind() -> None:
+    comp = {
+        "label": "96 Well Flat",
+        "kind": "catalog",
+        "insert_text": "96 Well Flat",
+        "replace_start": 5,
+        "detail": "plate",
+    }
+    items = to_completion_items([comp], line=0, cursor_char=9)
+    assert items[0].kind == lsp.CompletionItemKind.Value
 
 
 def test_looks_like_protocol() -> None:
