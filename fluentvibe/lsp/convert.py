@@ -7,7 +7,7 @@ the analyzer. Pure and unit-testable.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from lsprotocol import types as lsp
 
@@ -95,6 +95,36 @@ def to_completion_items(
             )
         )
     return items
+
+
+def to_signature_help(info: Optional[dict[str, Any]]) -> Optional[lsp.SignatureHelp]:
+    """Map an api_info signature dict to LSP signature help."""
+    if not info:
+        return None
+    params = [lsp.ParameterInformation(label=p) for p in info.get("params", [])]
+    signature = lsp.SignatureInformation(
+        label=info["label"],
+        documentation=info.get("doc") or None,
+        parameters=params,
+    )
+    active = info.get("active_param", 0)
+    if params:
+        active = min(active, len(params) - 1)
+    return lsp.SignatureHelp(
+        signatures=[signature], active_signature=0, active_parameter=active
+    )
+
+
+def to_hover(info: Optional[dict[str, Any]]) -> Optional[lsp.Hover]:
+    """Map an api_info signature dict to an LSP hover (markdown)."""
+    if not info:
+        return None
+    owner = info.get("owner") or ""
+    head = f"{owner}.{info['label']}" if owner else info["label"]
+    value = f"```python\n{head}\n```"
+    if info.get("doc"):
+        value += f"\n\n{info['doc']}"
+    return lsp.Hover(contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=value))
 
 
 def code_actions_for(uri: str, diagnostics: list[lsp.Diagnostic]) -> list[lsp.CodeAction]:
