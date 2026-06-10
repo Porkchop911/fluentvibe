@@ -179,9 +179,17 @@ tests in `tests/test_lsp.py`. *Still to add: unknown catalog name → closest
 language explanation via an injectable OpenAI-compatible client (offline-testable;
 defaults to the env endpoint). Surfaced as `fluentvibe check --explain`
 (`--endpoint`/`--model` overrides). Tested by `tests/test_copilot_explain.py` with
-a fake client + a monkeypatched CLI integration test. *Still to add: "edit-with-
-prompt" via the authoring stack (re-validated before offer), and an LSP surface
-(hover/command) for explanations.*
+a fake client + a monkeypatched CLI integration test.
+
+**Edit-with-prompt (Continue-style inline edit). ✅ SHIPPED.**
+`fluentvibe/copilot/edit.py` (`edit_region`) rewrites a selected line range from a
+plain-language instruction and **re-validates** the result through `analyze_source`
+(`EditResult.introduces_errors`), so a bad suggestion is caught before it lands.
+Surfaced three ways: `fluentvibe edit <file> --start --end -m "..." [--apply]`, an
+LSP server command `fluentvibe.inlineEdit`, and a **Ctrl+I** command in the VS Code
+extension (select → describe → applied, with a warning if it regresses). Tested by
+`tests/test_copilot_edit.py` (fence stripping, prompt, clean + regressing
+re-validation, CLI). *Still to add: an LSP hover surface for explanations.*
 
 **Phase 5 — Completions. ✅ STARTED.** `fluentvibe/copilot/complete.py`
 (`complete_at`) offers deterministic completions: real catalog names inside

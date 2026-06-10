@@ -89,6 +89,24 @@ def main(argv: Optional[list[str]] = None) -> int:
                             help="emit completions as JSON")
     p_complete.set_defaults(func=_cmd_complete)
 
+    p_edit = sub.add_parser(
+        "edit",
+        help="rewrite a line range with an instruction (LLM), re-validated",
+    )
+    p_edit.add_argument("input", type=Path)
+    p_edit.add_argument("--start", type=int, required=True, help="1-based start line (inclusive)")
+    p_edit.add_argument("--end", type=int, required=True, help="1-based end line (inclusive)")
+    p_edit.add_argument("--instruction", "-m", required=True, help="what to change")
+    p_edit.add_argument("--apply", action="store_true", help="write the edit back to the file")
+    p_edit.add_argument("--no-validate", dest="validate", action="store_false",
+                        help="skip re-validating the edited file")
+    p_edit.add_argument("--json", dest="as_json", action="store_true")
+    p_edit.add_argument("--endpoint", default=None,
+                        help="LM endpoint (default: env FLUENTVIBE_LM_ENDPOINT)")
+    p_edit.add_argument("--model", default=None,
+                        help="model name (default: env FLUENTVIBE_LM_MODEL)")
+    p_edit.set_defaults(func=_cmd_edit)
+
     p_lsp = sub.add_parser(
         "lsp",
         help="start the fluentvibe language server over stdio (for editors)",
@@ -396,6 +414,57 @@ def _cmd_complete(args) -> int:
             print(f"  {c.label}{detail}")
         if not completions:
             print("(no completions)")
+    return 0
+
+
+def _cmd_edit(args) -> int:
+    from .copilot import edit_region
+
+    client = None
+    if args.endpoint or args.model:
+        from .authoring.lm_client import (
+            DEFAULT_LM_STUDIO_ENDPOINT,
+            DEFAULT_LM_STUDIO_MODEL,
+            LMStudioChatClient,
+        )
+        client = LMStudioChatClient(
+            endpoint=args.endpoint or DEFAULT_LM_STUDIO_ENDPOINT,
+            model=args.model or DEFAULT_LM_STUDIO_MODEL,
+        )
+
+    source = Path(args.input).read_text(encoding="utf-8")
+    try:
+        result = edit_region(
+            source, args.start, args.end, args.instruction,
+            client=client, path=str(args.input), revalidate=args.validate,
+        )
+    except Exception as exc:
+        print(f"Edit failed: {exc}", file=sys.stderr)
+        return 1
+
+    if args.as_json:
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print(result.new_text)
+        if result.diagnostics:
+            print(
+                f"\n# re-validation: {len(result.diagnostics)} diagnostic(s)"
+                + (" — INTRODUCES ERRORS" if result.introduces_errors else ""),
+                file=sys.stderr,
+            )
+            for d in result.diagnostics:
+                print(f"#   {args.input}:{d['line']}: [{d['severity']}] {d['message']}",
+                      file=sys.stderr)
+
+    if args.apply and result.new_text:
+        lines = source.splitlines()
+        start = max(1, args.start)
+        end = min(len(lines), max(start, args.end))
+        edited = "\n".join([*lines[:start - 1], *result.new_text.splitlines(), *lines[end:]])
+        if source.endswith("\n"):
+            edited += "\n"
+        Path(args.input).write_text(edited, encoding="utf-8")
+        print(f"Applied edit to {args.input}", file=sys.stderr)
     return 0
 
 

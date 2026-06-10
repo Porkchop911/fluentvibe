@@ -128,8 +128,13 @@ Python build errors and simulator failures — positioned at the authoring line
 that caused them, each with a repair hint and, where mechanical, a suggested
 fix. Add `--json` for machine-readable output, or `--explain` for a
 plain-language LLM explanation per diagnostic (needs a reachable LM endpoint;
-see `FLUENTVIBE_LM_ENDPOINT`). It is the headless core of the editor copilot (see
-[docs/copilot-design.md](docs/copilot-design.md)). Example:
+see `FLUENTVIBE_LM_ENDPOINT`). `fluentvibe edit <protocol.py> --start L --end L -m "..."` rewrites a line range
+from a plain-language instruction (LLM) and re-validates the result, and
+`fluentvibe complete <protocol.py> --line L --col C` lists catalog/API
+completions. These are the headless core of the editor copilot (see
+[docs/copilot-design.md](docs/copilot-design.md)); the VS Code extension under
+[editors/vscode/](editors/vscode/) wraps them (diagnostics, quick-fixes,
+autocomplete, Ctrl+I inline edit). Example:
 
 ```text
 my_protocol.py:16: [error] Aspirate: well 'A1' on 'Source' short by 15.00 uL
