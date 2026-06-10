@@ -300,10 +300,14 @@ class Simulator:
         step = self._current_step
         step_type = type(step).__name__ if step is not None else None
         command_id = None
+        source_pos = None
         if step is not None:
             command_id = getattr(step, "step_type", type(step).__name__)
             command_id = getattr(command_id, "value", command_id)
             command_id = str(command_id)
+            step_source_pos = getattr(step, "source_pos", None)
+            if step_source_pos is not None:
+                source_pos = step_source_pos.to_dict()
         self._report.failure = SimulationFailure(
             category=self._classify_failure(exc),
             exception_type=type(exc).__name__,
@@ -314,6 +318,7 @@ class Simulator:
             operation=_failure_operation(command_id),
             details=dict(getattr(exc, "sim_details", {}) or {}),
             repair_options=_repair_options(getattr(exc, "sim_category", None) or self._classify_failure(exc)),
+            source_pos=source_pos,
         )
 
     def _classify_failure(self, exc: Exception) -> str:

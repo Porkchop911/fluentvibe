@@ -69,6 +69,10 @@ class SimulationFailure:
     operation: str | None = None
     details: dict[str, Any] = field(default_factory=dict)
     repair_options: list[str] = field(default_factory=list)
+    # Python source position (file/line) of the authoring call that emitted the
+    # failing step, when known. Lets editors place the diagnostic on the right
+    # line. See fluentvibe/ir/source_pos.py.
+    source_pos: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +85,7 @@ class SimulationFailure:
             "operation": self.operation,
             "details": dict(self.details),
             "repair_options": list(self.repair_options),
+            "source_pos": self.source_pos,
         }
 
 

@@ -10,6 +10,8 @@ from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from .source_pos import SourcePos
+
 
 class StepType(str, Enum):
     """Enumeration of all supported step types."""
@@ -77,6 +79,10 @@ class BaseStep(BaseModel):
     line_number: Optional[int] = None  # Auto-assigned if not provided
     disabled: bool = False
     breakpoint: bool = False
+    # Editor-facing Python source position of the authoring call that emitted
+    # this step. Populated by Worktable._emit; excluded from serialization and
+    # never rendered. See fluentvibe/ir/source_pos.py.
+    source_pos: Optional[SourcePos] = Field(default=None, exclude=True)
 
 
 class SetVariableStep(BaseStep):
@@ -556,6 +562,7 @@ class GenericStep(BaseModel):
     line_number: Optional[int] = None
     disabled: bool = False
     breakpoint: bool = False
+    source_pos: Optional[SourcePos] = Field(default=None, exclude=True)
     # All other parameters stored as dict
     parameters: dict = Field(default_factory=dict, description="Step parameters")
 
@@ -565,7 +572,7 @@ class GenericStep(BaseModel):
 
     def __init__(self, **data):
         # Extract known fields, put rest in parameters
-        known_fields = {'step_type', 'line_number', 'disabled', 'breakpoint', 'parameters'}
+        known_fields = {'step_type', 'line_number', 'disabled', 'breakpoint', 'source_pos', 'parameters'}
         params = {k: v for k, v in data.items() if k not in known_fields}
         if 'parameters' not in data:
             data['parameters'] = params
