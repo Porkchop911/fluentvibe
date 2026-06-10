@@ -145,11 +145,14 @@ accuracy, framework-frame skipping, serialization exclusion, end-to-end
 failure→line). *Mechanism A; container-step (group/loop) attribution via contextlib
 is best-effort — revisit with mechanism B if needed.*
 
-**Phase 1 — Headless analysis core (2–3 days).** A `fluentvibe/lsp/analyzer.py`
-that takes a source string and returns a list of structured diagnostics (build +
-simulate + catalog), each with a range, severity, category, and any repair options.
-No editor yet; exercise via `fluentvibe copilot file.py --json` and unit tests.
-*Exit: diagnostics JSON for a suite of good/bad fixtures matches expectations.*
+**Phase 1 — Headless analysis core. ✅ SHIPPED.** `fluentvibe/copilot/analyzer.py`
+takes protocol source and returns structured `Diagnostic`s (build errors +
+simulate failures), each with a line, severity, category, message, and repair
+hint (reusing `repair_policy`). Exposed as `fluentvibe check <file> [--json]`
+(`cli.py:_cmd_check`). Covered by `tests/test_copilot_analyzer.py` (clean / short
+volume / syntax error / unknown method / missing factory / source==file parity).
+*Deferred to later phases: eager catalog-name checks before simulate, and
+opaque/coverage info diagnostics.*
 
 **Phase 2 — VS Code extension + LSP server (3–4 days).** `pygls` server wrapping
 the analyzer; thin TS extension publishing diagnostics on save/change. *Exit:

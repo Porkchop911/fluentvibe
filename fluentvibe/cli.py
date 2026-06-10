@@ -62,6 +62,15 @@ def main(argv: Optional[list[str]] = None) -> int:
                             help="require a bound workspace plus strict slot/catalog semantics")
     p_simulate.set_defaults(func=_cmd_simulate)
 
+    p_check = sub.add_parser(
+        "check",
+        help="analyze a protocol .py and report diagnostics (build + simulate)",
+    )
+    p_check.add_argument("input", type=Path)
+    p_check.add_argument("--json", dest="as_json", action="store_true",
+                         help="emit diagnostics as JSON")
+    p_check.set_defaults(func=_cmd_check)
+
     p_decompile = sub.add_parser(
         "decompile",
         help="parse a .xscr and emit a fluentvibe Python protocol",
@@ -291,6 +300,23 @@ def _cmd_simulate(args) -> int:
             for warning in report.warnings:
                 print(f"  warning: {warning}")
     return 0
+
+
+def _cmd_check(args) -> int:
+    from .copilot import analyze_file
+
+    diagnostics = analyze_file(args.input)
+    if args.as_json:
+        print(json.dumps([d.to_dict() for d in diagnostics], indent=2))
+    else:
+        for d in diagnostics:
+            location = f"{args.input}:{d.line}" + (f":{d.col}" if d.col else "")
+            print(f"{location}: [{d.severity}] {d.message}", file=sys.stderr)
+            if d.hint:
+                print(f"    hint: {d.hint}", file=sys.stderr)
+        if not diagnostics:
+            print(f"{args.input}: no problems found")
+    return 1 if any(d.severity == "error" for d in diagnostics) else 0
 
 
 def _cmd_decompile(args) -> int:
