@@ -131,7 +131,7 @@ def create_server() -> LanguageServer:
         info = hover_at(doc.source, params.position.line, params.position.character)
         return to_hover(info.to_dict() if info else None)
 
-    @server.command("fluentvibe.inlineEdit")
+    @server.command("fluentvibe.applyInlineEdit")
     def _inline_edit(ls: LanguageServer, args: list) -> dict:
         from ..copilot.edit import edit_region
 
