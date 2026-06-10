@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe import (  # noqa: E402
-    FCA1000Box, Plate96, Reagent, Worktable,
+    FCA1000Box, MCA100Box, Plate96, Reagent, Worktable,
 )
 from fluentvibe.compiler.renderer import Renderer  # noqa: E402
 from fluentvibe.decompiler.xscr_parser import parse_xscr  # noqa: E402
@@ -141,6 +141,111 @@ def test_full_plate_compile_has_default_well_selection() -> None:
     assert "<FirstTipXPosition>1</FirstTipXPosition>" in xml
     # No explicit column list is injected for a full-plate aspirate.
     assert "<SelectedRowsOrColumns>" not in xml.replace("<SelectedRowsOrColumns />", "")
+
+
+# ── Partial-tip pickup/setback offsets (tip sorting) ────────────────
+
+def test_pickup_setback_default_offsets_are_zero() -> None:
+    """Without offsets, the partial-tip block stays at the origin (regression guard)."""
+    wt, src, dst, tip_box = _mca_worktable()
+    wt.group("Transfer")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tip_box)
+    head.return_tips()
+
+    xml = _compile_xml(wt)
+    assert "<PartialColumnOffset>0</PartialColumnOffset>" in xml
+    assert "<PartialRowsOffset>0</PartialRowsOffset>" in xml
+    # No stray placeholder ever leaks through.
+    assert "{{PartialColumnOffset}}" not in xml
+    assert "{{PartialRowsOffset}}" not in xml
+
+
+def test_partial_tip_offset_is_derived_from_column() -> None:
+    """PartialColumnOffset is derived as head_width - max(column), matching the
+    PartialMCAexamples reference (box col 1 -> offset 11, col 4 -> offset 8)."""
+    wt, src, dst, tip_box = _mca_worktable()
+    wt.group("Sort")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tip_box, columns=[1])      # 12 - 1 = 11
+    head.return_tips(tip_box, columns=[4])   # 12 - 4 = 8
+
+    xml = _compile_xml(wt)
+    assert "<PartialColumns>1</PartialColumns>" in xml
+    assert "<PartialColumnOffset>11</PartialColumnOffset>" in xml
+    assert "<PartialColumnOffset>8</PartialColumnOffset>" in xml
+    # The offset is never 12 - 1's mirror: a stuck/constant offset would contradict
+    # the well-selection. Well-selection tracks the box columns.
+    assert "<FirstTipXPosition>1</FirstTipXPosition>" in xml
+    assert "<FirstTipXPosition>4</FirstTipXPosition>" in xml
+
+
+# ── Tip sorting (per-column tip-box simulation) ─────────────────────
+
+def test_sort_tips_into_columns_then_use() -> None:
+    """Sorting columns into an empty box simulates; the box tracks occupancy."""
+    wt, src, dst, full = _mca_worktable()
+    empty = wt.place(MCA100Box("EmptyTips", catalog="MCA96, 100ul, Box"), "Nest", 5)
+    empty.is_full = False
+    full2 = wt.place(MCA100Box("FullTips2", catalog="MCA96, 100ul, Box"), "Nest", 6)
+
+    wt.group("Sort")
+    head = wt.mca96
+    head.mount_adapter()
+    # Peel source columns 1-4 off the moving left edge into 1/4/7/10.
+    for src_col, tgt_col in ((1, 1), (2, 4), (3, 7), (4, 10)):
+        head.pick_up(full2, columns=[src_col])
+        head.return_tips(empty, columns=[tgt_col])
+    wt.group("Use")
+    # The sorted box is used by picking the whole thing at once.
+    sorted_cols = [1, 4, 7, 10]
+    head.pick_up(empty, columns=sorted_cols)
+    head.aspirate(src, 20.0, liquid_class="Water Free Single", columns=sorted_cols)
+    head.dispense(dst, 20.0, liquid_class="Water Free Single", columns=sorted_cols)
+    head.return_tips(empty, columns=sorted_cols)
+    head.drop_adapter()
+
+    wt.simulate()
+    report = wt.simulation_report
+    assert report is not None
+    for col in (1, 4, 7, 10):
+        assert _vol(report, "Dest", f"A{col}") == pytest.approx(20.0)
+    assert _vol(report, "Dest", "A2") == pytest.approx(0.0)
+    # The empty box ends holding exactly the sorted columns; the full box is
+    # drained of the four it gave up.
+    assert empty.columns_present == {1, 4, 7, 10}
+    assert full2.columns_present == {5, 6, 7, 8, 9, 10, 11, 12}
+
+
+def test_partial_pickup_rejects_interior_column() -> None:
+    """A single column can only be peeled from the current outer filled edge;
+    an interior column of a full box is physically impossible and must raise."""
+    from fluentvibe.simulator.invariants import MissingTipsError
+
+    wt, src, dst, _ = _mca_worktable()
+    full2 = wt.place(MCA100Box("FullTips2", catalog="MCA96, 100ul, Box"), "Nest", 6)
+    wt.group("Bad peel")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(full2, columns=[5])  # interior of a full box — not an edge
+    with pytest.raises(MissingTipsError):
+        wt.simulate()
+
+
+def test_double_full_pickup_still_reports_empty() -> None:
+    """Two full pickups with no return still raise tip_box_empty (regression)."""
+    from fluentvibe.simulator.invariants import MissingTipsError
+
+    wt, src, dst, tip_box = _mca_worktable()
+    wt.group("Transfer")
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tip_box)
+    head.pick_up(tip_box)  # nothing returned — box is empty
+    with pytest.raises(MissingTipsError):
+        wt.simulate()
 
 
 # ── Render → decompile round-trip (closes the loop) ─────────────────

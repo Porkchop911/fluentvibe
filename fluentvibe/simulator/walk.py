@@ -440,18 +440,23 @@ class Simulator:
             raise MissingTipsError(
                 f"PickUpTips: {step.labware_name!r} is not a tip box"
             )
-        if not tip_box.is_full:
+        picked = self._partial_box_columns(step, tip_box)
+        present = tip_box.columns_present
+        missing = picked - present
+        if missing:
             raise _with_sim_details(
                 MissingTipsError(
-                    f"PickUpTips: {step.labware_name!r} is empty (already picked up)"
+                    f"PickUpTips: {step.labware_name!r} has no tips in "
+                    f"column(s) {sorted(missing)} (already picked up)"
                 ),
                 category="tip_box_empty",
                 tip_box=step.labware_name,
             )
+        self._check_peel_edge(step, picked, present)
         capacity = tip_box.capacity_ul
+        tip_box.remove_columns(picked)
         self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(96)]
         self._mca_tip_box_label = step.labware_name
-        tip_box.is_full = False
 
     def _on_return_tips(self, step: SetTipsBackStep) -> None:
         if not self._mca_tips:
@@ -460,9 +465,52 @@ class Simulator:
         if target is not None:
             tip_box = self._twin.get(target)
             if isinstance(tip_box, TipBox):
-                tip_box.is_full = True
+                tip_box.add_columns(self._partial_box_columns(step, tip_box))
         self._mca_tips = []
         self._mca_tip_box_label = None
+
+    @staticmethod
+    def _check_peel_edge(step, picked: set[int], present: set[int]) -> None:
+        """Enforce the physical peel rule for a partial pickup.
+
+        A partial selection can lift either the **whole** filled box at once, or
+        a **contiguous block flush to the current left-most or right-most filled
+        column** — so the head's idle channels overhang empty space and don't
+        knock neighbouring tips. Anything else (an interior or sparse subset that
+        leaves tips on both sides) is physically impossible: the idle channels
+        would land on tips you don't mean to pick.
+        """
+        if not picked or picked == present:
+            return
+        lo, hi = min(picked), max(picked)
+        contiguous = picked == set(range(lo, hi + 1))
+        flush = lo == min(present) or hi == max(present)
+        if not (contiguous and flush):
+            raise _with_sim_details(
+                MissingTipsError(
+                    f"PickUpTips: {step.labware_name!r} column(s) {sorted(picked)} "
+                    f"are not a left/right edge of the filled columns "
+                    f"{sorted(present)} — a single column can only be peeled from "
+                    f"the current outermost filled column."
+                ),
+                category="partial_pickup_not_edge",
+                tip_box=step.labware_name,
+            )
+
+    @staticmethod
+    def _partial_box_columns(step, tip_box: "TipBox") -> set[int]:
+        """1-based box columns a pickup/set-back addresses.
+
+        ``step.columns`` *is* the addressed box columns (the well-selection); the
+        ``PartialColumnOffset`` is derived from them at render time and does not
+        independently change which columns are touched. ``columns=None`` is a
+        full pickup.
+        """
+        total = getattr(tip_box, "total_columns", 12)
+        cols = getattr(step, "columns", None)
+        if cols:
+            return {int(c) for c in cols if 1 <= int(c) <= total}
+        return set(range(1, total + 1))
 
     def _on_mca384_get_tips(self, step: Mca384GetTipsStep) -> None:
         label = step.labware_name
