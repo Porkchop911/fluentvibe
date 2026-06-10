@@ -111,6 +111,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         "lsp",
         help="start the fluentvibe language server over stdio (for editors)",
     )
+    # LSP clients (vscode-languageclient) append a transport flag to the launch
+    # command. We always speak stdio, so accept and ignore the standard ones.
+    p_lsp.add_argument("--stdio", action="store_true", help=argparse.SUPPRESS)
+    p_lsp.add_argument("--node-ipc", action="store_true", help=argparse.SUPPRESS)
+    p_lsp.add_argument("--socket", default=None, help=argparse.SUPPRESS)
+    p_lsp.add_argument("--pipe", default=None, help=argparse.SUPPRESS)
+    p_lsp.add_argument("--clientProcessId", default=None, help=argparse.SUPPRESS)
     p_lsp.set_defaults(func=_cmd_lsp)
 
     p_decompile = sub.add_parser(
