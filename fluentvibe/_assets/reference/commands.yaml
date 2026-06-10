@@ -488,8 +488,8 @@ commands:
     >\n  <Mca384PickUpTipsScriptCommandDataV2>\n    <BlowoutAirgap>{{BlowoutAirgap}}</BlowoutAirgap>\n\
     \    <Data Type=\"Tecan.Core.Instrument.Devices.Mca.Mca384.Scripting.Mca384PartialTipCommandBaseDataV2\"\
     >\n      <Mca384PartialTipCommandBaseDataV2>\n        <PartialColumns>{{PartialColumns}}</PartialColumns>\n\
-    \        <PartialRows>{{PartialRows}}</PartialRows>\n        <PartialColumnOffset>0</PartialColumnOffset>\n\
-    \        <PartialRowsOffset>0</PartialRowsOffset>\n        <HeadPosition>\n  \
+    \        <PartialRows>{{PartialRows}}</PartialRows>\n        <PartialColumnOffset>{{PartialColumnOffset}}</PartialColumnOffset>\n\
+    \        <PartialRowsOffset>{{PartialRowsOffset}}</PartialRowsOffset>\n        <HeadPosition>\n  \
     \        <HeadPositions>{{HeadPosition}}</HeadPositions>\n        </HeadPosition>\n\
     \        <RemoveRack>False</RemoveRack>\n        <WasteForDitis />\n        <Data\
     \ Type=\"Tecan.Core.Instrument.Devices.Mca._384.Scripting.Data.Mca384ScriptCommandUsingWellSelectionBaseDataV6\"\
@@ -548,8 +548,8 @@ commands:
     \     <Backs>{{UseSourceAsBackPosition}}</Backs>\n    </UseSourceAsBackPosition>\n\
     \    <Data Type=\"Tecan.Core.Instrument.Devices.Mca.Mca384.Scripting.Mca384PartialTipCommandBaseDataV2\"\
     >\n      <Mca384PartialTipCommandBaseDataV2>\n        <PartialColumns>{{PartialColumns}}</PartialColumns>\n\
-    \        <PartialRows>{{PartialRows}}</PartialRows>\n        <PartialColumnOffset>0</PartialColumnOffset>\n\
-    \        <PartialRowsOffset>0</PartialRowsOffset>\n        <HeadPosition>\n  \
+    \        <PartialRows>{{PartialRows}}</PartialRows>\n        <PartialColumnOffset>{{PartialColumnOffset}}</PartialColumnOffset>\n\
+    \        <PartialRowsOffset>{{PartialRowsOffset}}</PartialRowsOffset>\n        <HeadPosition>\n  \
     \        <HeadPositions>{{HeadPosition}}</HeadPositions>\n        </HeadPosition>\n\
     \        <RemoveRack>False</RemoveRack>\n        <WasteForDitis />\n        <Data\
     \ Type=\"Tecan.Core.Instrument.Devices.Mca._384.Scripting.Data.Mca384ScriptCommandUsingWellSelectionBaseDataV6\"\

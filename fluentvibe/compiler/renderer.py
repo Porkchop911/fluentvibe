@@ -678,6 +678,46 @@ class Renderer:
         lines = "\n".join(parts).split("\n")
         return "\n".join("                        " + line for line in lines)
 
+    @staticmethod
+    def _partial_tip_dims(step: Step, default_cols: int, default_rows: int) -> tuple[int, int]:
+        """(PartialColumns, PartialRows) for a pickup/set-back.
+
+        When the step names box ``columns``, ``PartialColumns`` is the column
+        *span* (``max - min + 1``) of the active block and ``PartialRows`` is the
+        adapter's full column height. The span — not the count — is what keeps
+        the block consistent with ``FirstTip..LastTipXPosition`` and the derived
+        ``PartialColumnOffset``; a sparse set (e.g. 1,4,7,10) spans 10 columns
+        and is narrowed by ``SelectedRowsOrColumns``. Verified against the
+        FluentControl ``PartialMCAexamples`` reference (col 1 -> span 1; cols
+        7-12 -> span 6). Otherwise fall back to the legacy count fields, so full
+        pickups stay byte-identical.
+        """
+        cols = getattr(step, "columns", None)
+        if cols:
+            ints = [int(c) for c in cols]
+            return max(ints) - min(ints) + 1, default_rows
+        pc = step.partial_columns if step.partial_columns else default_cols
+        pr = step.partial_rows if step.partial_rows else default_rows
+        return pc, pr
+
+    @staticmethod
+    def _partial_tip_col_offset(step: Step, default_cols: int, fallback: int) -> int:
+        """``PartialColumnOffset`` for a pickup/set-back.
+
+        FluentControl stores the offset counted from the *right* edge of the
+        head: ``PartialColumnOffset = head_width - (rightmost addressed box
+        column)``. So box col 1 -> offset 11, cols 7-12 -> offset 0 (verified
+        against ``PartialMCAexamples``). It is therefore *derived* from the
+        addressed columns and must never be passed independently — that is the
+        defect that let the partial block and the well-selection disagree. When
+        the step names no ``columns`` (the row-partial / legacy path) the manual
+        field is used unchanged.
+        """
+        cols = getattr(step, "columns", None)
+        if cols:
+            return default_cols - max(int(c) for c in cols)
+        return fallback
+
     def _post_process_partial_columns_xml(self, xml: str, step: Step) -> str:
         """Inject MCA partial-column well-selection into an aspirate/dispense.
 
@@ -720,7 +760,7 @@ class Renderer:
         if "LiquidClassName" in params:
             xml = self._post_process_liquid_class_xml(xml, str(params.get("LiquidClassName") or ""))
 
-        if stype in {"aspirate", "dispense"}:
+        if stype in {"aspirate", "dispense", "pick_up_tips", "set_tips_back"}:
             xml = self._post_process_partial_columns_xml(xml, step)
 
         if stype in {"export_variable", "import_variable"}:
@@ -1239,13 +1279,17 @@ class Renderer:
                 adapter = self._current_adapter_config
                 default_cols = adapter["partial_columns"] if adapter else 24
                 default_rows = adapter["partial_rows"] if adapter else 16
+                pcols, prows = self._partial_tip_dims(step, default_cols, default_rows)
+                coff = self._partial_tip_col_offset(step, default_cols, step.partial_column_offset)
                 params.update({
                     "LabwareName": step.labware_name,
                     "DeviceAlias": step.device_alias or default_device,
                     "AvailableID": step.available_id or default_available_id,
                     "BlowoutAirgap": str(step.blowout_airgap),
-                    "PartialColumns": str(step.partial_columns if step.partial_columns else default_cols),
-                    "PartialRows": str(step.partial_rows if step.partial_rows else default_rows),
+                    "PartialColumns": str(pcols),
+                    "PartialRows": str(prows),
+                    "PartialColumnOffset": str(coff),
+                    "PartialRowsOffset": str(step.partial_row_offset),
                     "HeadPosition": step.head_position,
                 })
 
@@ -1254,13 +1298,17 @@ class Renderer:
                 adapter = self._current_adapter_config
                 default_cols = adapter["partial_columns"] if adapter else 24
                 default_rows = adapter["partial_rows"] if adapter else 16
+                pcols, prows = self._partial_tip_dims(step, default_cols, default_rows)
+                coff = self._partial_tip_col_offset(step, default_cols, step.partial_column_offset)
                 params.update({
                     "LabwareName": step.labware_name,
                     "DeviceAlias": step.device_alias or default_device,
                     "AvailableID": step.available_id or default_available_id,
                     "UseSourceAsBackPosition": step.back_position,
-                    "PartialColumns": str(step.partial_columns if step.partial_columns else default_cols),
-                    "PartialRows": str(step.partial_rows if step.partial_rows else default_rows),
+                    "PartialColumns": str(pcols),
+                    "PartialRows": str(prows),
+                    "PartialColumnOffset": str(coff),
+                    "PartialRowsOffset": str(step.partial_row_offset),
                     "HeadPosition": step.head_position,
                 })
 

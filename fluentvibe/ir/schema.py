@@ -141,6 +141,18 @@ class PickUpTipsStep(BaseStep):
     blowout_airgap: int = Field(default=0, ge=0)
     partial_columns: int = Field(default=24, ge=1, le=24, description="Number of columns")
     partial_rows: int = Field(default=16, ge=1, le=16, description="Number of rows")
+    columns: Optional[list[int]] = Field(
+        default=None,
+        description=(
+            "1-based box columns this pickup addresses (well-selection "
+            "FirstTip..LastTipXPosition). None = full head. e.g. [1] picks one "
+            "column; [7,8,9,10,11,12] picks the right half; [1,4,7,10] grabs a "
+            "whole sorted box. The PartialColumnOffset is derived from these "
+            "(head_width - max(columns)); do not set it independently."
+        ),
+    )
+    partial_column_offset: int = Field(default=0, ge=0, le=23, description="PartialColumnOffset; DERIVED from `columns` at render time (head_width - max(columns)). Only the legacy/row-partial path (columns=None) uses this field directly.")
+    partial_row_offset: int = Field(default=0, ge=0, le=15, description="0-based head-channel row edge of the active block")
     head_position: str = Field(default="Left", description="Head position (Left/Right)")
 
 
@@ -153,6 +165,17 @@ class SetTipsBackStep(BaseStep):
     back_position: str = Field(default="BackToPosition")
     partial_columns: int = Field(default=24, ge=1, le=24, description="Number of columns")
     partial_rows: int = Field(default=16, ge=1, le=16, description="Number of rows")
+    columns: Optional[list[int]] = Field(
+        default=None,
+        description=(
+            "1-based box columns this set-back addresses (well-selection "
+            "FirstTip..LastTipXPosition). None = full head. The "
+            "PartialColumnOffset is derived from these (head_width - "
+            "max(columns)); do not set it independently."
+        ),
+    )
+    partial_column_offset: int = Field(default=0, ge=0, le=23, description="PartialColumnOffset; DERIVED from `columns` at render time (head_width - max(columns)). Only the legacy/row-partial path (columns=None) uses this field directly.")
+    partial_row_offset: int = Field(default=0, ge=0, le=15, description="0-based head-channel row edge of the active block")
     head_position: str = Field(default="Left", description="Head position (Left/Right)")
 
 

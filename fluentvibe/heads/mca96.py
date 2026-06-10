@@ -71,34 +71,43 @@ class MCA96Head:
         self,
         tip_box: Union[Labware, str],
         *,
-        columns: Optional[int] = None,
-        rows: Optional[int] = None,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
         """Pick up tips, optionally on only a partial block of the head.
 
-        `columns`/`rows` request a partial-tip pickup of that many columns/rows
-        (a contiguous block from the head origin). Omit both for a full pickup.
+        `columns` is the list of 1-based **box columns** to address, e.g. ``[1]``
+        for a single column, ``[7,8,9,10,11,12]`` for the right half, or
+        ``[1,4,7,10]`` to grab a whole sorted box in one go. Omit `columns` for
+        a full pickup.
+
+        The physical offset is **derived** from the columns, never passed in:
+        FluentControl stores ``PartialColumnOffset = head_width - max(columns)``
+        (box col 1 -> 11, col 12 -> 0). A single column can only be peeled from
+        the box's current **left-most or right-most filled** column, so its idle
+        channels overhang empty space; the simulator enforces this.
         """
         step = PickUpTipsStep(labware_name=self._label(tip_box))
         if columns is not None:
-            step.partial_columns = columns
-        if rows is not None:
-            step.partial_rows = rows
+            step.columns = [int(c) for c in columns]
         self._wt._emit(step)
 
     def return_tips(
         self,
         tip_box: Optional[Union[Labware, str]] = None,
         *,
-        columns: Optional[int] = None,
-        rows: Optional[int] = None,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
+        """Set tips back, optionally as a partial block.
+
+        `columns` are the 1-based **box columns** the tips land in. Setting tips
+        back into an empty box has no edge constraint (no neighbouring tips to
+        collide with), so any target column is allowed; the
+        ``PartialColumnOffset`` is derived from it the same way as `pick_up`.
+        """
         labware_name = self._label(tip_box) if tip_box is not None else None
         step = SetTipsBackStep(labware_name=labware_name)
         if columns is not None:
-            step.partial_columns = columns
-        if rows is not None:
-            step.partial_rows = rows
+            step.columns = [int(c) for c in columns]
         self._wt._emit(step)
 
     # ── Pipetting ───────────────────────────────────────────────────
