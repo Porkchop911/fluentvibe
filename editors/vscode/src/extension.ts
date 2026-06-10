@@ -24,11 +24,16 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   const pythonPath = config.get<string>("pythonPath", "python");
 
-  // The server is `python -m fluentvibe lsp`, speaking LSP over stdio.
-  const serverOptions: ServerOptions = {
-    run: { command: pythonPath, args: ["-m", "fluentvibe", "lsp"], transport: TransportKind.stdio },
-    debug: { command: pythonPath, args: ["-m", "fluentvibe", "lsp"], transport: TransportKind.stdio },
+  // The server is `python -m fluentvibe lsp`, speaking LSP over stdio. Never
+  // rebuild the catalog index on startup — that would block the LSP handshake.
+  const env = { ...process.env, FLUENTVIBE_NO_AUTO_REBUILD: "1" };
+  const run = {
+    command: pythonPath,
+    args: ["-m", "fluentvibe", "lsp"],
+    transport: TransportKind.stdio,
+    options: { env },
   };
+  const serverOptions: ServerOptions = { run, debug: run };
 
   // Only Python documents; the server itself ignores non-protocol files.
   const clientOptions: LanguageClientOptions = {
