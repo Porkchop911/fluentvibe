@@ -1,73 +1,78 @@
 """fluentvibe language server (pygls).
 
-Publishes diagnostics for fluentvibe protocol files on open and save. Analysis
-runs in an isolated subprocess (``python -m fluentvibe check --json``) with a
-timeout, so executing the protocol's ``build_worktable()`` can never hang or
-compromise the editor.
+Real-time, deterministic authoring support for FluentControl protocols:
+- diagnostics as you type (build errors + simulator failures), debounced;
+- quick-fixes (code actions);
+- autocomplete (catalog names + API);
+- signature help (parameter hints) and hover (signature + docstring).
+
+Signature help, hover and completion are pure introspection — instant and safe.
+Diagnostics execute the protocol's ``build_worktable()`` in-process (fast, since
+the package is already imported) on a short debounce; the server only touches
+files that import fluentvibe and define ``build_worktable()``.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-import subprocess
-import sys
+import threading
 
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
+from ..copilot.analyzer import analyze_source
+from ..copilot.api_info import hover_at, signature_at
 from ..copilot.complete import complete_at
-from .convert import code_actions_for, to_completion_items, to_lsp_diagnostics
+from .convert import (
+    code_actions_for,
+    to_completion_items,
+    to_hover,
+    to_lsp_diagnostics,
+    to_signature_help,
+)
 
 logger = logging.getLogger("fluentvibe.lsp")
 
-_ANALYSIS_TIMEOUT_S = 30
+# Wait this long after the last keystroke before re-analyzing.
+_DEBOUNCE_S = 0.4
 
 
 def _looks_like_protocol(source: str) -> bool:
-    """Only analyze files that look like fluentvibe protocols.
-
-    Keeps the server quiet on ordinary Python files: requires a fluentvibe
-    import and the ``build_worktable()`` authoring contract.
-    """
+    """Only analyze files that look like fluentvibe protocols, so the server
+    stays quiet on ordinary Python files."""
     return "fluentvibe" in source and "build_worktable" in source
 
 
-def _run_analysis(path: str) -> list[dict]:
-    """Run ``fluentvibe check --json`` on ``path`` in an isolated subprocess."""
-    env = dict(os.environ)
-    env.setdefault("FLUENTVIBE_NO_AUTO_REBUILD", "1")
-    proc = subprocess.run(
-        [sys.executable, "-m", "fluentvibe", "check", path, "--json"],
-        capture_output=True,
-        text=True,
-        timeout=_ANALYSIS_TIMEOUT_S,
-        env=env,
-    )
-    out = (proc.stdout or "").strip()
-    if not out:
-        return []
-    return json.loads(out)
+def analyze(source: str, path: str) -> list[dict]:
+    """Run the headless analyzer in-process and return diagnostic dicts."""
+    return [d.to_dict() for d in analyze_source(source, path)]
 
 
 def create_server() -> LanguageServer:
     server = LanguageServer("fluentvibe-lsp", "v0.1")
+    debounce: dict[str, threading.Timer] = {}
 
     def _validate(ls: LanguageServer, uri: str) -> None:
         doc = ls.workspace.get_text_document(uri)
         diagnostics: list[lsp.Diagnostic] = []
         if _looks_like_protocol(doc.source):
             try:
-                diagnostics = to_lsp_diagnostics(_run_analysis(doc.path))
-            except subprocess.TimeoutExpired:
-                diagnostics = [_whole_file_error("Analysis timed out.")]
+                diagnostics = to_lsp_diagnostics(analyze(doc.source, doc.path))
             except Exception:
                 logger.exception("fluentvibe analysis failed for %s", uri)
                 diagnostics = []
         ls.text_document_publish_diagnostics(
             lsp.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics)
         )
+
+    def _schedule(ls: LanguageServer, uri: str) -> None:
+        existing = debounce.get(uri)
+        if existing is not None:
+            existing.cancel()
+        timer = threading.Timer(_DEBOUNCE_S, _validate, args=(ls, uri))
+        timer.daemon = True
+        debounce[uri] = timer
+        timer.start()
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
     def _did_open(ls: LanguageServer, params: lsp.DidOpenTextDocumentParams) -> None:
@@ -76,6 +81,10 @@ def create_server() -> LanguageServer:
     @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
     def _did_save(ls: LanguageServer, params: lsp.DidSaveTextDocumentParams) -> None:
         _validate(ls, params.text_document.uri)
+
+    @server.feature(lsp.TEXT_DOCUMENT_DID_CHANGE)
+    def _did_change(ls: LanguageServer, params: lsp.DidChangeTextDocumentParams) -> None:
+        _schedule(ls, params.text_document.uri)
 
     @server.feature(lsp.TEXT_DOCUMENT_CODE_ACTION)
     def _code_action(
@@ -100,6 +109,27 @@ def create_server() -> LanguageServer:
             params.position.character,
         )
 
+    @server.feature(
+        lsp.TEXT_DOCUMENT_SIGNATURE_HELP,
+        lsp.SignatureHelpOptions(trigger_characters=["(", ","]),
+    )
+    def _signature_help(
+        ls: LanguageServer, params: lsp.SignatureHelpParams
+    ) -> lsp.SignatureHelp | None:
+        doc = ls.workspace.get_text_document(params.text_document.uri)
+        if not _looks_like_protocol(doc.source):
+            return None
+        info = signature_at(doc.source, params.position.line, params.position.character)
+        return to_signature_help(info.to_dict() if info else None)
+
+    @server.feature(lsp.TEXT_DOCUMENT_HOVER)
+    def _hover(ls: LanguageServer, params: lsp.HoverParams) -> lsp.Hover | None:
+        doc = ls.workspace.get_text_document(params.text_document.uri)
+        if not _looks_like_protocol(doc.source):
+            return None
+        info = hover_at(doc.source, params.position.line, params.position.character)
+        return to_hover(info.to_dict() if info else None)
+
     @server.command("fluentvibe.inlineEdit")
     def _inline_edit(ls: LanguageServer, args: list) -> dict:
         from ..copilot.edit import edit_region
@@ -116,18 +146,6 @@ def create_server() -> LanguageServer:
         return result.to_dict()
 
     return server
-
-
-def _whole_file_error(message: str) -> lsp.Diagnostic:
-    return lsp.Diagnostic(
-        range=lsp.Range(
-            start=lsp.Position(line=0, character=0),
-            end=lsp.Position(line=0, character=0),
-        ),
-        message=message,
-        severity=lsp.DiagnosticSeverity.Warning,
-        source="fluentvibe",
-    )
 
 
 def main() -> None:

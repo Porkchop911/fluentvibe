@@ -38,12 +38,20 @@ Development Host. Open a fluentvibe protocol `.py` and save it to see diagnostic
 
 ## Features (current)
 
-- **Diagnostics** on open and save: build errors + simulator failures on the
+All deterministic features (diagnostics, completion, signature help, hover) are
+pure analysis — no LLM, no cloud. Only the optional Ctrl+I inline edit uses a model.
+
+- **Live diagnostics** as you type (debounced): build errors + simulator failures
+  (bad catalog name, overdraw, missing tips/adapter, occupied slot, typos) on the
   exact line, with repair hints.
 - **Quick-fixes** (lightbulb 💡): e.g. pipetting before mounting the adapter →
   one-click insert of `head.mount_adapter()`.
 - **Autocomplete**: real FluentControl catalog names inside `catalog="..."`, and
   the fluentvibe API after `head.` / `wt.` / `gripper.` etc.
+- **Signature help**: type `head.aspirate(` and see the parameters
+  (`target, volume_ul, *, liquid_class, columns=None`), with the current argument
+  highlighted.
+- **Hover**: hover a method to see its signature and docstring.
 - **Inline edit (Ctrl+I)**: select lines, describe a change ("add a return-tips
   step", "use 200 uL tips"), and the model rewrites them — re-validated by the
   simulator, with a warning if the edit introduces an error. Needs a reachable

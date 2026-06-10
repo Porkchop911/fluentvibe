@@ -172,16 +172,36 @@ def test_create_server_returns_language_server() -> None:
     assert server.name == "fluentvibe-lsp"
 
 
-def test_run_analysis_subprocess_reports_failure(tmp_path: Path) -> None:
-    """End-to-end: the isolated subprocess analysis returns positioned diagnostics."""
-    path = tmp_path / "short.py"
-    path.write_text(_BAD_PROTOCOL, encoding="utf-8")
-    diags = lsp_server._run_analysis(str(path))
+def test_analyze_reports_failure_in_process() -> None:
+    """The server's in-process analyze() returns positioned diagnostic dicts."""
+    diags = lsp_server.analyze(_BAD_PROTOCOL, "short.py")
     assert len(diags) == 1
     assert diags[0]["code"] == "source_volume_short"
     assert diags[0]["severity"] == "error"
-    # The diagnostic lands on the aspirate line.
     expected_line = next(
         i for i, t in enumerate(_BAD_PROTOCOL.splitlines(), start=1) if "head.aspirate(" in t
     )
     assert diags[0]["line"] == expected_line
+
+
+def test_signature_help_and_hover_mapping() -> None:
+    from fluentvibe.lsp.convert import to_hover, to_signature_help
+
+    info = {
+        "name": "aspirate",
+        "label": "aspirate(target, volume_ul, *, liquid_class, columns=None)",
+        "doc": "Aspirate from target.",
+        "params": ["target", "volume_ul", "liquid_class", "columns"],
+        "active_param": 1,
+        "owner": "MCA96Head",
+    }
+    sh = to_signature_help(info)
+    assert sh.signatures[0].label.startswith("aspirate(")
+    assert [p.label for p in sh.signatures[0].parameters] == info["params"]
+    assert sh.active_parameter == 1
+    assert to_signature_help(None) is None
+
+    hover = to_hover(info)
+    assert "MCA96Head.aspirate(" in hover.contents.value
+    assert "Aspirate from target." in hover.contents.value
+    assert to_hover(None) is None

@@ -199,7 +199,18 @@ class introspection). Wired as the LSP `textDocument/completion` provider (trigg
 chars `.` `"` `'`) and as `fluentvibe complete <file> --line --col` for headless
 use. Tested by `tests/test_copilot_complete.py` + mapping tests in
 `tests/test_lsp.py`. *Next: infer the labware category from the class on the line
-to narrow catalog suggestions; hover docs.*
+to narrow catalog suggestions.*
+
+**Real-time support (live diagnostics + signature help + hover). ✅ SHIPPED.**
+Diagnostics now fire on `didChange` (debounced ~0.4 s), run **in-process**
+(`server.analyze` → `analyze_source`; fast because the package is already
+imported) so they update as you type and work on unsaved buffers. Added
+`fluentvibe/copilot/api_info.py` (`signature_at`/`hover_at`, pure introspection of
+the real classes) wired as `textDocument/signatureHelp` (trigger `(` `,`) and
+`textDocument/hover`. Tested by `tests/test_copilot_api_info.py` + mapping tests in
+`tests/test_lsp.py`. *Trade-off: in-process analysis executes `build_worktable()`
+per debounce — fine for hand-written linear protocols; a pathological infinite
+loop would need a warm-worker subprocess guard later.*
 
 ## 6. Open questions / risks
 
