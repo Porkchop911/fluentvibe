@@ -17,7 +17,7 @@ import sys
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
-from .convert import to_lsp_diagnostics
+from .convert import code_actions_for, to_lsp_diagnostics
 
 logger = logging.getLogger("fluentvibe.lsp")
 
@@ -75,6 +75,12 @@ def create_server() -> LanguageServer:
     @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
     def _did_save(ls: LanguageServer, params: lsp.DidSaveTextDocumentParams) -> None:
         _validate(ls, params.text_document.uri)
+
+    @server.feature(lsp.TEXT_DOCUMENT_CODE_ACTION)
+    def _code_action(
+        ls: LanguageServer, params: lsp.CodeActionParams
+    ) -> list[lsp.CodeAction]:
+        return code_actions_for(params.text_document.uri, params.context.diagnostics)
 
     return server
 

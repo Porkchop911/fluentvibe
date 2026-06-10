@@ -20,7 +20,11 @@ sys.path.insert(0, str(REPO_ROOT))
 from lsprotocol import types as lsp  # noqa: E402
 
 from fluentvibe.lsp import server as lsp_server  # noqa: E402
-from fluentvibe.lsp.convert import to_lsp_diagnostic, to_lsp_diagnostics  # noqa: E402
+from fluentvibe.lsp.convert import (  # noqa: E402
+    code_actions_for,
+    to_lsp_diagnostic,
+    to_lsp_diagnostics,
+)
 
 _BAD_PROTOCOL = '''\
 from fluentvibe import Worktable, Reagent, Plate96, MCA100Box
@@ -56,9 +60,18 @@ def _diag_dict(**over) -> dict:
         "source": "simulate",
         "hint": "Increase the initial fill volume.",
         "repair_options": ["increase_source_initial_volume"],
+        "fixes": [],
     }
     base.update(over)
     return base
+
+
+_MOUNT_FIX = {
+    "title": "Insert head.mount_adapter() before this line",
+    "kind": "insert_before",
+    "line": 15,
+    "text": "    head.mount_adapter()",
+}
 
 
 def test_convert_maps_to_zero_based_range_and_severity() -> None:
@@ -86,6 +99,32 @@ def test_to_lsp_diagnostics_list() -> None:
     out = to_lsp_diagnostics([_diag_dict(), _diag_dict(severity="warning")])
     assert len(out) == 2
     assert [x.severity for x in out] == [lsp.DiagnosticSeverity.Error, lsp.DiagnosticSeverity.Warning]
+
+
+def test_diagnostic_carries_fix_data() -> None:
+    d = to_lsp_diagnostic(_diag_dict(code="adapter_state", fixes=[_MOUNT_FIX]))
+    assert d.data == {"fixes": [_MOUNT_FIX]}
+
+
+def test_code_actions_builds_insert_edit() -> None:
+    uri = "file:///x.py"
+    diag = to_lsp_diagnostic(_diag_dict(code="adapter_state", fixes=[_MOUNT_FIX]))
+    actions = code_actions_for(uri, [diag])
+    assert len(actions) == 1
+    action = actions[0]
+    assert action.kind == lsp.CodeActionKind.QuickFix
+    assert action.title == _MOUNT_FIX["title"]
+    edit = action.edit.changes[uri][0]
+    assert edit.new_text == "    head.mount_adapter()\n"
+    # insert_before -> zero-width range at the start of the (0-based) target line.
+    assert edit.range.start.line == 14
+    assert edit.range.start.character == 0
+    assert edit.range.end == edit.range.start
+
+
+def test_code_actions_empty_when_no_fixes() -> None:
+    diag = to_lsp_diagnostic(_diag_dict(code="source_volume_short", fixes=[]))
+    assert code_actions_for("file:///x.py", [diag]) == []
 
 
 def test_looks_like_protocol() -> None:

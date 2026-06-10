@@ -164,9 +164,15 @@ import fluentvibe and define `build_worktable()`. Thin TS client scaffold under
 (convert mapping, heuristic, server construction, real subprocess analysis).
 *Diagnostics fire on open/save; live-on-change is deferred (needs debounce).*
 
-**Phase 3 — Deterministic fix-its (2–3 days).** Code actions for the mechanical
-repairs in 4b, driven by `_REPAIR_POLICIES` + `find_components`. *Exit: unknown
-catalog name and missing-adapter both offer one-click fixes that re-validate clean.*
+**Phase 3 — Deterministic fix-its. ✅ STARTED.** `fluentvibe/copilot/fixes.py`
+computes mechanical, line-based edits per failure category and attaches them to
+each `Diagnostic` (`fixes`); shown in `fluentvibe check` ("fix: …") and offered as
+LSP quick-fix code actions (`convert.code_actions_for`, server
+`TEXT_DOCUMENT_CODE_ACTION`, fix data round-tripped via `Diagnostic.data`).
+Shipped fixes: `adapter_state` → insert `<head>.mount_adapter()`, `tip_state` →
+insert `<head>.pick_up(...)`. Tested by `tests/test_copilot_fixes.py` + code-action
+tests in `tests/test_lsp.py`. *Still to add: unknown catalog name → closest
+`find_components` matches (catalog-gated), and `runtime_variable` → `set_sim_value`.*
 
 **Phase 4 — LLM assistance (3–5 days).** "Explain error" + "edit-with-prompt"
 backed by the existing authoring service and re-validated before offer. *Exit:

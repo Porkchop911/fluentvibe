@@ -320,6 +320,8 @@ def _cmd_check(args) -> int:
             print(f"{location}: [{d.severity}] {d.message}", file=sys.stderr)
             if d.hint:
                 print(f"    hint: {d.hint}", file=sys.stderr)
+            for fix in d.fixes:
+                print(f"    fix: {fix.title}", file=sys.stderr)
         if not diagnostics:
             print(f"{args.input}: no problems found")
     return 1 if any(d.severity == "error" for d in diagnostics) else 0
