@@ -53,6 +53,34 @@ def test_compute_fixes_none_for_build_source_or_other_category() -> None:
     assert compute_fixes("source_volume_short", 1, "simulate", ["    head.aspirate(s, 5)"]) == []
 
 
+def test_compute_fixes_missing_method_suggests_closest() -> None:
+    fixes = compute_fixes("missing_method", 1, "build", ["    head.aspirat(src, 20.0)"])
+    assert len(fixes) == 1
+    assert fixes[0].kind == "replace_line"
+    assert fixes[0].text == "    head.aspirat(src, 20.0)".replace("aspirat(", "aspirate(")
+    assert "aspirate" in fixes[0].title
+
+
+def test_compute_fixes_missing_method_none_when_no_close_match() -> None:
+    # A method nothing on the class resembles -> no guess.
+    assert compute_fixes("missing_method", 1, "build", ["    head.zzzzzzz(x)"]) == []
+    # An unknown receiver -> no class -> no fix.
+    assert compute_fixes("missing_method", 1, "build", ["    nope.aspirat(x)"]) == []
+
+
+def test_compute_fixes_runtime_variable_inserts_set_sim_value() -> None:
+    msg = "No sim-time value for runtime variable 'TARGET_VOLUME_UL'. Call `wt.set_sim_value(...)`."
+    fixes = compute_fixes(
+        "runtime_variable", 2, "simulate", ["x", "    head.aspirate(s, TARGET_VOLUME_UL)"], msg
+    )
+    assert len(fixes) == 1
+    assert fixes[0].kind == "insert_before"
+    assert fixes[0].line == 2
+    assert fixes[0].text.startswith('    wt.set_sim_value("TARGET_VOLUME_UL", ')
+    # Without the variable name in the message, there is nothing to seed.
+    assert compute_fixes("runtime_variable", 2, "simulate", ["x", "    y"], "no name here") == []
+
+
 def test_analyzer_attaches_mount_adapter_fix(tmp_path: Path) -> None:
     path = tmp_path / "no_adapter.py"
     path.write_text(_NO_ADAPTER, encoding="utf-8")

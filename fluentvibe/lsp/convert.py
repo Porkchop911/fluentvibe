@@ -86,11 +86,19 @@ def to_completion_items(
             start=lsp.Position(line=line, character=int(c.get("replace_start") or 0)),
             end=lsp.Position(line=line, character=cursor_char),
         )
+        is_snippet = c.get("insert_format") == "snippet"
+        doc = c.get("documentation")
         items.append(
             lsp.CompletionItem(
                 label=c["label"],
                 kind=_COMPLETION_KIND.get(c.get("kind"), lsp.CompletionItemKind.Text),
                 detail=c.get("detail") or None,
+                documentation=(
+                    lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=doc) if doc else None
+                ),
+                insert_text_format=(
+                    lsp.InsertTextFormat.Snippet if is_snippet else lsp.InsertTextFormat.PlainText
+                ),
                 text_edit=lsp.TextEdit(range=rng, new_text=c.get("insert_text") or c["label"]),
             )
         )

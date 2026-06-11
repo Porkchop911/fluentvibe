@@ -89,7 +89,7 @@ def analyze_source(source: str, path: str | Path) -> list[Diagnostic]:
 
     lines = source.splitlines()
     for d in diagnostics:
-        d.fixes = compute_fixes(d.code, d.line, d.source, lines)
+        d.fixes = compute_fixes(d.code, d.line, d.source, lines, d.message)
     return diagnostics
 
 
