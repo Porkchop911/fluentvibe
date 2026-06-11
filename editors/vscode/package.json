@@ -4,6 +4,12 @@
   "description": "Live diagnostics for fluentvibe protocol authoring (build errors + simulator failures).",
   "version": "0.1.0",
   "publisher": "fluentvibe",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Porkchop911/fluentvibe.git",
+    "directory": "editors/vscode"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

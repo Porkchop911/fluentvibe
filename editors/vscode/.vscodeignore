@@ -1,0 +1,16 @@
+# Source and build config — only the compiled out/ is shipped.
+.vscode/**
+.gitignore
+src/**
+tsconfig.json
+package-lock.json
+*.vsix
+**/*.map
+**/*.ts
+
+# Dev-only node_modules (TypeScript toolchain + type stubs). The runtime deps
+# (vscode-languageclient and its transitive js) stay.
+node_modules/typescript/**
+node_modules/@types/**
+node_modules/undici-types/**
+node_modules/.bin/**
