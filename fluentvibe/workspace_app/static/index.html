@@ -408,6 +408,60 @@
     }
     .author-composer textarea:focus { outline: none; box-shadow: none; }
     .author-composer button { width: auto; min-width: 92px; align-self: stretch; }
+    .author-attachbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .author-attachbar input { display: none; }
+    .attach-button {
+      display: inline-flex;
+      align-items: center;
+      width: auto;
+      min-height: 26px;
+      padding: 3px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .attach-button:hover { background: #f4f4f5; }
+    .attachment-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .attachment-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 240px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 2px 6px;
+      background: #f4f4f5;
+      color: var(--text);
+    }
+    .attachment-chip span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .attachment-chip button {
+      width: auto;
+      min-width: 0;
+      min-height: 18px;
+      padding: 0 4px;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+    }
     .author-pending { opacity: .65; }
     .author-pending .msg-title::after {
       content: '';
@@ -560,6 +614,11 @@
           <textarea id="authorPrompt" rows="1" placeholder="Message the author…  (Enter to send, Shift+Enter for newline)" disabled></textarea>
           <button id="sendAuthor" disabled>Send</button>
         </div>
+        <div class="author-attachbar">
+          <label class="attach-button secondary" for="authorAttachments">Attach files</label>
+          <input id="authorAttachments" type="file" multiple accept=".pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.py,application/pdf,text/*">
+          <div class="attachment-list" id="authorAttachmentList"></div>
+        </div>
 
         <details class="author-extras">
           <summary>Generated code &amp; raw result</summary>
@@ -672,7 +731,10 @@
       profiles: [],
       authorSessionId: null,
       authorMessages: [],
-      authorPending: false
+      authorPending: false,
+      authorAttachments: [],
+      capabilities: null,
+      attachmentsEnabled: false
     };
 
     const $ = (id) => document.getElementById(id);
@@ -805,6 +867,7 @@
       bindSetup();
       bindWorkbench();
       try {
+        await loadCapabilities();
         const [configs, workspaces, liquidClasses] = await Promise.all([
           api('/api/configurations'),
           api('/api/workspaces'),
@@ -825,6 +888,23 @@
       } catch (err) {
         setStatus('status', err.message, 'error');
       }
+    }
+
+    async function loadCapabilities() {
+      try {
+        state.capabilities = await api('/api/capabilities');
+        const caps = state.capabilities.attachments || {};
+        state.attachmentsEnabled = caps.enabled === true;
+        if (!caps.pdf_text_available) {
+          setStatus('authorStatus', 'PDF text extraction is unavailable: install fluentvibe[pdf].', 'error');
+        } else if (!caps.ocr_available) {
+          setStatus('authorStatus', `PDF upload enabled. Scanned PDFs need OCR: ${caps.ocr_error || 'OCR unavailable'}`);
+        }
+      } catch (err) {
+        state.attachmentsEnabled = false;
+        setStatus('authorStatus', 'Attachment support is unavailable in the running backend. Restart the workspace app.', 'error');
+      }
+      renderAuthorAttachments();
     }
 
     function bindTabs() {
@@ -861,6 +941,7 @@
           sendAuthorMessage();
         }
       });
+      $('authorAttachments').addEventListener('change', addAuthorAttachments);
       $('simulateSource').addEventListener('click', simulateSource);
       $('compileSource').addEventListener('click', compileSource);
       $('runDecompile').addEventListener('click', runDecompile);
@@ -1057,6 +1138,7 @@
           state.authorSessionId = result.session_id;
           $('sendAuthor').disabled = false;
           $('authorPrompt').disabled = false;
+          $('authorAttachments').disabled = !state.attachmentsEnabled;
           pushAuthorMessage(
             'system',
             'Session started',
@@ -1075,6 +1157,64 @@
     function setComposerBusy(busy) {
       $('sendAuthor').disabled = busy || !state.authorSessionId;
       $('authorPrompt').disabled = busy || !state.authorSessionId;
+      $('authorAttachments').disabled = busy || !state.authorSessionId || !state.attachmentsEnabled;
+    }
+
+    function addAuthorAttachments(event) {
+      const files = Array.from(event.target.files || []);
+      for (const file of files) {
+        state.authorAttachments.push(file);
+      }
+      event.target.value = '';
+      renderAuthorAttachments();
+    }
+
+    function renderAuthorAttachments() {
+      const list = $('authorAttachmentList');
+      if (!list) return;
+      if (!state.authorAttachments.length) {
+        list.innerHTML = `<span>${state.attachmentsEnabled ? 'No files attached' : 'Attachments unavailable until backend restart/capability check passes'}</span>`;
+        return;
+      }
+      list.innerHTML = state.authorAttachments.map((file, index) =>
+        `<div class="attachment-chip" title="${escapeHtml(file.name)}">
+          <span>${escapeHtml(file.name)}</span>
+          <button type="button" data-remove-attachment="${index}" title="Remove">×</button>
+        </div>`
+      ).join('');
+      list.querySelectorAll('button[data-remove-attachment]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.authorAttachments.splice(Number(btn.dataset.removeAttachment), 1);
+          renderAuthorAttachments();
+        });
+      });
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error(`Could not read ${file.name}`));
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          const marker = 'base64,';
+          const idx = result.indexOf(marker);
+          resolve(idx >= 0 ? result.slice(idx + marker.length) : result);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function buildAuthorAttachmentPayload() {
+      const out = [];
+      for (const file of state.authorAttachments) {
+        out.push({
+          name: file.name,
+          mime_type: file.type || null,
+          size: file.size,
+          content_base64: await readFileAsBase64(file)
+        });
+      }
+      return out;
     }
 
     async function sendAuthorMessage() {
@@ -1083,23 +1223,44 @@
         return;
       }
       const message = $('authorPrompt').value.trim();
-      if (!message) {
-        setStatus('authorStatus', 'Type a message first.', 'error');
+      if (!message && !state.authorAttachments.length) {
+        setStatus('authorStatus', 'Type a message or attach a file first.', 'error');
         return;
       }
       setComposerBusy(true);
       try {
-        pushAuthorMessage('user', 'You', message);
+        const attachments = await buildAuthorAttachmentPayload();
+        const sentAttachmentCount = attachments.length;
+        const attachmentLine = attachments.length
+          ? `\n\nAttachments: ${attachments.map(item => item.name).join(', ')}`
+          : '';
+        pushAuthorMessage('user', 'You', `${message || '(file attachment)'}${attachmentLine}`);
         $('authorPrompt').value = '';
         state.authorPending = true;
         renderAuthorChat();
         await submitAndPoll('authoring-send', {
           session_id: state.authorSessionId,
-          message
+          message,
+          attachments
         }, 'authorStatus', 'authorResult', result => {
+          const processed = result.attachments || [];
+          if (sentAttachmentCount && processed.length !== sentAttachmentCount) {
+            throw new Error(`Attachment processing mismatch: sent ${sentAttachmentCount}, backend processed ${processed.length}. Restart the workspace app and resend.`);
+          }
           const authored = result.authoring || {};
           const summary = summarizeAuthoringResult(authored);
           state.authorPending = false;
+          state.authorAttachments = [];
+          renderAuthorAttachments();
+          if (processed.length) {
+            pushAuthorMessage(
+              'system',
+              'Attachments processed',
+              processed.map(item =>
+                `${item.name}: ${item.extraction_method || 'extracted'}, ${item.extracted_chars || 0} chars${item.page_count ? `, ${item.page_count} pages` : ''}`
+              ).join('\n')
+            );
+          }
           pushAuthorMessage(
             authored.status === 'failure' ? 'error' : 'model',
             summary.title,
@@ -1356,6 +1517,7 @@
     }
 
     renderAuthorChat();
+    renderAuthorAttachments();
     init();
   </script>
 </body>

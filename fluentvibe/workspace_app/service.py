@@ -210,6 +210,14 @@ def catalog_info() -> dict[str, Any]:
     }
 
 
+def capabilities() -> dict[str, Any]:
+    from ..authoring.attachments import attachment_capabilities
+
+    caps = attachment_capabilities()
+    caps["workspace_app"] = {"api_version": 2}
+    return caps
+
+
 def submit_job(kind: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = dict(payload or {})
     handler = _job_handlers().get(kind)
@@ -332,18 +340,40 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _job_authoring_send(payload: dict[str, Any]) -> dict[str, Any]:
+    from ..authoring.attachments import (
+        build_attachment_context,
+        extract_uploaded_attachments,
+        looks_like_pdf_path,
+    )
+
     session_id = str(payload.get("session_id") or "").strip()
     message = str(payload.get("message") or "").strip()
+    raw_attachments = payload.get("attachments") or []
     if not session_id:
         raise ValueError("session_id is required")
-    if not message:
-        raise ValueError("message is required")
+    if not message and not raw_attachments:
+        raise ValueError("message or attachments are required")
+    if message and not raw_attachments and looks_like_pdf_path(message):
+        raise ValueError(
+            "PDF paths pasted into chat are not read. Use Attach files to upload the PDF."
+        )
     with _JOB_LOCK:
         session = _SESSIONS.get(session_id)
     if session is None:
         raise ValueError(f"Authoring session not found: {session_id!r}")
-    result = session.send(message)
-    return {"ok": True, "session_id": session_id, "authoring": result.to_dict()}
+    attachments = extract_uploaded_attachments(
+        raw_attachments,
+        output_dir=session.output_dir,
+        turn_index=len(getattr(session, "_user_turns", ())) + 1,
+    )
+    enriched_message = build_attachment_context(message, attachments)
+    result = session.send(enriched_message)
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "attachments": [item.to_dict() for item in attachments],
+        "authoring": result.to_dict(),
+    }
 
 
 def _job_simulate_source(payload: dict[str, Any]) -> dict[str, Any]:
