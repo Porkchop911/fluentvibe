@@ -873,6 +873,20 @@ def _profile_deck_skill(
         if layout_rows
         else ""
     )
+    class_rows = "\n".join(
+        f"| `{item.get('catalog_name')}` | `{item.get('python_class')}` |"
+        for item in profile.get("common_labware") or []
+        if item.get("catalog_name") and item.get("python_class")
+    )
+    class_section = (
+        "\n## Profile labware class contract\n\n"
+        "Use the exact `python_class` shown for each profile catalog. A protocol "
+        "that uses a listed catalog with any other class is invalid.\n\n"
+        "| Catalog | Required python_class |\n|---|---|\n"
+        f"{class_rows}\n"
+        if class_rows
+        else ""
+    )
     liquid_class = str((profile.get("liquid_class") or {}).get("name") or "Water Free Single")
 
     description = (
@@ -902,6 +916,7 @@ def _profile_deck_skill(
         "| Location | Valid positions |\n|---|---|\n"
         f"{position_rows}\n"
         f"{layout_section}\n"
+        f"{class_section}\n"
         "## Notes\n\n"
         "- Use ONLY the exact location keys above; do not invent location names.\n"
         f"- Default liquid class for this profile: `{liquid_class}`.\n"

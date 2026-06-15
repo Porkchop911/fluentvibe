@@ -40,6 +40,7 @@ class ResolvedProfile:
     current_worktable: Path
     deck_skill: Path | None
     labware: frozenset[str] = field(default_factory=frozenset)
+    labware_classes: dict[str, str] = field(default_factory=dict)
     liquid_classes: frozenset[str] = field(default_factory=frozenset)
     deck_rules: dict[str, Any] = field(default_factory=dict)
 
@@ -61,7 +62,7 @@ def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
     if not name or not guid:
         raise ValueError(f"Profile {root} is missing workspace.name/guid")
 
-    labware, liquid_classes, raw_deck_rules = _read_generation_profile(root)
+    labware, labware_classes, liquid_classes, raw_deck_rules = _read_generation_profile(root)
     # generation.profile.yaml keys deck_rules by workspace name (same shape as
     # the shipped generation.yaml); extract this workspace's flat rule set.
     deck_rules = raw_deck_rules.get(name, {}) if isinstance(raw_deck_rules, dict) else {}
@@ -76,6 +77,7 @@ def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
         current_worktable=root / "current_worktable.py",
         deck_skill=decks[0] if decks else None,
         labware=labware,
+        labware_classes=labware_classes,
         liquid_classes=liquid_classes,
         deck_rules=deck_rules,
     )
@@ -99,10 +101,10 @@ def profile_from_env() -> ResolvedProfile | None:
 
 def _read_generation_profile(
     root: Path,
-) -> tuple[frozenset[str], frozenset[str], dict[str, Any]]:
+) -> tuple[frozenset[str], dict[str, str], frozenset[str], dict[str, Any]]:
     path = root / "generation.profile.yaml"
     if not path.exists():
-        return frozenset(), frozenset(), {}
+        return frozenset(), {}, frozenset(), {}
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
@@ -111,8 +113,16 @@ def _read_generation_profile(
     labware = frozenset(
         str(x).strip() for x in (lab_scope.get("labware") or []) if str(x).strip()
     )
+    profile_block = data.get("workspace_profile") if isinstance(data.get("workspace_profile"), dict) else {}
+    labware_classes = {
+        str(item.get("catalog_name") or "").strip(): str(item.get("python_class") or "").strip()
+        for item in (profile_block.get("common_labware") or [])
+        if isinstance(item, dict)
+        and str(item.get("catalog_name") or "").strip()
+        and str(item.get("python_class") or "").strip()
+    }
     liquid_classes = frozenset(
         str(x).strip() for x in (lab_scope.get("liquid_classes") or []) if str(x).strip()
     )
     deck_rules = data.get("deck_rules") if isinstance(data.get("deck_rules"), dict) else {}
-    return labware, liquid_classes, deck_rules
+    return labware, labware_classes, liquid_classes, deck_rules

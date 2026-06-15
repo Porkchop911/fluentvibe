@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from fluentvibe.authoring.document_adherence import document_adherence_report
+from fluentvibe.authoring.lab_scope import LabScope
 from fluentvibe.authoring.tools import AuthoringToolRegistry
 
 
@@ -113,3 +114,36 @@ def test_cli_check_source_doc_json_includes_adherence(
     assert "document_adherence" in out
     codes = {issue["code"] for issue in out["document_adherence"]["issues"]}
     assert "missing_adapter_attachment" in codes
+
+
+def test_profile_labware_class_contract_rejects_source_mismatch(tmp_path: Path) -> None:
+    tools = AuthoringToolRegistry(output_dir=tmp_path)
+    tools.lab_scope = LabScope(
+        mode="skills",
+        labware=frozenset({"FCA, 1000ul SBS"}),
+        labware_classes={"FCA, 1000ul SBS": "FCA1000Box"},
+        liquid_classes=frozenset({"Water Free Single"}),
+    )
+
+    bad_source = """
+from fluentvibe import Worktable, TipBox
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(
+        "SAT_Fluent_1080_Test",
+        workspace_guid="test-guid",
+        auto_place=False,
+    )
+    wt.declare_variable("sample_count", "Number", 24)
+    wt.set_sim_value("sample_count", 24)
+    wt.group("Labware Placement")
+    wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 3)
+    return wt
+"""
+
+    result = tools.simulate_python_draft(bad_source)
+
+    assert result["ok"] is False
+    assert result["stage"] == "contract"
+    assert "Profile labware class contract violation" in result["message"]
+    assert "must use FCA1000Box" in result["message"]

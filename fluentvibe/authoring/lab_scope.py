@@ -83,6 +83,7 @@ class LabScope:
     mode: str = "off"
     cheatsheet_text: str | None = None
     labware: frozenset[str] = field(default_factory=frozenset)
+    labware_classes: dict[str, str] = field(default_factory=dict)
     liquid_classes: frozenset[str] = field(default_factory=frozenset)
     # Populated only in ``skills`` mode (loaded from ``_assets/config/skills``).
     skill_catalog: tuple = ()
@@ -233,6 +234,7 @@ def load_lab_scope(
     )
     if profile is not None and profile.labware:
         labware = profile.labware
+    labware_classes = dict(profile.labware_classes) if profile is not None else {}
     if profile is not None and profile.liquid_classes:
         liquid_classes = profile.liquid_classes
 
@@ -280,6 +282,7 @@ def load_lab_scope(
             mode=mode,
             cheatsheet_text=None,
             labware=labware,
+            labware_classes=labware_classes,
             liquid_classes=liquid_classes,
             skill_catalog=catalog,
         )
@@ -308,5 +311,6 @@ def load_lab_scope(
         mode=mode,
         cheatsheet_text=text,
         labware=labware,
+        labware_classes=labware_classes,
         liquid_classes=liquid_classes,
     )

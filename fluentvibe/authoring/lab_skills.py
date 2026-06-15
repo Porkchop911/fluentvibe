@@ -239,7 +239,25 @@ def assemble_context(scope: LabScope, names: list[str]) -> str | None:
     bodies = [by_name[n].body for n in names if n in by_name]
     if not bodies:
         return None
-    return context_header(scope.enforces) + _BODY_SEP.join(bodies)
+    profile_table = _profile_labware_class_table(scope)
+    pieces = ([profile_table] if profile_table else []) + bodies
+    return context_header(scope.enforces) + _BODY_SEP.join(pieces)
+
+
+def _profile_labware_class_table(scope: LabScope) -> str | None:
+    if not scope.labware_classes:
+        return None
+    rows = "\n".join(
+        f"| `{catalog}` | `{python_class}` |"
+        for catalog, python_class in sorted(scope.labware_classes.items())
+    )
+    return (
+        "## Profile labware class contract\n\n"
+        "Use the exact `python_class` shown for each profile catalog. A protocol "
+        "that uses a listed catalog with any other class is invalid.\n\n"
+        "| Catalog | Required python_class |\n|---|---|\n"
+        f"{rows}"
+    )
 
 
 def build_initial_scope_message(scope: LabScope, prompt: str, client) -> str | None:

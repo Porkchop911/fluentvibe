@@ -45,6 +45,18 @@ def _write_profile(root: Path) -> Path:
                 "labware": ["96_ABgene_SuperPlate_Thermo_AB2800", "MCA96, 200ul, Box"],
                 "liquid_classes": ["Water Free Single"],
             },
+            "workspace_profile": {
+                "common_labware": [
+                    {
+                        "catalog_name": "96_ABgene_SuperPlate_Thermo_AB2800",
+                        "python_class": "Plate96",
+                    },
+                    {
+                        "catalog_name": "MCA96, 200ul, Box",
+                        "python_class": "MCA200Box",
+                    },
+                ],
+            },
             "deck_rules": {WS_NAME: {"trough_locations": ["WS_100ml_"],
                                      "require_fca_tipbox": True, "check_mix_section": True}},
         }),
@@ -79,6 +91,7 @@ def test_profile_drives_deck_and_whitelist(tmp_path: Path) -> None:
     deck_names = [s.name for s in scope.skill_catalog if s.axis == "deck"]
     assert deck_names == [f"deck-{WS_NAME.lower()}"]
     assert scope.labware == rp.labware
+    assert scope.labware_classes == rp.labware_classes
     assert scope.liquid_classes == rp.liquid_classes
 
 
@@ -90,6 +103,8 @@ def test_assembled_context_binds_profile_workspace_only(tmp_path: Path) -> None:
     assert ctx is not None
     # binds to the profile's workspace …
     assert WS_GUID in ctx and WS_NAME in ctx
+    assert "Profile labware class contract" in ctx
+    assert "| `MCA96, 200ul, Box` | `MCA200Box` |" in ctx
     # … and NOTHING of the shipped 780 deck leaks through (the regression).
     assert DEFAULT_780_NAME not in ctx
     assert DEFAULT_780_GUID not in ctx
