@@ -41,6 +41,12 @@ def _write_profile(root: Path) -> Path:
                 "labware": ["Foo Plate", "Bar Tips"],
                 "liquid_classes": ["Test Liquid"],
             },
+            "workspace_profile": {
+                "common_labware": [
+                    {"catalog_name": "Foo Plate", "python_class": "Plate96"},
+                    {"catalog_name": "Bar Tips", "python_class": "FCA1000Box"},
+                ],
+            },
             "deck_rules": {
                 WS_NAME: {
                     "trough_locations": ["WS_50ml_"],
@@ -74,6 +80,7 @@ def test_resolve_profile_parses_all_fields(tmp_path: Path) -> None:
     assert rp.current_worktable == root / "current_worktable.py"
     assert rp.deck_skill is not None and rp.deck_skill.name == f"deck-{WS_NAME.lower()}.md"
     assert rp.labware == frozenset({"Foo Plate", "Bar Tips"})
+    assert rp.labware_classes == {"Foo Plate": "Plate96", "Bar Tips": "FCA1000Box"}
     assert rp.liquid_classes == frozenset({"Test Liquid"})
     # deck_rules are extracted (un-keyed) for this workspace
     assert rp.deck_rules["trough_locations"] == ["WS_50ml_"]

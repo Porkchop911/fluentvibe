@@ -2051,6 +2051,7 @@ class AuthoringToolRegistry:
         errors: list[dict[str, Any]] = []
         confirmed_catalogs = self._confirmed_catalog_names()
         confirmed_liquid_classes = self._confirmed_liquid_class_names()
+        profile_classes = dict(getattr(self.lab_scope, "labware_classes", {}) or {})
 
         for index, item in enumerate(object_draft["labware"]):
             label = _object_label(item, default=f"labware[{index}]")
@@ -2087,6 +2088,20 @@ class AuthoringToolRegistry:
                 })
                 continue
             if catalog_name:
+                expected_profile_class = profile_classes.get(catalog_name)
+                if expected_profile_class and python_class != expected_profile_class:
+                    errors.append({
+                        "field": f"labware[{index}].python_class",
+                        "label": label,
+                        "catalog_name": catalog_name,
+                        "received": python_class,
+                        "expected_python_class": expected_profile_class,
+                        "message": "Profile labware class contract violation.",
+                        "fix": (
+                            f"Use {expected_profile_class} for profile catalog "
+                            f"{catalog_name!r}; do not substitute {python_class!r}."
+                        ),
+                    })
                 row = resolve_by_name(catalog_name)
                 if row is None:
                     errors.append({
@@ -2771,6 +2786,11 @@ class AuthoringToolRegistry:
             contract_error = self.validator._check_contract(source)
             if contract_error is None and not self._is_staged_subdraft(source):
                 contract_error = self.validator._check_prompt_intent(source, self.current_prompt)
+            if contract_error is None:
+                contract_error = _check_source_against_profile_labware_classes(
+                    source,
+                    dict(getattr(self.lab_scope, "labware_classes", {}) or {}),
+                )
             if contract_error is None and self.object_draft_approved and self.object_draft:
                 contract_error = _check_source_against_approved_objects(source, self.object_draft)
             if contract_error:
@@ -2812,6 +2832,23 @@ class AuthoringToolRegistry:
 
     def compile_and_simulate(self, source: str) -> dict[str, Any]:
         self._compile_attempt += 1
+        profile_contract_error = _check_source_against_profile_labware_classes(
+            source,
+            dict(getattr(self.lab_scope, "labware_classes", {}) or {}),
+        )
+        if profile_contract_error:
+            return {
+                "success": False,
+                "ok": False,
+                "stage": "contract",
+                "category": FailureCategory.PYTHON_BUILD_FAILURE.value,
+                "python_build_ok": False,
+                "compile_ok": False,
+                "strict_simulation_ok": False,
+                "failure_category": FailureCategory.PYTHON_BUILD_FAILURE.value,
+                "message": profile_contract_error,
+                "failure_message": profile_contract_error,
+            }
         report = self.validator.validate(
             source,
             output_dir=self.output_dir,
@@ -3462,6 +3499,58 @@ def _check_source_against_approved_objects(source: str, object_draft: dict[str, 
                     f"Add `{python_var}.fill_all(<reagent>, {recommended:.1f})` "
                     f"(includes dead-volume buffer) before the first aspirate."
                 )
+    return None
+
+
+def _check_source_against_profile_labware_classes(
+    source: str,
+    profile_classes: dict[str, str],
+) -> str | None:
+    if not profile_classes:
+        return None
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "place":
+            continue
+        if not node.args:
+            continue
+        labware_call = node.args[0]
+        if not isinstance(labware_call, ast.Call):
+            continue
+        python_class = _call_name(labware_call.func)
+        if not python_class:
+            continue
+        catalog_name = _catalog_kwarg_value(labware_call)
+        if not catalog_name:
+            continue
+        expected = profile_classes.get(catalog_name)
+        if expected and python_class != expected:
+            return (
+                "Profile labware class contract violation: "
+                f"catalog {catalog_name!r} must use {expected}, got {python_class} "
+                f"on line {getattr(labware_call, 'lineno', '?')}."
+            )
+    return None
+
+
+def _call_name(func: ast.expr) -> str | None:
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _catalog_kwarg_value(call: ast.Call) -> str | None:
+    for keyword in call.keywords:
+        if keyword.arg == "catalog" and isinstance(keyword.value, ast.Constant):
+            value = keyword.value.value
+            return str(value).strip() if isinstance(value, str) else None
     return None
 
 

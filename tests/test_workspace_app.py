@@ -107,6 +107,10 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     # binds to THIS workspace, not a hardcoded default
     assert detail["workspace"]["guid"] in body
     assert detail["workspace"]["name"] in body
+    assert "Profile labware class contract" in body
+    for item in common_labware:
+        if item.get("catalog_name") and item.get("python_class"):
+            assert f"| `{item['catalog_name']}` | `{item['python_class']}` |" in body
 
     # generation.profile.yaml carries data-driven deck_rules for this workspace
     # (trough family derived from valid slots + the FC-universal guard flags).
