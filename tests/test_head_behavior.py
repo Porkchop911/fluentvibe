@@ -19,6 +19,7 @@ from fluentvibe import (  # noqa: E402
     Plate96,
     Reagent,
     SimulationError,
+    TipBox,
     Trough100mL,
     Worktable,
 )
@@ -79,6 +80,27 @@ def test_liha_aspirate_from_single_trough_repeats_for_mounted_channels() -> None
     assert report.final_labware["Dest"]["wells"]["H1"]["volume_ul"] == pytest.approx(20.0)
     a2 = report.final_labware["Dest"]["wells"].get("A2", {"volume_ul": 0.0})
     assert a2["volume_ul"] == pytest.approx(0.0)
+
+
+def test_liha_generic_fca_tipbox_infers_capacity_from_catalog() -> None:
+    wt = Worktable(name="liha generic fca tips")
+    wt.group("Setup")
+    src = wt.place(Plate96("BarcodePlate", catalog="96 Well Flat"), "Nest", 1)
+    dst = wt.place(Plate96("SamplePlate", catalog="96 Well Flat"), "Nest", 2)
+    tips = wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest", 3)
+    src.fill_all(Reagent("Rapid Barcode"), 5.0)
+
+    head = wt.liha
+    head.get_tips(tips)
+    head.aspirate(src, 1.0, liquid_class="Water Free Single")
+    head.dispense(dst, 1.0, liquid_class="Water Free Single")
+
+    wt.simulate()
+    report = wt.simulation_report
+    assert report is not None
+    assert report.final_labware["BarcodePlate"]["wells"]["A1"]["volume_ul"] == pytest.approx(4.0)
+    assert report.final_labware["SamplePlate"]["wells"]["A1"]["volume_ul"] == pytest.approx(1.0)
+    assert report.state_summary["tip_state"]["liha"]["capacity_ul"] == [1000.0]
 
 
 @pytest.mark.skipif(not index_exists(), reason="catalog index empty")
