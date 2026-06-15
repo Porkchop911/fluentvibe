@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import time
 from pathlib import Path
@@ -196,6 +197,130 @@ def test_workbench_authoring_session_job_finishes_without_model_call() -> None:
     assert job["status"] == "success"
     assert job["result"]["ok"] is True
     assert job["result"]["session_id"]
+
+
+def test_workspace_app_capabilities_expose_attachment_support() -> None:
+    caps = service.capabilities()
+    assert caps["ok"] is True
+    assert caps["workspace_app"]["api_version"] >= 2
+    assert caps["attachments"]["enabled"] is True
+    assert ".pdf" in caps["attachments"]["supported_extensions"]
+
+
+def test_workbench_authoring_send_enriches_uploaded_text_attachment(tmp_path: Path) -> None:
+    class FakeResult:
+        def to_dict(self):
+            return {"status": "clarification_required", "clarification_questions": []}
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.output_dir = tmp_path / "authoring"
+            self._user_turns = []
+            self.sent: list[str] = []
+
+        def send(self, text: str):
+            self.sent.append(text)
+            self._user_turns.append(text)
+            return FakeResult()
+
+    session = FakeSession()
+    session_id = "test-session-attachments"
+    with service._JOB_LOCK:
+        service._SESSIONS[session_id] = session
+    try:
+        payload = {
+            "session_id": session_id,
+            "message": "Use this SOP.",
+            "attachments": [
+                {
+                    "name": "sop.md",
+                    "mime_type": "text/markdown",
+                    "size": 19,
+                    "content_base64": base64.b64encode(b"Transfer 20 uL.\n").decode("ascii"),
+                }
+            ],
+        }
+        result = service._job_authoring_send(payload)
+    finally:
+        with service._JOB_LOCK:
+            service._SESSIONS.pop(session_id, None)
+
+    assert result["ok"] is True
+    assert result["attachments"][0]["name"] == "sop.md"
+    assert result["attachments"][0]["extraction_method"] == "text"
+    assert result["attachments"][0]["extracted_chars"] > 0
+    assert Path(result["attachments"][0]["stored_path"]).exists()
+    assert Path(result["attachments"][0]["extracted_text_path"]).exists()
+    assert "Use this SOP." in session.sent[0]
+    assert "Attached file: sop.md" in session.sent[0]
+    assert "Transfer 20 uL" in session.sent[0]
+
+
+def test_workbench_authoring_send_allows_attachment_without_message(tmp_path: Path) -> None:
+    class FakeResult:
+        def to_dict(self):
+            return {"status": "clarification_required", "clarification_questions": []}
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.output_dir = tmp_path / "authoring"
+            self._user_turns: list[str] = []
+            self.sent: list[str] = []
+
+        def send(self, text: str):
+            self.sent.append(text)
+            self._user_turns.append(text)
+            return FakeResult()
+
+    session = FakeSession()
+    session_id = "test-session-attachment-only"
+    with service._JOB_LOCK:
+        service._SESSIONS[session_id] = session
+    try:
+        result = service._job_authoring_send({
+            "session_id": session_id,
+            "message": "",
+            "attachments": [
+                {
+                    "name": "protocol.txt",
+                    "content_base64": base64.b64encode(b"Make a transfer protocol.").decode("ascii"),
+                }
+            ],
+        })
+    finally:
+        with service._JOB_LOCK:
+            service._SESSIONS.pop(session_id, None)
+
+    assert result["ok"] is True
+    assert "Please author a fluentvibe protocol" in session.sent[0]
+    assert "Make a transfer protocol." in session.sent[0]
+
+
+def test_workbench_authoring_send_rejects_pasted_pdf_path_without_upload(tmp_path: Path) -> None:
+    class FakeSession:
+        def __init__(self) -> None:
+            self.output_dir = tmp_path / "authoring"
+            self._user_turns: list[str] = []
+
+        def send(self, text: str):  # pragma: no cover - should not be called
+            raise AssertionError("session.send should not be called for pasted PDF paths")
+
+    session_id = "test-session-pdf-path"
+    with service._JOB_LOCK:
+        service._SESSIONS[session_id] = FakeSession()
+    try:
+        try:
+            service._job_authoring_send({
+                "session_id": session_id,
+                "message": r"C:\Users\Niko\Downloads\protocol.pdf",
+            })
+        except ValueError as exc:
+            assert "Use Attach files" in str(exc)
+        else:
+            raise AssertionError("pasted PDF path should be rejected")
+    finally:
+        with service._JOB_LOCK:
+            service._SESSIONS.pop(session_id, None)
 
 
 def test_workbench_simulate_source_job_reports_structured_result(tmp_path: Path) -> None:

@@ -68,6 +68,8 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
                 self._json(service.list_liquid_classes())
             elif parsed.path == "/api/catalog-info":
                 self._json(service.catalog_info())
+            elif parsed.path == "/api/capabilities":
+                self._json(service.capabilities())
             elif parsed.path == "/api/profiles":
                 self._json(service.list_profiles())
             elif parsed.path == "/api/profile":
