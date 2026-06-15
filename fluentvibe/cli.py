@@ -69,6 +69,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_check.add_argument("input", type=Path)
     p_check.add_argument("--json", dest="as_json", action="store_true",
                          help="emit diagnostics as JSON")
+    p_check.add_argument("--source-doc", type=Path, default=None,
+                         help="compare the protocol against a source PDF/text document")
     p_check.add_argument("--explain", action="store_true",
                          help="add a plain-language LLM explanation per diagnostic "
                               "(needs a reachable LM endpoint; see FLUENTVIBE_LM_ENDPOINT)")
@@ -355,6 +357,24 @@ def _cmd_check(args) -> int:
     from .copilot import analyze_file
 
     diagnostics = analyze_file(args.input)
+    document_adherence = None
+    if getattr(args, "source_doc", None):
+        from .authoring.document_adherence import (
+            document_adherence_report,
+            read_source_document,
+        )
+
+        source_doc = read_source_document(args.source_doc)
+        document_adherence = document_adherence_report(
+            source_text=str(source_doc.get("text") or ""),
+            protocol_source=Path(args.input).read_text(encoding="utf-8"),
+            source_name=str(source_doc.get("path") or args.source_doc),
+        )
+        document_adherence["extraction"] = {
+            "method": source_doc.get("extraction_method"),
+            "page_count": source_doc.get("page_count"),
+            "warnings": source_doc.get("warnings") or [],
+        }
 
     explanations: dict[int, str] = {}
     if getattr(args, "explain", False) and diagnostics:
@@ -367,7 +387,13 @@ def _cmd_check(args) -> int:
             if i in explanations:
                 item["explanation"] = explanations[i]
             out.append(item)
-        print(json.dumps(out, indent=2))
+        if document_adherence is None:
+            print(json.dumps(out, indent=2))
+        else:
+            print(json.dumps({
+                "diagnostics": out,
+                "document_adherence": document_adherence,
+            }, indent=2))
     else:
         for i, d in enumerate(diagnostics):
             location = f"{args.input}:{d.line}" + (f":{d.col}" if d.col else "")
@@ -378,9 +404,26 @@ def _cmd_check(args) -> int:
                 print(f"    fix: {fix.title}", file=sys.stderr)
             if i in explanations:
                 print(f"    explain: {explanations[i]}", file=sys.stderr)
+        if document_adherence is not None:
+            issues = document_adherence.get("issues") or []
+            print(
+                f"{args.source_doc}: document adherence "
+                f"{len(issues)} issue(s)"
+            )
+            for issue in issues:
+                print(
+                    f"    [{issue.get('severity')}] {issue.get('code')}: "
+                    f"{issue.get('message')}"
+                )
         if not diagnostics:
             print(f"{args.input}: no problems found")
-    return 1 if any(d.severity == "error" for d in diagnostics) else 0
+    doc_errors = []
+    if document_adherence is not None:
+        doc_errors = [
+            issue for issue in (document_adherence.get("issues") or [])
+            if issue.get("severity") == "error"
+        ]
+    return 1 if any(d.severity == "error" for d in diagnostics) or doc_errors else 0
 
 
 def _explain_diagnostics(args, diagnostics) -> dict[int, str]:

@@ -344,6 +344,30 @@ class PromptAuthoringSession:
         if result.status is AuthoringStatus.APPROVAL_REQUIRED:
             return result
         pending = self._registry.pending_approval_kind
+        if pending == "source_protocol" and self._registry.source_protocol_plan is not None:
+            plan = self._registry.source_protocol_plan
+            return AuthoringResult(
+                status=AuthoringStatus.APPROVAL_REQUIRED,
+                prompt=result.prompt,
+                spec=result.spec,
+                generated_code=result.generated_code,
+                validation=result.validation,
+                compiled_xscr=result.compiled_xscr,
+                clarification_questions=result.clarification_questions,
+                approval_request=ApprovalRequest(
+                    kind="source_protocol",
+                    title="Approve Source Protocol Plan",
+                    summary=str(plan.get("summary") or ""),
+                    payload=plan,
+                    question=(
+                        "Approve this extraction of the source document, or reply "
+                        "with missing/incorrect steps."
+                    ),
+                ),
+                best_draft_code=result.best_draft_code,
+                attempts=result.attempts,
+                tool_calls=result.tool_calls,
+            )
         if pending == "objects" and self._registry.object_draft is not None:
             draft = self._registry.object_draft
             return AuthoringResult(

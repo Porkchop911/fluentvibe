@@ -495,7 +495,7 @@ class _Nodes:
                 if repair_guidance is not None:
                     result = dict(result)
                     result["retrieved_recipes"] = repair_guidance["recipes"]
-            if name in {"present_object_draft", "present_functional_group_plan"}:
+            if name in {"present_source_protocol_plan", "present_object_draft", "present_functional_group_plan"}:
                 _supersede_prior_drafts(name, list(state["messages"]) + appended)
             appended.append(ToolMessage(
                 content=json.dumps(result, default=str),
@@ -1217,8 +1217,19 @@ def _approval_stage_block(
         "suggest_deck_layout",
         "ground_in_parallel",
         "declare_intent",
-        "present_object_draft",
+        "present_source_protocol_plan",
     }:
+        return None
+    if registry.requires_source_protocol_plan() and not registry.source_protocol_plan_approved:
+        return {
+            "ok": False,
+            "category": "source_protocol_approval_required",
+            "message": (
+                "Before object planning or Python drafting from attached file context, "
+                "call present_source_protocol_plan and wait for user approval."
+            ),
+        }
+    if tool_name == "present_object_draft":
         return None
     if not registry.object_draft_approved:
         return {

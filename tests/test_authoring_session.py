@@ -335,6 +335,40 @@ def test_session_surfaces_pending_object_approval_over_empty_failure() -> None:
     assert result.approval_request.payload == draft
 
 
+def test_session_surfaces_pending_source_protocol_approval_over_empty_failure() -> None:
+    session = PromptAuthoringSession(
+        output_dir=Path("build") / "test_authoring_session" / "pending_source_protocol",
+        client=FakeClient([]),
+    )
+    plan = {
+        "protocol_title": "Attached SOP",
+        "summary": "Extracted source steps",
+        "source_files": [{"name": "sop.pdf"}],
+        "steps": [{"description": "Barcode samples", "classification": "automated"}],
+    }
+    session._registry.source_protocol_plan = plan
+    session._registry.pending_approval_kind = "source_protocol"
+    failure = AuthoringResult(
+        status=AuthoringStatus.FAILURE,
+        prompt="attached SOP",
+        spec=None,
+        generated_code=None,
+        validation=None,
+        compiled_xscr=None,
+        failure_category=None,
+        failure_message=None,
+        attempts=3,
+        tool_calls=({"name": "present_source_protocol_plan"},),
+    )
+
+    result = session._normalize_pending_approval_result(failure)
+
+    assert result.status is AuthoringStatus.APPROVAL_REQUIRED
+    assert result.approval_request is not None
+    assert result.approval_request.kind == "source_protocol"
+    assert result.approval_request.payload == plan
+
+
 def test_session_resumes_after_clarification_and_compiles() -> None:
     draft = _valid_draft()
     client = FakeClient([

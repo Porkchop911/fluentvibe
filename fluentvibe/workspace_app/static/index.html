@@ -805,6 +805,27 @@
       }
       if (status === 'approval_required') {
         const req = authoring.approval_request || {};
+        if (req.kind === 'source_protocol') {
+          const payload = req.payload || {};
+          const steps = Array.isArray(payload.steps) ? payload.steps : [];
+          const lines = [
+            req.title || 'Approve Source Protocol Plan',
+            payload.protocol_title || '',
+            req.summary || payload.summary || '',
+            steps.length ? `Steps: ${steps.length}` : '',
+            ...steps.slice(0, 12).map((step, index) => {
+              const cls = step.classification || 'unclassified';
+              const ref = step.source_ref || step.page || '';
+              return `${index + 1}. [${cls}] ${step.description || step.name || ''}${ref ? ` (${ref})` : ''}`;
+            }),
+            steps.length > 12 ? `... ${steps.length - 12} more step(s)` : '',
+            req.question || ''
+          ].filter(Boolean);
+          return {
+            title: 'Source protocol approval',
+            text: lines.join('\n')
+          };
+        }
         const lines = [req.title, req.summary, req.question].filter(Boolean);
         return {
           title: 'Approval requested',
@@ -813,13 +834,23 @@
       }
       if (status === 'success') {
         const validation = authoring.validation || {};
+        const adherence = validation.document_adherence || null;
+        const adherenceLines = adherence
+          ? [
+              `Document adherence: ${adherence.issue_count || 0} issue(s)`,
+              ...(adherence.issues || []).slice(0, 6).map(issue =>
+                `[${issue.severity || 'info'}] ${issue.code || 'document'}: ${issue.message || ''}`
+              )
+            ]
+          : [];
         return {
           title: 'Protocol authored',
           text: [
             authoring.spec && authoring.spec.protocol_name ? authoring.spec.protocol_name : 'Authoring succeeded.',
             validation.python_path ? `Python: ${validation.python_path}` : '',
             authoring.compiled_xscr ? `XSCR: ${authoring.compiled_xscr}` : '',
-            `Attempts: ${authoring.attempts || 0}`
+            `Attempts: ${authoring.attempts || 0}`,
+            ...adherenceLines
           ].filter(Boolean).join('\n')
         };
       }

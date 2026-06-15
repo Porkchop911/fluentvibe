@@ -150,6 +150,14 @@ def build_attachment_context(user_text: str, attachments: list[ExtractedAttachme
     return "\n".join(blocks)
 
 
+def extract_file_text(path: Path | str) -> tuple[str, str, int | None, tuple[str, ...]]:
+    """Extract text from a supported file path without storing a copy."""
+
+    resolved = Path(path)
+    raw = resolved.read_bytes()
+    return _extract_text(resolved, raw)
+
+
 def _decode_attachment(item: dict[str, Any]) -> bytes:
     encoded = item.get("content_base64") or item.get("data_base64")
     if not isinstance(encoded, str) or not encoded.strip():
