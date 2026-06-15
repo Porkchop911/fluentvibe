@@ -680,6 +680,8 @@ class Simulator:
                         tip_box=step.labware_name,
                     )
                 capacity = tip_box.capacity_ul
+                if capacity <= 0.0:
+                    capacity = self._infer_liha_tip_capacity(tip_box.catalog_name)
                 tip_box.is_full = False
             elif tip_box is not None:
                 capacity = self._infer_liha_tip_capacity(tip_box.catalog_name)
