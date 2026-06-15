@@ -268,6 +268,7 @@ class ValidationReport:
     state_summary: dict[str, Any] | None = None
     final_labware: dict[str, Any] | None = None
     intent_check_ok: bool | None = None
+    document_adherence: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -287,6 +288,7 @@ class ValidationReport:
             "state_summary": self.state_summary,
             "final_labware": self.final_labware,
             "intent_check_ok": self.intent_check_ok,
+            "document_adherence": self.document_adherence,
         }
 
 

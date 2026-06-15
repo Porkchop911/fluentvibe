@@ -125,6 +125,14 @@ def build_worktable() -> Worktable:
 If the request cannot be safely authored, return a concise refusal or
 clarification request instead of code.
 
+When the user message contains attached file context, treat that document as a
+binding source protocol. Before object drafting, call present_source_protocol_plan
+with the ordered source-document steps, key volumes/reagents/labware/incubations,
+source references, and a classification for each step: automated,
+manual_off_deck, or unsupported. Do not omit unsupported or off-deck steps;
+surface them for approval and represent approved manual steps as explicit
+comments/waits where needed.
+
 When FluentControl shell validation is requested or available as the final
 vendor gate, use validate_fluentcontrol_shell only after compile_and_simulate
 has passed. Treat zero load failures and zero InfoPad error lines as vendor
@@ -358,6 +366,7 @@ class PromptAuthoringService:
             repair_hint=result.get("repair_hint"),
             attempt_index=int(result.get("attempt_index") or 1),
             state_summary=result.get("state_summary"),
+            document_adherence=result.get("document_adherence"),
         )
 
     def _failure(

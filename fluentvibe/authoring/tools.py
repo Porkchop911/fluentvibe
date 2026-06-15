@@ -858,6 +858,24 @@ def tool_definitions() -> list[dict[str, Any]]:
             },
             "liquid_class": {"type": "string"},
         }, required=()),
+        _tool("present_source_protocol_plan",
+              "When the user provides attached file context, present the source "
+              "protocol you extracted from that document BEFORE object drafting. "
+              "Every document step must be classified as automated, manual_off_deck, "
+              "or unsupported. Include key volumes, reagents, labware, incubations, "
+              "and page/source references when available. Wait for user approval or "
+              "requested changes before calling present_object_draft.", {
+            "protocol_title": {"type": "string"},
+            "summary": {"type": "string"},
+            "source_files": {"type": "array", "items": {"type": "object"}},
+            "steps": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Ordered source-document steps with description, classification, "
+                               "volumes, reagents, labware, incubations, and source_ref/page.",
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+        }, required=("protocol_title", "summary", "source_files", "steps")),
         _tool("declare_protocol_workflow",
               "Declare the high-level protocol plan before drafting Python. "
               "The first two groups must be exactly Variables and Labware Placement. "
@@ -1127,6 +1145,8 @@ class AuthoringToolRegistry:
         self._compile_attempt = 0
         self.current_intent: IntentSpec = IntentSpec()
         self.workflow_plan: ProtocolWorkflowPlan | None = None
+        self.source_protocol_plan: dict[str, Any] | None = None
+        self.source_protocol_plan_approved: bool = False
         self.object_draft: dict[str, Any] | None = None
         self.object_draft_approved: bool = False
         self.functional_group_plan_approved: bool = False
@@ -1409,6 +1429,7 @@ class AuthoringToolRegistry:
         return {
             "ask_user": self.ask_user,
             "declare_intent": self.declare_intent,
+            "present_source_protocol_plan": self.present_source_protocol_plan,
             "declare_protocol_workflow": self.declare_protocol_workflow,
             "present_object_draft": self.present_object_draft,
             "present_functional_group_plan": self.present_functional_group_plan,
@@ -1468,6 +1489,78 @@ class AuthoringToolRegistry:
         )
         self.current_intent = merged
         return {"ok": True, "intent": merged.to_dict()}
+
+    def requires_source_protocol_plan(self) -> bool:
+        text = self.current_prompt or self.user_history_text or self.latest_user_text or ""
+        return "Attached file context:" in text
+
+    def present_source_protocol_plan(
+        self,
+        protocol_title: str,
+        summary: str,
+        source_files: list[dict[str, Any]] | None,
+        steps: list[dict[str, Any]] | None,
+        warnings: list[str] | None = None,
+    ) -> dict[str, Any]:
+        plan = {
+            "protocol_title": str(protocol_title or "").strip() or "Source Protocol",
+            "summary": str(summary or "").strip(),
+            "source_files": [dict(item) for item in (source_files or ()) if isinstance(item, dict)],
+            "steps": [dict(item) for item in (steps or ()) if isinstance(item, dict)],
+            "warnings": [str(item) for item in (warnings or ()) if str(item).strip()],
+        }
+        errors: list[dict[str, Any]] = []
+        if not plan["source_files"]:
+            errors.append({"field": "source_files", "message": "At least one source file must be listed."})
+        if not plan["steps"]:
+            errors.append({"field": "steps", "message": "At least one source-document protocol step must be listed."})
+        valid = {"automated", "manual_off_deck", "unsupported"}
+        for index, step in enumerate(plan["steps"]):
+            description = str(step.get("description") or step.get("name") or "").strip()
+            classification = str(step.get("classification") or "").strip()
+            if not description:
+                errors.append({
+                    "field": f"steps[{index}].description",
+                    "message": "Each source step needs a description.",
+                })
+            if classification not in valid:
+                errors.append({
+                    "field": f"steps[{index}].classification",
+                    "received": classification,
+                    "message": "classification must be one of automated, manual_off_deck, unsupported.",
+                })
+        if errors:
+            self.source_protocol_plan = plan
+            self.source_protocol_plan_approved = False
+            self.object_draft_approved = False
+            self.functional_group_plan_approved = False
+            self.pending_approval_kind = "source_protocol"
+            return {
+                "ok": False,
+                "category": "source_protocol_plan_invalid",
+                "message": "Source protocol plan is not ready for user approval.",
+                "errors": errors,
+                "next_checkpoint": "Revise the source protocol plan and call present_source_protocol_plan again.",
+            }
+        self.source_protocol_plan = plan
+        self.source_protocol_plan_approved = False
+        self.object_draft_approved = False
+        self.functional_group_plan_approved = False
+        self.pending_approval_kind = "source_protocol"
+        return {
+            "ok": True,
+            "status": "needs_approval",
+            "approval": {
+                "kind": "source_protocol",
+                "title": "Approve Source Protocol Plan",
+                "summary": plan["summary"],
+                "payload": plan,
+                "question": (
+                    "Approve this extraction of the source document, or reply with "
+                    "missing/incorrect steps before labware planning."
+                ),
+            },
+        }
 
     def declare_protocol_workflow(
         self,
@@ -2257,6 +2350,10 @@ class AuthoringToolRegistry:
         }
 
     def approve_pending(self, kind: str) -> None:
+        if kind == "source_protocol" and self.pending_approval_kind == "source_protocol":
+            self.source_protocol_plan_approved = True
+            self.pending_approval_kind = None
+            return
         if kind == "objects" and self.pending_approval_kind == "objects":
             self.object_draft_approved = True
             self.pending_approval_kind = None
@@ -2267,7 +2364,12 @@ class AuthoringToolRegistry:
             return
 
     def reopen_pending(self, kind: str) -> None:
-        if kind == "objects":
+        if kind == "source_protocol":
+            self.source_protocol_plan_approved = False
+            self.object_draft_approved = False
+            self.functional_group_plan_approved = False
+            self.pending_approval_kind = "source_protocol"
+        elif kind == "objects":
             self.object_draft_approved = False
             self.functional_group_plan_approved = False
             self.pending_approval_kind = "objects"
@@ -2720,6 +2822,15 @@ class AuthoringToolRegistry:
         )
         payload = report.to_dict()
         payload["ok"] = report.success
+        if self.source_protocol_plan is not None:
+            from .document_adherence import document_adherence_report
+
+            payload["document_adherence"] = document_adherence_report(
+                source_text=self.current_prompt or "",
+                protocol_source=source,
+                source_name="attached file context",
+                approved_plan=self.source_protocol_plan,
+            )
         return payload
 
     def validate_fluentcontrol_shell(
