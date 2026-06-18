@@ -129,13 +129,20 @@ class LabScope:
     # compile it to .xscr. Everything else is withheld (see
     # ``allowed_tools``) and all pre-simulation gates are disabled.
     _ENFORCE_ALLOWED_TOOLS = frozenset({"simulate_python_draft", "compile_and_simulate"})
+    # ``skills`` shares enforce's two-tool judging surface but additionally
+    # exposes ``declare_protocol_workflow`` so it can stage a multi-stage
+    # protocol group-by-group (enforce stays strictly one-pass).
+    _SKILLS_ALLOWED_TOOLS = _ENFORCE_ALLOWED_TOOLS | {"declare_protocol_workflow"}
 
     def allowed_tools(self) -> frozenset[str] | None:
         """Tool names the LLM may call. ``None`` ⇒ no allow-list (all permitted).
 
-        Only ``enforce`` constrains the surface; off/cheatsheet return ``None``
-        so their tool exposure is byte-identical to baseline.
+        ``enforce`` restricts to the two judging tools; ``skills`` adds
+        ``declare_protocol_workflow`` for staged drafting; off/cheatsheet return
+        ``None`` so their tool exposure is byte-identical to baseline.
         """
+        if self.mode == "skills":
+            return self._SKILLS_ALLOWED_TOOLS
         return self._ENFORCE_ALLOWED_TOOLS if self.enforces else None
 
     def denied_tools(self) -> frozenset[str]:
@@ -188,8 +195,40 @@ _CHEATSHEET_HEADER = (
 )
 
 
-def context_header(enforces: bool) -> str:
-    """The header block for an injected lab-scope context message."""
+_SKILLS_HEADER = (
+    "LAB SCOPE (authoritative — this IS the catalog for this run). "
+    "Grounding and approval tools are intentionally unavailable: the only "
+    "tools you can call are `declare_protocol_workflow`, "
+    "`simulate_python_draft`, and `compile_and_simulate`. Everything the "
+    "removed tools used to look up (the head/object API, valid deck "
+    "positions, the workspace GUID, liquid classes, and the authoring "
+    "rules) is provided below and in the selected skills — do not ask for "
+    "it and do not attempt catalog search.\n\n"
+    "WORKFLOW: FIRST call `declare_protocol_workflow` with the protocol "
+    "name, a one-line summary, the planned variables and labware, and the "
+    "ORDERED functional groups. The first two groups must be exactly "
+    "`Variables` then `Labware Placement`; after them, name EVERY stage the "
+    "request describes as its own group (e.g. a bead/SPRI cleanup, ethanol "
+    "washes, elution, barcoding) — do not collapse or omit a stage. For a "
+    "multi-stage protocol you will then be guided to draft and "
+    "`simulate_python_draft` ONE group at a time, keeping prior accepted "
+    "code and extending it, until every group passes; only then call "
+    "`compile_and_simulate` on the full source. Fix any simulator error and "
+    "re-call `simulate_python_draft`. Use the exact `catalog=` names and "
+    "`python_class` values listed below. If the request needs labware not "
+    "in this list, say so explicitly and stop rather than substituting.\n\n"
+)
+
+
+def context_header(enforces: bool, *, staged: bool = False) -> str:
+    """The header block for an injected lab-scope context message.
+
+    ``staged`` selects the skills group-by-group workflow header (only skills
+    mode passes it); otherwise enforce's one-pass header or the cheatsheet
+    header is used.
+    """
+    if staged:
+        return _SKILLS_HEADER
     return _ENFORCE_HEADER if enforces else _CHEATSHEET_HEADER
 
 

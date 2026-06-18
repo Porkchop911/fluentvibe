@@ -8,7 +8,7 @@ always_on: false
 
 Multi-step workflow covering tagmentation (fragmentation + adapter tagging),
 library amplification by PCR, and bead-based size selection/cleanup. Reuses
-patterns from `family-bead-cleanup-ampure` for the cleanup phase and
+patterns from `family-bead-cleanup-spri` for the cleanup phase and
 `family-pcr-setup` for amplification setup.
 
 ### Overview of steps
@@ -32,7 +32,7 @@ NUM_SAMPLES            — number of samples (columns in the plate)
 
 ### Variables (bead cleanup phase — reuses bead-cleanup skill)
 
-See `family-bead-cleanup-ampure` for bead ratio, wash volumes, and elution.
+See `family-bead-cleanup-spri` for bead ratio, wash volumes, and elution.
 Typical NGS cleanup uses 0.8x-1.0x beads for clean-up or 0.5x/0.9x for
 double-size-selection.
 
@@ -94,7 +94,7 @@ head.drop_tips()
 wt.add_comment("Thermocycle: 72C 3min; 10-14x [95C 30s, 55C 30s, 72C 60s]; "
                "final 72C 1min, hold at 4C")
 
-# === PHASE 4: Bead cleanup (reuses family-bead-cleanup-ampure) ===
+# === PHASE 4: Bead cleanup (reuses family-bead-cleanup-spri) ===
 # See api-magnetization-model for magnet engage/disengage via gripper
 # Typical: add beads, mix, incubate, move to magnet, aspirate supernatant,
 # wash x2 with ethanol, air-dry, elute in buffer
@@ -118,7 +118,7 @@ enzymatic fragmentation, in deep-well plates:
   comment. See [capability-roadmap](../../docs/skill-authoring/capability-roadmap.md) P3.
 - **Thermocycler** (amplification cycles): off-deck, noted in comments. See roadmap P4.
 - **Bead cleanup**: fully authorable with current magnet + gripper model — see
-  `family-bead-cleanup-ampure` and `api-magnetization-model`.
+  `family-bead-cleanup-spri` and `api-magnetization-model`.
 
 ### Whitelist additions needed
 

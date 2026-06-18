@@ -39,7 +39,7 @@ FIELDS = [
 # bucket id -> target skill name (the skill the bucket's protocols feed).
 # `new-family-candidate` has no target yet — Claude decides axis/name on review.
 BUCKET_TARGET = {
-    "bead-cleanup": "family-bead-cleanup-ampure",
+    "bead-cleanup": "family-bead-cleanup-spri",
     "protein-assay": "family-protein-assay",
     "elisa": "family-elisa",
     "serial-dilution": "family-serial-dilution",

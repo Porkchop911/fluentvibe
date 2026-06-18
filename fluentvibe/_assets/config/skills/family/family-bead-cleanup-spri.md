@@ -1,13 +1,41 @@
 ---
-name: family-bead-cleanup-ampure
+name: family-bead-cleanup-spri
 axis: family
-description: AMPure XP / SPRI magnetic-bead PCR cleanup — add beads at a configurable ratio, bind on magnet, configurable ethanol washes, air-dry, elute, transfer eluate. Select for any bead-based cleanup, SPRI, size-selection, or magnetic-separation request. Covers bead ratio, reagent roles, resuspension mixing, and derived supernatant/eluate volumes.
+description: SPRI magnetic-bead PCR cleanup (e.g. AMPure XP and equivalents) — add beads at a configurable ratio, bind on magnet, configurable ethanol washes, air-dry, elute, transfer eluate. Select for any bead-based cleanup, SPRI, size-selection, or magnetic-separation request. Covers bead ratio, reagent roles, resuspension mixing, and derived supernatant/eluate volumes.
 always_on: false
+select_when:
+  - bead
+  - beads
+  - spri
+  - magnetic
+  - magnet
 ---
+## REQUIRED INVARIANTS — a bead cleanup is INVALID otherwise
+
+A cleanup that adds beads but never gets the product back off them is wrong even
+if every other step looks plausible. Before anything else, guarantee all five:
+
+1. **Tag the product** `Reagent("<name> DNA", role="analyte")` — without the
+   `analyte` role the model of what you are purifying does not exist and the
+   recovery cannot happen or be verified. The beads are `role="bead_carrier"`,
+   the elution buffer `role="eluent"`.
+2. **Elute OFF the magnet**: `wt.gripper.move(plate, to=("Nest61mm_Pos", 1))`
+   before dispensing elution buffer, then mix to release the analyte.
+3. **RECOVER the eluate**: after eluting, move the plate **back**
+   `onto=magnet`, then transfer the cleared eluate (now carrying the analyte)
+   to a SEPARATE clean plate. NEVER add downstream reagents (barcodes,
+   adapters, master mix) into the bead-containing well — barcoding/ligating on
+   the bead slurry is a failed protocol.
+4. **Analyte/eluate NEVER goes to waste** — only the supernatant and ethanol
+   washes are emptied to waste; the eluate transfer target is the clean plate.
+5. **Separate eluate tip box**: a second MCA tip box used only for the final
+   eluate transfer, so waste/wash beads do not carry over into the product.
+
 ## Canonical workflow: AMPure XP PCR cleanup (96-well)
 
 Annotated reference for the lab's most common bead-cleanup shape. Adapt
-volumes to the user's request; keep the structure.
+volumes to the user's request; keep the structure. Steps 7–8 below are the
+required eluate recovery from invariants 2–5 — they are not optional.
 
 1. **Variables** (top-level, before any `wt.group`): a liquid-class variable
    per role (default `"Water Free Single"`), `TARGET_VOLUME_UL`, bead/wash/
