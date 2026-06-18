@@ -93,6 +93,11 @@ class GraphState(TypedDict, total=False):
     last_accepted_source_hash: str | None
     result: AuthoringResult | None
     prompt: str
+    adherence_nudges: int
+    # Last draft that compiled+simulated cleanly, captured before an adherence
+    # nudge, as a ready success result. Used as the accept-with-gaps fallback if
+    # the model cannot produce another compiling draft after being nudged.
+    fallback_result: AuthoringResult | None
 
 
 # ── Public API ───────────────────────────────────────────────────────
@@ -224,10 +229,12 @@ def run_graph(
             last_accepted_source_hash=None,
             result=None,
             prompt=prompt,
+            adherence_nudges=0,
+            fallback_result=None,
         )
 
     final_state: GraphState = graph.invoke(initial_state)
-    result = final_state.get("result")
+    result = _prefer_fallback(final_state.get("result"), final_state.get("fallback_result"))
     if result is None:
         # Graph fell off the end without a terminal — should not happen, but
         # produce a defensive failure rather than crashing.
@@ -255,6 +262,28 @@ class _Nodes:
     concurrency: AuthoringConcurrencyConfig = field(default_factory=AuthoringConcurrencyConfig)
     trace_recorder: ModelTraceRecorder | None = None
 
+    def _effective_max_iterations(self) -> int:
+        """Iteration cap, scaled up for staged drafting.
+
+        Staged mode needs ~1+ model turn per declared functional group; the
+        base ``max_iterations`` (tuned for one-shot) would cut a multi-stage
+        protocol off mid-plan. Scale with the declared group count.
+        """
+        if getattr(self.registry, "staged_drafting", False):
+            groups = len(_workflow_groups(self.registry))
+            if groups:
+                return max(self.max_iterations, groups * 2 + 8)
+        return self.max_iterations
+
+    def _effective_max_tool_calls(self) -> int:
+        """Tool-call cap, scaled up for staged drafting (declare + per-group
+        simulate + repairs + compile)."""
+        if getattr(self.registry, "staged_drafting", False):
+            groups = len(_workflow_groups(self.registry))
+            if groups:
+                return max(self.max_tool_calls, groups * 3 + 12)
+        return self.max_tool_calls
+
     # Intent-axis nudge — runs once at the start of each `invoke`. Kept as a
     # node (not in run_graph) so multi-turn callers re-evaluate per send().
     def intent_nudge(self, state: GraphState) -> dict[str, Any]:
@@ -264,7 +293,7 @@ class _Nodes:
 
     def model_call(self, state: GraphState) -> dict[str, Any]:
         iterations = state.get("iterations", 0) + 1
-        if iterations > self.max_iterations:
+        if iterations > self._effective_max_iterations():
             return {
                 "iterations": iterations,
                 "result": _build_failure(
@@ -367,10 +396,12 @@ class _Nodes:
         last_validation = state.get("last_validation")
         current_group_index = state.get("current_group_index", 0)
         last_accepted_source_hash = state.get("last_accepted_source_hash")
+        adherence_nudges = state.get("adherence_nudges", 0)
+        fallback_result = state.get("fallback_result")
 
         for _enum_idx, call in enumerate(tool_calls):
             tool_call_count += 1
-            if tool_call_count > self.max_tool_calls:
+            if tool_call_count > self._effective_max_tool_calls():
                 return Command(
                     update={
                         "tool_call_count": tool_call_count,
@@ -477,12 +508,22 @@ class _Nodes:
                         f"Result: {json.dumps(grounding, default=str)}"
                     )))
             if name == "declare_protocol_workflow" and result.get("ok") is True:
+                # Decide now whether this declared plan needs per-group staging
+                # (multi-stage) or may be drafted in one pass (skills-simple).
+                self.registry.staged_drafting = _should_stage(self.registry)
                 appended.append(ToolMessage(
                     content=json.dumps(result, default=str),
                     tool_call_id=tool_call_id,
                     name=name,
                 ))
-                appended.append(_workflow_next_group_message(self.registry, current_group_index))
+                if getattr(self.registry, "staged_drafting", False):
+                    appended.append(_workflow_next_group_message(self.registry, current_group_index))
+                else:
+                    appended.append(HumanMessage(content=(
+                        "Workflow recorded. This protocol is simple enough to draft in one "
+                        "pass: write the complete build_worktable() source for all groups and "
+                        "call simulate_python_draft, then compile_and_simulate once it passes."
+                    )))
                 continue
 
             repair_guidance = None
@@ -566,6 +607,16 @@ class _Nodes:
                     if missing:
                         appended.append(_grounding_nudge_message(missing))
                         continue
+                    gaps = _coverage_gaps(result)
+                    if gaps and adherence_nudges < ADHERENCE_NUDGE_BUDGET:
+                        adherence_nudges += 1
+                        fallback_result = _build_success(
+                            registry=self.registry, state=state, code=best_code,
+                            tool_result=result, last_validation=last_validation,
+                            coverage_gaps=gaps,
+                        )
+                        appended.append(_adherence_nudge_message(gaps))
+                        continue
                     return Command(
                         update={
                             "tool_call_count": tool_call_count,
@@ -574,12 +625,14 @@ class _Nodes:
                             "last_validation": last_validation,
                             "current_group_index": current_group_index,
                             "last_accepted_source_hash": last_accepted_source_hash,
+                            "adherence_nudges": adherence_nudges,
                             "result": _build_success(
                                 registry=self.registry,
                                 state=state,
                                 code=best_code,
                                 tool_result=result,
                                 last_validation=last_validation,
+                                coverage_gaps=gaps,
                             ),
                         },
                         goto=END,
@@ -612,6 +665,16 @@ class _Nodes:
                         if missing:
                             appended.append(_grounding_nudge_message(missing))
                             continue
+                        gaps = _coverage_gaps(compile_result)
+                        if gaps and adherence_nudges < ADHERENCE_NUDGE_BUDGET:
+                            adherence_nudges += 1
+                            fallback_result = _build_success(
+                                registry=self.registry, state=state, code=best_code,
+                                tool_result=compile_result, last_validation=last_validation,
+                                coverage_gaps=gaps,
+                            )
+                            appended.append(_adherence_nudge_message(gaps))
+                            continue
                         return Command(
                             update={
                                 "tool_call_count": tool_call_count,
@@ -620,12 +683,14 @@ class _Nodes:
                                 "last_validation": last_validation,
                                 "current_group_index": current_group_index,
                                 "last_accepted_source_hash": last_accepted_source_hash,
+                                "adherence_nudges": adherence_nudges,
                                 "result": _build_success(
                                     registry=self.registry,
                                     state=state,
                                     code=best_code,
                                     tool_result=compile_result,
                                     last_validation=last_validation,
+                                    coverage_gaps=gaps,
                                 ),
                             },
                             goto=END,
@@ -649,6 +714,8 @@ class _Nodes:
                 "last_validation": last_validation,
                 "current_group_index": current_group_index,
                 "last_accepted_source_hash": last_accepted_source_hash,
+                "adherence_nudges": adherence_nudges,
+                "fallback_result": fallback_result,
             },
             goto="model_call",
         )
@@ -674,6 +741,21 @@ class _Nodes:
                         ),
                     },
                     goto=END,
+                )
+            # Skills staged drafting: a turn with neither a tool call nor a fenced
+            # draft is the model "thinking out loud" mid-plan. Re-nudge with the
+            # current group's instruction instead of aborting the whole run; the
+            # (staging-scaled) iteration budget remains the hard backstop. Scoped
+            # to skills so enforce/default keep their immediate-failure behavior.
+            _scope = getattr(self.registry, "lab_scope", None)
+            if _scope is not None and _scope.mode == "skills":
+                return Command(
+                    update={
+                        "messages": [_workflow_next_group_message(
+                            self.registry, state.get("current_group_index", 0)
+                        )],
+                    },
+                    goto="model_call",
                 )
             return Command(
                 update={
@@ -712,7 +794,7 @@ class _Nodes:
                 goto="model_call",
             )
 
-        if not _gates_off(self.registry) and self.registry.workflow_plan is None:
+        if _requires_workflow_declaration(self.registry) and self.registry.workflow_plan is None:
             return Command(
                 update={
                     "best_code": code,
@@ -736,20 +818,33 @@ class _Nodes:
             prompt=state.get("prompt", ""),
         )
         if validation.success:
+            gaps = _coverage_gaps_for_source(state.get("prompt", ""), code)
+            success = AuthoringResult(
+                status=AuthoringStatus.SUCCESS,
+                prompt=state.get("prompt", ""),
+                spec=None,
+                generated_code=code,
+                validation=validation,
+                compiled_xscr=validation.xscr_path,
+                attempts=iteration,
+                tool_calls=tuple(self.registry.calls),
+                coverage_gaps=tuple(gaps),
+            )
+            adherence_nudges = state.get("adherence_nudges", 0)
+            if gaps and adherence_nudges < ADHERENCE_NUDGE_BUDGET:
+                return Command(
+                    update={
+                        "last_validation": validation,
+                        "best_code": code,
+                        "adherence_nudges": adherence_nudges + 1,
+                        # Keep this clean draft as the accept-with-gaps fallback.
+                        "fallback_result": success,
+                        "messages": [_adherence_nudge_message(gaps)],
+                    },
+                    goto="model_call",
+                )
             return Command(
-                update={
-                    "last_validation": validation,
-                    "result": AuthoringResult(
-                        status=AuthoringStatus.SUCCESS,
-                        prompt=state.get("prompt", ""),
-                        spec=None,
-                        generated_code=code,
-                        validation=validation,
-                        compiled_xscr=validation.xscr_path,
-                        attempts=iteration,
-                        tool_calls=tuple(self.registry.calls),
-                    ),
-                },
+                update={"last_validation": validation, "result": success},
                 goto=END,
             )
         repair_msg = HumanMessage(content=(
@@ -1035,6 +1130,69 @@ def _grounding_nudge_message(missing: list[str]) -> HumanMessage:
     return _to_lc_message(_missing_grounding_message(missing))
 
 
+# Soft-gate budget: how many times the loop nudges the model to close
+# source-document coverage gaps before accepting the protocol with the gaps
+# attached. The `max_iterations` budget remains the hard backstop.
+ADHERENCE_NUDGE_BUDGET = 3
+
+
+def _prefer_fallback(
+    result: AuthoringResult | None, fallback: AuthoringResult | None
+) -> AuthoringResult | None:
+    """Choose the terminal result, applying accept-with-gaps.
+
+    If the run failed *after* an adherence nudge dropped a cleanly-compiling
+    draft, return that draft (with its gaps surfaced) rather than failing —
+    nudging must never make a usable protocol worse. Returns None only when both
+    are None (caller builds a defensive failure).
+    """
+    if result is None:
+        return fallback
+    if result.status is AuthoringStatus.FAILURE and fallback is not None:
+        return fallback
+    return result
+
+
+def _coverage_gaps(tool_result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Gating source-document coverage gaps from a compile/simulate result."""
+    from .document_adherence import coverage_gaps
+    return coverage_gaps((tool_result or {}).get("document_adherence"))
+
+
+def _coverage_gaps_for_source(prompt: str, code: str | None) -> list[dict[str, Any]]:
+    """Compute gating coverage gaps directly from prompt + code.
+
+    Used on the direct-Python (validate_locally) path, which produces a
+    ValidationReport rather than the compile tool result that carries an
+    adherence report. Only runs when the prompt carries attached source text.
+    """
+    if not code or "Attached file context:" not in (prompt or ""):
+        return []
+    from .document_adherence import coverage_gaps, document_adherence_report
+    report = document_adherence_report(
+        source_text=prompt or "",
+        protocol_source=code,
+        source_name="attached file context",
+        approved_plan=None,
+    )
+    return coverage_gaps(report)
+
+
+def _adherence_nudge_message(gaps: list[dict[str, Any]]) -> HumanMessage:
+    lines = "\n".join(
+        f"- {gap.get('message') or gap.get('code')}" for gap in gaps
+    )
+    return HumanMessage(content=(
+        "The protocol simulates, but it does not cover every stage the source "
+        "document describes. Each of these library-prep stages is missing:\n"
+        f"{lines}\n\n"
+        "Cover each one — either author it on-deck where the deck allows, or add "
+        "an explicit `wt.add_comment(...)` stating that stage is performed "
+        "manually/off-deck. Do not silently drop any stage. Then re-run "
+        "compile_and_simulate."
+    ))
+
+
 def _to_lc_message(raw: dict[str, Any]) -> BaseMessage:
     role = raw.get("role")
     content = raw.get("content") or ""
@@ -1085,13 +1243,55 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
     return [group.name for group in plan.groups]
 
 
+_SCAFFOLD_GROUPS = ("Variables", "Labware Placement")
+# Stage names that signal a protocol whose late stages carry order- and
+# volume-dependent detail the one-shot draft tends to botch — bead cleanups,
+# washes, elutions. Any match forces staged drafting in skills mode.
+_STAGE_TRIGGER_RE = re.compile(r"bead|clean|elut|wash|magnet|spri|ampure", re.IGNORECASE)
+
+
+def _requires_workflow_declaration(registry: AuthoringToolRegistry) -> bool:
+    """True for every active mode except ``enforce``.
+
+    Enforce writes the whole protocol in one pass with no plan; every other mode
+    (off/cheatsheet/skills) declares the ordered functional groups before
+    drafting. (``skills`` then stages only when the plan is multi-stage — see
+    :func:`_should_stage`.)
+    """
+    scope = getattr(registry, "lab_scope", None)
+    return not (scope is not None and scope.mode == "enforce")
+
+
+def _should_stage(registry: AuthoringToolRegistry) -> bool:
+    """Whether to enforce per-group checkpoints for the declared plan.
+
+    off/cheatsheet always stage (preserved baseline). ``skills`` stages only when
+    the plan is genuinely multi-stage — ≥3 non-scaffold groups, or any group that
+    names a bead/cleanup/wash/elution stage — so simple protocols still one-shot
+    after the (cheap) declaration.
+    """
+    scope = getattr(registry, "lab_scope", None)
+    if scope is None or scope.mode != "skills":
+        return True
+    non_scaffold = [g for g in _workflow_groups(registry) if g not in _SCAFFOLD_GROUPS]
+    if len(non_scaffold) >= 3:
+        return True
+    return any(_STAGE_TRIGGER_RE.search(g) for g in non_scaffold)
+
+
 def _workflow_complete(registry: AuthoringToolRegistry, current_group_index: int) -> bool:
     # Enforce: the single full-source draft is always "complete" — there is no
     # staged group plan, so a passing simulate goes straight to compile.
-    if _gates_off(registry):
+    if not _requires_workflow_declaration(registry):
         return True
     groups = _workflow_groups(registry)
-    return bool(groups) and current_group_index >= len(groups)
+    if not groups:
+        # Declaration required but not yet made — not complete (must declare).
+        return False
+    if not getattr(registry, "staged_drafting", False):
+        # Declared but simple (skills): one full-source pass is "complete".
+        return True
+    return current_group_index >= len(groups)
 
 
 def _advance_workflow_index(
@@ -1148,8 +1348,8 @@ def _workflow_stage_block(
     arguments: dict[str, Any],
     current_group_index: int,
 ) -> dict[str, Any] | None:
-    if _gates_off(registry):
-        return None
+    if not _requires_workflow_declaration(registry):
+        return None  # enforce: one-shot, no staging gate
     if tool_name not in {"simulate_python_draft", "compile_and_simulate"}:
         return None
     groups = _workflow_groups(registry)
@@ -1162,6 +1362,9 @@ def _workflow_stage_block(
                 "The first two functional groups must be `Variables` and `Labware Placement`."
             ),
         }
+    if not getattr(registry, "staged_drafting", False):
+        # Declared but simple (skills): allow the full-source draft in one pass.
+        return None
     if tool_name == "compile_and_simulate" and not _workflow_complete(registry, current_group_index):
         return {
             "ok": False,
@@ -1666,6 +1869,7 @@ def _build_success(
     code: str | None,
     tool_result: dict[str, Any],
     last_validation: Any,
+    coverage_gaps: list[dict[str, Any]] | None = None,
 ) -> AuthoringResult:
     return AuthoringResult(
         status=AuthoringStatus.SUCCESS,
@@ -1676,4 +1880,5 @@ def _build_success(
         compiled_xscr=Path(tool_result["xscr_path"]) if tool_result.get("xscr_path") else None,
         attempts=state.get("iterations", 0),
         tool_calls=tuple(registry.calls),
+        coverage_gaps=tuple(coverage_gaps or ()),
     )

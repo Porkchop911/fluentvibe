@@ -310,7 +310,18 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
     from ..authoring.lm_client import DEFAULT_LM_STUDIO_MODEL
     from ..authoring.profile import resolve_profile
 
-    output_dir = _workbench_path(payload.get("output_dir"), "authored")
+    raw_output_dir = payload.get("output_dir")
+    if raw_output_dir:
+        output_dir = _workbench_path(raw_output_dir, "authored")
+    else:
+        # Each generation gets its own timestamped folder so runs no longer
+        # overwrite one another under build/workbench/authored.
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        output_dir = WORKBENCH_BASE_DIR / "authored" / stamp
+        if output_dir.exists():
+            # Same-second collision (rare): keep the stamp readable, add a suffix.
+            output_dir = WORKBENCH_BASE_DIR / "authored" / f"{stamp}-{uuid.uuid4().hex[:4]}"
+        output_dir.mkdir(parents=True, exist_ok=True)
     profile_name = str(payload.get("profile_name") or "").strip()
     profile_dir = _profile_dir(profile_name) if profile_name else None
     workspace_name = None

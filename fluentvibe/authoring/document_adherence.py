@@ -73,6 +73,41 @@ _CONCEPTS: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
 )
 
 
+# Adherence omissions that should gate acceptance ("automate or justify"): a
+# library-prep liquid-handling stage named in the source document with no
+# corresponding automated step *or* justifying comment in the protocol. Stages
+# that are inherently downstream/instrument steps (flow-cell loading,
+# quantification) and the informational `missing_volume` codes are deliberately
+# excluded — they are surfaced in the report but never block.
+GATING_CODES: frozenset[str] = frozenset({
+    "missing_barcoding",
+    "missing_thermal_incubation",
+    "missing_pooling",
+    "missing_magnetic_bead_cleanup",
+    "missing_ethanol_wash",
+    "missing_elution",
+    "missing_adapter_attachment",
+    "missing_approved_source_step",
+})
+
+
+def coverage_gaps(report: dict[str, Any] | None) -> list[dict[str, str]]:
+    """Warning-severity adherence omissions that should gate acceptance.
+
+    Returns the subset of ``report['issues']`` whose code is in
+    :data:`GATING_CODES`. Non-gating omissions (instrument/QC stages, volume
+    infos) are left in the report but excluded here so the soft gate only
+    pushes on library-prep stages the deck can plausibly cover or justify.
+    """
+    if not report:
+        return []
+    return [
+        issue
+        for issue in report.get("issues", [])
+        if issue.get("severity") == "warning" and issue.get("code") in GATING_CODES
+    ]
+
+
 def read_source_document(path: str | Path) -> dict[str, Any]:
     """Read a text/PDF source document and return extracted text metadata."""
 

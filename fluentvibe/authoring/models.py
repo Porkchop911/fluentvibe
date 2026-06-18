@@ -307,6 +307,9 @@ class AuthoringResult:
     best_draft_code: str | None = None
     attempts: int = 0
     tool_calls: tuple[dict[str, Any], ...] = ()
+    # Residual source-document coverage gaps accepted under the soft gate
+    # (library-prep stages neither automated nor justified by a comment).
+    coverage_gaps: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -337,4 +340,5 @@ class AuthoringResult:
             "best_draft_code": self.best_draft_code,
             "attempts": self.attempts,
             "tool_calls": list(self.tool_calls),
+            "coverage_gaps": list(self.coverage_gaps),
         }

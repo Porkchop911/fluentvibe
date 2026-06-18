@@ -17,6 +17,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from .graph import (
     AuthoringConcurrencyConfig,
     GraphState,
+    _prefer_fallback,
     _to_lc_message,
     adapt_client,
     build_authoring_graph,
@@ -231,6 +232,8 @@ class PromptAuthoringSession:
             "last_accepted_source_hash": None,
             "result": None,
             "prompt": self._registry.current_prompt or history_text,
+            "adherence_nudges": 0,
+            "fallback_result": None,
         }
 
         final_state = graph.invoke(initial_state)
@@ -239,7 +242,13 @@ class PromptAuthoringSession:
         self._last_validation = final_state.get("last_validation", self._last_validation)
         self._iterations += int(final_state.get("iterations", 0))
 
-        result = final_state.get("result")
+        # Accept-with-gaps: if the run failed after an adherence nudge dropped a
+        # cleanly-compiling draft, return that draft (with its gaps) instead of
+        # failing. run_graph (CLI path) applies the same rule; the session path
+        # must too, or the fallback never reaches the webapp.
+        result = _prefer_fallback(
+            final_state.get("result"), final_state.get("fallback_result")
+        )
         if result is None:
             return self._failure(
                 FailureCategory.MODEL_AUTHORING_FAILURE,
