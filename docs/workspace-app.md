@@ -72,12 +72,21 @@ class. **Save profile** then writes a self-contained profile directory under
 | `current_worktable.*` | A worktable snapshot the authoring grounding layer loads. |
 | `generation.profile.yaml` | Data-driven `deck_rules` for this workspace (trough family, FC guard flags) consumed by generation. |
 | a `--lab-scope skills` **deck skill** | An always-on deck skill bound to *this* workspace's GUID/name, so authoring targets this deck rather than the shipped default. |
+| `workspace_modules.yaml` + `modules/` | Optional approved Python helpers for reusable workspace-specific operations, copied beside generated drafts so the model can import them. |
 | `README.md` | A human summary of the saved profile. |
 
 The save path validates that every placed item sits in a **valid slot** and that
 the workspace file hasn't changed since you loaded it (a stale
 `workspace_source.sha256` is rejected). Saved profiles are re-listable and
 re-loadable for editing.
+
+**Workspace modules.** The Setup tab can scan the selected workspace and common
+labware for reusable helper opportunities. V1 proposes a vetted `spri_cleanup`
+module when the profile looks bead-cleanup capable; approving it writes the
+module into the saved profile. Authoring then advertises the import/signature in
+`--lab-scope skills`, and simulation/validation copy the helper into the draft
+directory so generated protocols can use `from workspace_modules import
+spri_cleanup`.
 
 > The deck map's geometry is computed in JavaScript (absolute slot positions and
 > sizes from the workspace arrangement). Treat it as load-bearing; see the

@@ -248,12 +248,15 @@ class PromptAuthoringService:
         # dispatch_tools (with repair_lock + grounding gates) → extract_python
         # → validate_locally → terminal {success, clarify, fail}.
         from .graph import run_graph
+        from .profile import profile_from_env
 
+        _profile = profile_from_env()
         registry = AuthoringToolRegistry(
             output_dir=output_dir,
             workspace_name=workspace_name,
             workspace_guid=workspace_guid,
             current_prompt=prompt,
+            workspace_modules=tuple(_profile.workspace_modules) if _profile is not None else (),
         )
         registry.set_authoring_context(
             original_prompt=prompt,
@@ -262,7 +265,11 @@ class PromptAuthoringService:
         )
         # Narrowed-scope experiment: inert unless --lab-scope/env is set.
         # Stored on the registry so the Lever-B tool filter can consult it.
-        scope = load_lab_scope(lab_scope)
+        scope = (
+            load_lab_scope(lab_scope, profile=_profile)
+            if _profile is not None
+            else load_lab_scope(lab_scope)
+        )
         registry.lab_scope = scope
         initial_messages: list[Any] | None = None
         # For off/cheatsheet/enforce this is the static cheatsheet; for skills
@@ -301,6 +308,7 @@ class PromptAuthoringService:
                 client=self._client,
                 system_prompt=SYSTEM_PROMPT,
                 initial_messages=initial_messages,
+                validator=registry.validator,
                 concurrency=self._concurrency,
                 trace_recorder=trace,
             )

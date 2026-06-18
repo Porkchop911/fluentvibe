@@ -87,6 +87,8 @@ class LabScope:
     liquid_classes: frozenset[str] = field(default_factory=frozenset)
     # Populated only in ``skills`` mode (loaded from ``_assets/config/skills``).
     skill_catalog: tuple = ()
+    # Approved, profile-scoped Python helper modules available to generated code.
+    workspace_modules: tuple = ()
 
     @property
     def is_active(self) -> bool:
@@ -324,6 +326,7 @@ def load_lab_scope(
             labware_classes=labware_classes,
             liquid_classes=liquid_classes,
             skill_catalog=catalog,
+            workspace_modules=tuple(profile.workspace_modules) if profile is not None else (),
         )
 
     cheatsheet_name = block.get("cheatsheet") or "lab_scope.md"
@@ -352,4 +355,5 @@ def load_lab_scope(
         labware=labware,
         labware_classes=labware_classes,
         liquid_classes=liquid_classes,
+        workspace_modules=tuple(profile.workspace_modules) if profile is not None else (),
     )

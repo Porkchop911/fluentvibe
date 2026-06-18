@@ -17,6 +17,10 @@ from fluentvibe.authoring.profile import (  # noqa: E402
     profile_from_env,
     resolve_profile,
 )
+from fluentvibe.authoring.workspace_modules import (  # noqa: E402
+    MANIFEST_NAME,
+    MODULES_DIR_NAME,
+)
 
 WS_NAME = "Test_Deck_X"
 WS_GUID = "abcdef00-1111-2222-3333-444455556666"
@@ -85,6 +89,41 @@ def test_resolve_profile_parses_all_fields(tmp_path: Path) -> None:
     # deck_rules are extracted (un-keyed) for this workspace
     assert rp.deck_rules["trough_locations"] == ["WS_50ml_"]
     assert rp.deck_rules["require_fca_tipbox"] is True
+
+
+def test_resolve_profile_loads_approved_workspace_modules(tmp_path: Path) -> None:
+    root = _write_profile(tmp_path / "prof")
+    modules_dir = root / MODULES_DIR_NAME
+    modules_dir.mkdir()
+    (modules_dir / "workspace_modules.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
+    (root / MANIFEST_NAME).write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "modules": [
+                {
+                    "name": "spri_cleanup",
+                    "description": "validated cleanup",
+                    "source": "modules/workspace_modules.py",
+                    "import_name": "workspace_modules",
+                    "function": "spri_cleanup",
+                    "triggers": ["spri", "bead"],
+                    "parameters": ["sample_plate"],
+                    "required_roles": ["analyte"],
+                    "approved": True,
+                    "validation_status": "passed",
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+    rp = resolve_profile(root)
+
+    assert len(rp.workspace_modules) == 1
+    module = rp.workspace_modules[0]
+    assert module.name == "spri_cleanup"
+    assert module.is_usable is True
+    assert module.import_line == "from workspace_modules import spri_cleanup"
 
 
 def test_resolve_profile_rejects_non_profile_dir(tmp_path: Path) -> None:

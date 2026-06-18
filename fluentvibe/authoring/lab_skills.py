@@ -25,6 +25,7 @@ from pathlib import Path
 import yaml
 
 from .lab_scope import LabScope, context_header
+from .workspace_modules import render_workspace_module_context
 
 # api → deck → family. Stable ordering for the assembled context block so the
 # injected message is deterministic regardless of selection order.
@@ -311,7 +312,12 @@ def assemble_context(scope: LabScope, names: list[str]) -> str | None:
     if not bodies:
         return None
     profile_table = _profile_labware_class_table(scope)
-    pieces = ([profile_table] if profile_table else []) + bodies
+    module_context = render_workspace_module_context(tuple(scope.workspace_modules))
+    pieces = (
+        ([profile_table] if profile_table else [])
+        + ([module_context] if module_context else [])
+        + bodies
+    )
     # assemble_context only runs for ``skills`` mode (see build_initial_scope_message),
     # which stages multi-stage protocols group-by-group — use the staged header.
     return context_header(scope.enforces, staged=True) + _BODY_SEP.join(pieces)

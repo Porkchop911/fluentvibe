@@ -78,6 +78,7 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
             "workspace_source": detail["workspace_source"],
             "common_labware": common_labware,
             "liquid_class": detail["liquid_class"],
+            "workspace_modules": [{"name": "spri_cleanup", "approved": True}],
         },
         base_dir=tmp_path,
     )
@@ -89,6 +90,11 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     assert profile["workspace_source"]["sha256"] == detail["workspace_source"]["sha256"]
     assert profile["common_labware"]
     assert Path(paths["generation_yaml"]).exists()
+    assert Path(paths["modules_manifest"]).exists()
+    assert Path(paths["modules_dir"], "workspace_modules.py").exists()
+    manifest = service.yaml.safe_load(Path(paths["modules_manifest"]).read_text(encoding="utf-8"))
+    assert manifest["modules"][0]["name"] == "spri_cleanup"
+    assert manifest["modules"][0]["approved"] is True
     snapshot = load_current_worktable_snapshot(Path(paths["current_worktable"]))
     assert snapshot is not None
     assert snapshot["workspace"]["guid"] == detail["workspace"]["guid"]
@@ -121,6 +127,23 @@ def test_save_profile_writes_generation_artifacts(tmp_path: Path) -> None:
     assert deck_rules["require_fca_tipbox"] is True
     assert deck_rules["check_mix_section"] is True
     assert all(loc.startswith("WS_") for loc in deck_rules["trough_locations"])
+
+
+def test_propose_workspace_modules_offers_spri_for_matching_setup() -> None:
+    result = service.propose_workspace_modules({
+        "prompt": "We do AMPure bead cleanup here.",
+        "common_labware": [
+            {"category": "magnet_rack", "catalog_name": "24 Magnet Plate"},
+            {"category": "tip_box", "catalog_name": "MCA96, 100ul, Box", "python_class": "MCA100Box"},
+        ],
+    })
+
+    assert result["ok"] is True
+    assert result["modules"]
+    proposal = result["modules"][0]
+    assert proposal["name"] == "spri_cleanup"
+    assert proposal["approved"] is False
+    assert "source_preview" in proposal
 
 
 def test_list_and_load_profiles_roundtrip(tmp_path: Path) -> None:

@@ -13,6 +13,7 @@ from fluentvibe.authoring import PromptAuthoringService, PromptAuthoringSession
 from fluentvibe.authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
 from fluentvibe.authoring.models import AuthoringStatus
 from fluentvibe.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring.workspace_modules import WorkspaceModule
 
 
 def _valid_draft() -> str:
@@ -48,6 +49,38 @@ def build_worktable() -> Worktable:
     head.drop_adapter()
     return wt
 '''
+
+
+def test_simulate_python_draft_imports_workspace_module(tmp_path):
+    module_path = tmp_path / "profile" / "modules" / "workspace_modules.py"
+    module_path.parent.mkdir(parents=True)
+    module_path.write_text('HELPER_COMMENT = "module imported"\n', encoding="utf-8")
+    source = _valid_draft().replace(
+        "from fluentvibe import Worktable, Reagent, Plate96, MCA100Box",
+        "from fluentvibe import Worktable, Reagent, Plate96, MCA100Box\n"
+        "from workspace_modules import HELPER_COMMENT",
+    ).replace(
+        'comment="20 uL transfer validator fixture",',
+        'comment=HELPER_COMMENT,',
+    )
+    tools = AuthoringToolRegistry(
+        output_dir=tmp_path / "out",
+        workspace_modules=(
+            WorkspaceModule(
+                name="test_helper",
+                description="test helper",
+                source_path=module_path,
+                import_name="workspace_modules",
+                function="HELPER_COMMENT",
+                approved=True,
+                validation_status="passed",
+            ),
+        ),
+    )
+
+    result = tools.simulate_python_draft(source)
+
+    assert result["ok"] is True
 
 
 def _invalid_draft() -> str:

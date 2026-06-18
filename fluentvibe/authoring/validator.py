@@ -10,9 +10,13 @@ from typing import Any
 
 from .models import FailureCategory, IntentSpec, ValidationReport
 from .repair_policy import resolve_repair_policy
+from .workspace_modules import WorkspaceModule, copy_workspace_modules
 
 
 class AuthoringValidator:
+    def __init__(self, *, workspace_modules: tuple[WorkspaceModule, ...] = ()) -> None:
+        self.workspace_modules = tuple(workspace_modules)
+
     def validate(
         self,
         source: str,
@@ -24,6 +28,7 @@ class AuthoringValidator:
         intent: IntentSpec | None = None,
     ) -> ValidationReport:
         output_dir.mkdir(parents=True, exist_ok=True)
+        copy_workspace_modules(self.workspace_modules, output_dir)
         python_path = output_dir / f"{stem}.py"
         xscr_path = output_dir / f"{stem}.xscr"
         python_path.write_text(source, encoding="utf-8")
@@ -207,11 +212,14 @@ class AuthoringValidator:
             raise ValueError(f"Could not load {input_path}")
         module = importlib.util.module_from_spec(spec)
         original = sys.dont_write_bytecode
+        original_path = list(sys.path)
         sys.dont_write_bytecode = True
         try:
+            sys.path.insert(0, str(input_path.parent))
             spec.loader.exec_module(module)
         finally:
             sys.dont_write_bytecode = original
+            sys.path[:] = original_path
 
         if hasattr(module, "build_worktable"):
             return module.build_worktable()
