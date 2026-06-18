@@ -309,6 +309,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
     from ..authoring import PromptAuthoringSession
     from ..authoring.lm_client import DEFAULT_LM_STUDIO_MODEL
     from ..authoring.profile import resolve_profile
+    from ..authoring.trace import ModelTraceConfig
 
     raw_output_dir = payload.get("output_dir")
     if raw_output_dir:
@@ -330,6 +331,11 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         profile = resolve_profile(profile_dir)
         workspace_name = profile.workspace_name
         workspace_guid = profile.workspace_guid
+    # Model-reasoning traces are ON for the workbench GUI by default: each turn's
+    # request/response (incl. streamed reasoning) lands in
+    # <output_dir>/model_traces. Pass model_trace=false in the payload to opt out.
+    trace_enabled = bool(payload.get("model_trace", True))
+    trace_config = ModelTraceConfig.from_env(output_dir=output_dir, enabled=trace_enabled)
     session = PromptAuthoringSession(
         output_dir=output_dir,
         retry_budget=int(payload.get("retry_budget") or 8),
@@ -338,6 +344,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         model=str(payload.get("model") or "") or DEFAULT_LM_STUDIO_MODEL,
         lab_scope=str(payload.get("lab_scope") or "skills"),
         profile_dir=profile_dir,
+        trace_config=trace_config,
     )
     session_id = str(uuid.uuid4())
     with _JOB_LOCK:
@@ -347,6 +354,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         "session_id": session_id,
         "profile_name": profile_name or None,
         "output_dir": str(output_dir),
+        "model_traces": str(output_dir / "model_traces") if trace_enabled else None,
     }
 
 
