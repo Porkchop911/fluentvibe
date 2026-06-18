@@ -3,6 +3,10 @@ name: family-pooling
 axis: family
 description: Pool samples from multiple wells or plates into a single destination well or tube — column-wise consolidation and fixed-volume pooling via scalar loops; volume-equalized / arbitrary source-to-destination pooling from a CSV pick list via a worklist. Select for pooling, sample combining, library pool construction, multiplex pooling, normalase/normalization pooling, or consolidation transfers.
 always_on: false
+select_when:
+  - pool
+  - pooled
+  - pooling
 ---
 ## Canonical workflow: pooling (fixed-volume skeleton)
 

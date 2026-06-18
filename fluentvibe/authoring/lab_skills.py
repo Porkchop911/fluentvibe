@@ -51,6 +51,11 @@ class Skill:
     # mapping; ``None`` for non-deck skills (and decks that omit it).
     workspace_name: str | None = None
     workspace_guid: str | None = None
+    # Optional deterministic selection triggers: prompt substrings (matched
+    # case-insensitively, on word boundaries) that force this skill to be
+    # injected regardless of the LM pre-pass. Parsed from a ``select_when:``
+    # frontmatter list. Empty for skills that rely on LM selection alone.
+    select_when: tuple[str, ...] = ()
 
     def matches_workspace(self, name: str | None, guid: str | None) -> bool:
         """True when this deck targets the given workspace (guid wins, else name)."""
@@ -84,6 +89,12 @@ def _parse_skill(path: Path) -> Skill | None:
     ws = meta.get("workspace") if isinstance(meta.get("workspace"), dict) else {}
     ws_name = str(ws.get("name") or "").strip() or None
     ws_guid = str(ws.get("guid") or "").strip() or None
+    raw_triggers = meta.get("select_when")
+    select_when = (
+        tuple(str(t).strip() for t in raw_triggers if str(t).strip())
+        if isinstance(raw_triggers, list)
+        else ()
+    )
     return Skill(
         name=name,
         axis=axis,
@@ -93,6 +104,7 @@ def _parse_skill(path: Path) -> Skill | None:
         path=path,
         workspace_name=ws_name,
         workspace_guid=ws_guid,
+        select_when=select_when,
     )
 
 
@@ -179,19 +191,73 @@ _SELECTION_SYSTEM = (
     "You are given a list of optional skills (name, axis, description) and the "
     "user's request. Return ONLY a JSON array of the skill names that are "
     "relevant — no prose, no markdown fence. Pick every head/API skill the "
-    "protocol will actually use and exactly one protocol-family skill. If "
-    "unsure, include the skill. Example: [\"head-liha\", \"family-simple-transfer\"]."
+    "protocol will actually use, and every protocol-family skill it needs — a "
+    "multi-stage protocol often needs several (e.g. a sequencing library prep "
+    "that includes a magnetic-bead cleanup needs BOTH the library-prep family "
+    "and the bead-cleanup family; a prep that pools samples also needs the "
+    "pooling family). If unsure, include the skill. Example: "
+    "[\"head-liha\", \"family-ngs-library-prep\", \"family-bead-cleanup-spri\"]."
 )
+
+
+def _select_when_hits(optional: list[Skill], prompt: str) -> set[str]:
+    """Optional skill names whose ``select_when`` triggers occur in ``prompt``.
+
+    Deterministic, LM-independent: a configured domain trigger (e.g. the
+    bead-cleanup family's "ampure"/"spri") force-includes its skill so a
+    high-signal request never depends on the LM pre-pass picking it.
+    """
+    low = (prompt or "").lower()
+    hits: set[str] = set()
+    for skill in optional:
+        for term in skill.select_when:
+            if re.search(rf"\b{re.escape(term.lower())}\b", low):
+                hits.add(skill.name)
+                break
+    return hits
+
+
+def _expand_cross_references(
+    names: set[str], catalog: tuple[Skill, ...], *, max_hops: int = 2
+) -> set[str]:
+    """Pull in skills that selected skills reference by name in their bodies.
+
+    A family skill that says "reuses ``family-bead-cleanup-spri``" must
+    actually deliver that skill's body, not just a dangling pointer. Bounded
+    transitive closure over verbatim skill-name mentions; never expands into
+    ``deck`` skills (those are workspace-matched, not content-referenced).
+    """
+    bodies = {s.name: s.body for s in catalog}
+    expandable = [s.name for s in catalog if s.axis != "deck"]
+    result = set(names)
+    frontier = set(names)
+    for _ in range(max_hops):
+        added: set[str] = set()
+        for current in frontier:
+            body = bodies.get(current, "")
+            for other in expandable:
+                if other in result or other == current:
+                    continue
+                if other in body:
+                    added.add(other)
+        if not added:
+            break
+        result |= added
+        frontier = added
+    return result
 
 
 def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
     """Return the ordered skill names to inject for ``prompt``.
 
     ``always_on`` skills are always included. The remaining (optional) skills
-    are chosen by an LM pre-pass over ``client.invoke``. On any failure
-    (transport error, unparseable reply, no valid names) the optional set
-    falls back to ALL optional skills, so ``skills`` mode degrades to the
-    ``enforce`` monolith rather than dropping context.
+    are chosen by an LM pre-pass over ``client.invoke``, then augmented
+    deterministically: ``select_when`` domain triggers force-include
+    high-signal families, and cross-reference expansion pulls in skills that
+    selected skills name in their bodies. On any LM failure (transport error,
+    unparseable reply, no valid names) the optional set falls back to ALL
+    optional skills, so ``skills`` mode degrades to the ``enforce`` monolith
+    rather than dropping context.
     """
     always = {s.name for s in catalog if s.always_on}
     optional = [s for s in catalog if not s.always_on]
@@ -229,8 +295,13 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
         chosen = None
 
     if chosen is None:
-        chosen = optional_names  # safe fallback: load everything
-    return _order_names(always | chosen, catalog)
+        # Safe fallback: load everything. Triggers/cross-refs are redundant.
+        return _order_names(always | optional_names, catalog)
+
+    # Deterministic augmentation on top of the LM's picks.
+    chosen |= _select_when_hits(optional, prompt)
+    selected = _expand_cross_references(always | chosen, catalog)
+    return _order_names(selected, catalog)
 
 
 def assemble_context(scope: LabScope, names: list[str]) -> str | None:
@@ -241,7 +312,9 @@ def assemble_context(scope: LabScope, names: list[str]) -> str | None:
         return None
     profile_table = _profile_labware_class_table(scope)
     pieces = ([profile_table] if profile_table else []) + bodies
-    return context_header(scope.enforces) + _BODY_SEP.join(pieces)
+    # assemble_context only runs for ``skills`` mode (see build_initial_scope_message),
+    # which stages multi-stage protocols group-by-group — use the staged header.
+    return context_header(scope.enforces, staged=True) + _BODY_SEP.join(pieces)
 
 
 def _profile_labware_class_table(scope: LabScope) -> str | None:

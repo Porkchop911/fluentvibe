@@ -76,7 +76,7 @@ def test_discover_real_catalog():
     catalog = discover_skills(config_dir)
     assert catalog, "no skill files discovered"
     names = {s.name for s in catalog}
-    assert {"core-worktable-api", "deck-sat-780", "family-bead-cleanup-ampure"} <= names
+    assert {"core-worktable-api", "deck-sat-780", "family-bead-cleanup-spri"} <= names
     assert all(s.axis in {"api", "deck", "family"} for s in catalog)
     assert all(s.description for s in catalog)
     # the core api skills are always_on; decks are NOT (they are selected by
@@ -160,9 +160,10 @@ def test_skills_load_shares_enforce_posture():
     # whitelist still populated (shared with enforce)
     assert "96_ABgene_SuperPlate_Thermo_AB2800" in scope.labware
     assert "Water Free Single" in scope.liquid_classes
-    # identical tool surface to enforce
+    # tool surface mirrors enforce's two judging tools, plus the one extra tool
+    # skills needs to stage a multi-stage protocol group-by-group.
     enforce = load_lab_scope("enforce")
-    assert scope.allowed_tools() == enforce.allowed_tools()
+    assert scope.allowed_tools() == enforce.allowed_tools() | {"declare_protocol_workflow"}
     assert scope.denied_tools() == enforce.denied_tools()
 
 
@@ -177,11 +178,11 @@ def test_select_includes_always_on_and_picked():
     names = select_skills(
         "AMPure bead cleanup",
         cat,
-        _FakeClient('["family-bead-cleanup-ampure", "head-mca96"]'),
+        _FakeClient('["family-bead-cleanup-spri", "head-mca96"]'),
     )
     assert "core-worktable-api" in names  # always_on
     assert "deck-sat-780" in names  # always_on
-    assert "family-bead-cleanup-ampure" in names
+    assert "family-bead-cleanup-spri" in names
     assert "head-mca96" in names
     assert "family-simple-transfer" not in names  # not picked
 
@@ -191,7 +192,7 @@ def test_select_drops_unknown_names_then_falls_back():
     # only an unknown name → nothing valid picked → fallback to all optional
     names = select_skills("x", cat, _FakeClient('["does-not-exist"]'))
     assert "family-simple-transfer" in names
-    assert "family-bead-cleanup-ampure" in names
+    assert "family-bead-cleanup-spri" in names
 
 
 def test_select_falls_back_on_transport_error():
@@ -204,6 +205,83 @@ def test_select_falls_back_on_garbage_reply():
     cat = _catalog()
     names = select_skills("x", cat, _FakeClient("sorry, I cannot help"))
     assert set(names) == {s.name for s in cat}
+
+
+# ── deterministic augmentation: cross-refs + select_when triggers ───────
+
+def test_select_pulls_cross_referenced_skill():
+    # family-ngs-library-prep's body defers the cleanup to
+    # family-bead-cleanup-spri ("reuses ..."). Selecting the parent must
+    # actually deliver the referenced skill, even if the LM omitted it.
+    cat = _catalog()
+    names = select_skills(
+        "NGS library prep with size selection",
+        cat,
+        _FakeClient('["family-ngs-library-prep"]'),
+    )
+    assert "family-ngs-library-prep" in names
+    assert "family-bead-cleanup-spri" in names  # pulled via cross-reference
+    # it also references family-pcr-setup
+    assert "family-pcr-setup" in names
+
+
+def test_select_when_force_includes_bead_cleanup_despite_lm_omission():
+    # The LM (stubbed) picks only the library-prep family and the head, NOT the
+    # bead-cleanup family — but the prompt mentions AMPure, so the deterministic
+    # trigger force-includes it regardless.
+    cat = _catalog()
+    names = select_skills(
+        "Resuspend the AMPure XP beads and clean up the library",
+        cat,
+        _FakeClient('["head-liha"]'),
+    )
+    assert "family-bead-cleanup-spri" in names
+
+
+def test_select_when_pooling_trigger():
+    cat = _catalog()
+    names = select_skills(
+        "Pool all barcoded samples into one tube",
+        cat,
+        _FakeClient('["head-liha"]'),
+    )
+    assert "family-pooling" in names
+
+
+def test_select_when_does_not_overfire_on_unrelated_prompt():
+    # A plain transfer must not drag in the bead-cleanup or pooling families.
+    cat = _catalog()
+    names = select_skills(
+        "transfer 20 uL from a source plate to a destination plate",
+        cat,
+        _FakeClient('["family-simple-transfer", "head-liha"]'),
+    )
+    assert "family-bead-cleanup-spri" not in names
+    assert "family-pooling" not in names
+
+
+def test_select_accepts_multiple_family_skills():
+    cat = _catalog()
+    names = select_skills(
+        "library prep then pool",
+        cat,
+        _FakeClient('["family-ngs-library-prep", "family-pooling", "head-liha"]'),
+    )
+    fam = {n for n in names if n.startswith("family-")}
+    assert {"family-ngs-library-prep", "family-pooling", "family-bead-cleanup-spri"} <= fam
+
+
+def test_select_when_frontmatter_parses_on_shipped_skills():
+    cat = _catalog()
+    by_name = {s.name: s for s in cat}
+    # Triggers are brand-neutral generic terms (not "ampure"): any SPRI / magnetic
+    # bead cleanup selects the skill, regardless of bead brand.
+    bead_triggers = set(by_name["family-bead-cleanup-spri"].select_when)
+    assert {"bead", "magnetic"} <= bead_triggers
+    assert "ampure" not in bead_triggers
+    assert "pool" in by_name["family-pooling"].select_when
+    # skills without the field default to an empty tuple (degrade cleanly)
+    assert by_name["family-simple-transfer"].select_when == ()
 
 
 # ── profile deck swap ──────────────────────────────────────────────────
@@ -295,7 +373,7 @@ def test_assemble_orders_api_deck_family_with_header():
     names = select_skills(
         "bead cleanup",
         scope.skill_catalog,
-        _FakeClient('["family-bead-cleanup-ampure", "head-liha", "head-gripper"]'),
+        _FakeClient('["family-bead-cleanup-spri", "head-liha", "head-gripper"]'),
     )
     ctx = assemble_context(scope, names)
     assert ctx is not None

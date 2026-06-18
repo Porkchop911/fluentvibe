@@ -12,7 +12,7 @@ magnet, then the target is eluted. The bead/magnet mechanics are identical to
 SPRI — magnetization is implied by stacking onto the `MagnetRack`, beads are a
 solid-phase well attribute via reagent roles, binding happens on an off-magnet
 mix. **Reuse the mechanism from `api-magnetization-model`** and the bind/wash/
-elute structure from `family-bead-cleanup-ampure`; this family adds the
+elute structure from `family-bead-cleanup-spri`; this family adds the
 *affinity ligand* and a *binding incubation*.
 
 ### Variables
