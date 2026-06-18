@@ -166,11 +166,26 @@ from fluentvibe import Layer, Reagent, Worktable
 
 
 def _ensure_analyte_marker(sample_plate, analyte: Reagent, volume_ul: float) -> float:
-    """Ensure every sample well contains a small free analyte marker."""
+    """Normalize sample wells to bulk sample liquid plus a small analyte marker."""
     marker = max(0.5, min(2.0, float(volume_ul) * 0.1))
+    matrix = Reagent(f"{analyte.name} matrix")
     for well in sample_plate.wells.values():
-        if not any(layer.reagent is analyte or layer.reagent.name == analyte.name for layer in well.layers):
-            well.layers.append(Layer(reagent=analyte, volume_ul=marker))
+        analyte_layers = [
+            layer for layer in well.layers
+            if layer.reagent is analyte or layer.reagent.name == analyte.name
+        ]
+        other_layers = [
+            layer for layer in well.layers
+            if not (layer.reagent is analyte or layer.reagent.name == analyte.name)
+        ]
+        other_volume = sum(layer.volume_ul for layer in other_layers)
+        target_bulk = max(float(volume_ul) - marker, 0.0)
+        if other_volume < target_bulk:
+            other_layers.append(Layer(reagent=matrix, volume_ul=target_bulk - other_volume))
+        well.layers = other_layers
+        # Keep analyte non-volumetric in practice: it tracks product recovery,
+        # while the plain matrix layer preserves liquid bookkeeping.
+        well.layers.append(Layer(reagent=analyte, volume_ul=marker))
     return marker
 
 
@@ -226,7 +241,7 @@ def spri_cleanup(
     wt.group("SPRI cleanup - magnetise and remove supernatant")
     wt.gripper.move(sample_plate, onto=magnet)
     head.aspirate(sample_plate, supernatant_ul, liquid_class=liquid_class)
-    head.dispense(waste_labware, supernatant_ul, liquid_class=liquid_class)
+    head.empty_tips(waste_labware, supernatant_ul, liquid_class=liquid_class)
     wt.gripper.move(sample_plate, to=sample_plate.slot)
 
     wt.group("SPRI cleanup - elute off magnet")
