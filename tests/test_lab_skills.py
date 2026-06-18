@@ -18,10 +18,12 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from fluentvibe.authoring import lab_scope as lab_scope_mod  # noqa: E402
 from fluentvibe.authoring.lab_scope import (  # noqa: E402
+    LabScope,
     LabScopeSetupError,
     load_lab_scope,
     resolve_lab_scope_mode,
 )
+from fluentvibe.authoring.workspace_modules import WorkspaceModule  # noqa: E402
 from fluentvibe.authoring.lab_skills import (  # noqa: E402
     apply_profile_deck,
     assemble_context,
@@ -382,6 +384,41 @@ def test_assemble_orders_api_deck_family_with_header():
     fam_pos = ctx.index("AMPure XP PCR cleanup")
     api_pos = ctx.index("## `Worktable`")
     assert api_pos < fam_pos
+
+
+def test_assemble_context_includes_workspace_modules(tmp_path):
+    module_path = tmp_path / "workspace_modules.py"
+    module_path.write_text("def spri_cleanup():\n    pass\n", encoding="utf-8")
+    scope = load_lab_scope("skills")
+    scope = LabScope(
+        mode=scope.mode,
+        cheatsheet_text=scope.cheatsheet_text,
+        labware=scope.labware,
+        labware_classes=scope.labware_classes,
+        liquid_classes=scope.liquid_classes,
+        skill_catalog=scope.skill_catalog,
+        workspace_modules=(
+            WorkspaceModule(
+                name="spri_cleanup",
+                description="validated cleanup",
+                source_path=module_path,
+                import_name="workspace_modules",
+                function="spri_cleanup",
+                triggers=("spri", "bead"),
+                approved=True,
+                validation_status="passed",
+                parameters=("sample_plate", "magnet"),
+                required_roles=("analyte", "separate tips"),
+            ),
+        ),
+    )
+
+    ctx = assemble_context(scope, ["core-worktable-api"])
+
+    assert ctx is not None
+    assert "## Available workspace modules" in ctx
+    assert "from workspace_modules import spri_cleanup" in ctx
+    assert "Prefer these approved profile-local Python helpers" in ctx
 
 
 def test_build_initial_scope_message_skills_path():

@@ -53,6 +53,7 @@ from .models import (
 )
 from .repair_policy import resolve_repair_policy
 from .validator import AuthoringValidator
+from .workspace_modules import WorkspaceModule, copy_workspace_modules
 
 ToolFn = Callable[..., dict[str, Any]]
 
@@ -1131,6 +1132,7 @@ class AuthoringToolRegistry:
         workspace_name: str | None = None,
         workspace_guid: str | None = None,
         current_prompt: str | None = None,
+        workspace_modules: tuple[WorkspaceModule, ...] = (),
     ) -> None:
         self.output_dir = output_dir
         self.workspace_name = workspace_name
@@ -1139,7 +1141,8 @@ class AuthoringToolRegistry:
         self.original_prompt = current_prompt or ""
         self.latest_user_text = current_prompt or ""
         self.user_history_text = current_prompt or ""
-        self.validator = AuthoringValidator()
+        self.workspace_modules = tuple(workspace_modules)
+        self.validator = AuthoringValidator(workspace_modules=self.workspace_modules)
         self.calls: list[dict[str, Any]] = []
         self.model_turns: list[dict[str, Any]] = []
         self._compile_attempt = 0
@@ -2804,6 +2807,7 @@ class AuthoringToolRegistry:
                 )
         with tempfile.TemporaryDirectory(prefix="fluentvibe-authoring-sim-") as tmp:
             path = Path(tmp) / "draft.py"
+            copy_workspace_modules(self.workspace_modules, Path(tmp))
             path.write_text(source, encoding="utf-8")
             contract_error = self.validator._check_contract(source)
             if contract_error is None and not self._is_staged_subdraft(source):

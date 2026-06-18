@@ -9,6 +9,7 @@ The workspace setup app (``fluentvibe workspace-app`` →
 - ``generation.profile.yaml``  — the labware/liquid whitelist (+ optional
                                   ``deck_rules``),
 - ``deck-<name>.md``           — the ``--lab-scope skills`` deck skill.
+- ``workspace_modules.yaml``   — optional approved reusable Python helpers.
 
 This module is the single place that turns that directory into a
 :class:`ResolvedProfile`, so the CLI, the authoring session, and the lab-scope
@@ -27,6 +28,8 @@ from typing import Any
 
 import yaml
 
+from .workspace_modules import WorkspaceModule, load_workspace_modules
+
 PROFILE_DIR_ENV = "FLUENTVIBE_PROFILE_DIR"
 
 
@@ -43,6 +46,7 @@ class ResolvedProfile:
     labware_classes: dict[str, str] = field(default_factory=dict)
     liquid_classes: frozenset[str] = field(default_factory=frozenset)
     deck_rules: dict[str, Any] = field(default_factory=dict)
+    workspace_modules: tuple[WorkspaceModule, ...] = ()
 
 
 def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
@@ -80,6 +84,7 @@ def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
         labware_classes=labware_classes,
         liquid_classes=liquid_classes,
         deck_rules=deck_rules,
+        workspace_modules=load_workspace_modules(root),
     )
 
 

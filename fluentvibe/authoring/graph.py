@@ -137,6 +137,8 @@ def build_authoring_graph(
         _denied = frozenset(
             d["function"]["name"] for d in tool_definitions()
         ) - allowed
+    if registry.workflow_plan is not None:
+        registry.staged_drafting = _should_stage(registry)
     lc_tools = make_lc_tools(registry, denied=_denied or None)
     try:
         client_with_tools = client.bind_tools(lc_tools)
@@ -188,6 +190,7 @@ def run_graph(
     system_prompt: str,
     initial_messages: list[BaseMessage] | None = None,
     initial_state: GraphState | None = None,
+    validator: AuthoringValidator | None = None,
     concurrency: AuthoringConcurrencyConfig | None = None,
     trace_recorder: ModelTraceRecorder | None = None,
 ) -> AuthoringResult:
@@ -197,6 +200,7 @@ def run_graph(
         client=client,
         output_dir=output_dir,
         retry_budget=retry_budget,
+        validator=validator,
         concurrency=concurrency,
         trace_recorder=trace_recorder,
     )

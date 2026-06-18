@@ -29,6 +29,12 @@ from ..authoring.grounding import (
     load_generation_config,
 )
 from ..authoring.tools import _catalog_entry, _python_class_for, _semantic_category
+from ..authoring.workspace_modules import (
+    MANIFEST_NAME,
+    MODULES_DIR_NAME,
+    SPRI_MODULE_ENTRY,
+    SPRI_MODULE_SOURCE,
+)
 from ..catalog.catalog import (
     find_components,
     list_by_category,
@@ -66,6 +72,8 @@ class ProfilePaths:
     current_worktable: Path
     generation_yaml: Path
     deck_skill: Path
+    modules_dir: Path
+    modules_manifest: Path
     readme: Path
 
     def to_dict(self) -> dict[str, str]:
@@ -75,6 +83,8 @@ class ProfilePaths:
             "current_worktable": str(self.current_worktable),
             "generation_yaml": str(self.generation_yaml),
             "deck_skill": str(self.deck_skill),
+            "modules_dir": str(self.modules_dir),
+            "modules_manifest": str(self.modules_manifest),
             "readme": str(self.readme),
         }
 
@@ -493,6 +503,7 @@ def _registry_for_payload(payload: dict[str, Any], leaf: str):
     workspace_name = str(payload.get("workspace_name") or "").strip() or None
     workspace_guid = str(payload.get("workspace_guid") or "").strip() or None
     profile_name = str(payload.get("profile_name") or "").strip()
+    profile = None
     if profile_name:
         profile = resolve_profile(_profile_dir(profile_name))
         workspace_name = workspace_name or profile.workspace_name
@@ -501,6 +512,7 @@ def _registry_for_payload(payload: dict[str, Any], leaf: str):
         output_dir=_workbench_path(payload.get("output_dir"), leaf),
         workspace_name=workspace_name,
         workspace_guid=workspace_guid,
+        workspace_modules=tuple(profile.workspace_modules) if profile is not None else (),
     )
 
 
@@ -595,6 +607,40 @@ def suggest_roles(
     return {**suggested, "roles": {}}
 
 
+def propose_workspace_modules(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return reusable workspace-module proposals for human approval.
+
+    V1 offers the built-in SPRI cleanup helper when the selected workspace has a
+    magnet rack and MCA tips among common labware, or when the request text
+    explicitly mentions bead/SPRI/AMPure cleanup.
+    """
+    payload = dict(payload or {})
+    text = str(payload.get("prompt") or payload.get("notes") or "").lower()
+    common = payload.get("common_labware") or []
+    categories = {
+        str(item.get("category") or "").lower()
+        for item in common
+        if isinstance(item, dict)
+    }
+    has_magnet = "magnet_rack" in categories
+    has_mca_tips = any(
+        "mca" in str(item.get("python_class") or "").lower()
+        or "mca" in str(item.get("catalog_name") or "").lower()
+        for item in common
+        if isinstance(item, dict)
+    )
+    requested = any(term in text for term in ("spri", "ampure", "bead", "magnetic"))
+    proposals = []
+    if requested or (has_magnet and has_mca_tips):
+        proposals.append({
+            **SPRI_MODULE_ENTRY,
+            "approved": False,
+            "validation_status": "proposal",
+            "source_preview": SPRI_MODULE_SOURCE,
+        })
+    return {"ok": True, "modules": proposals}
+
+
 def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> dict[str, Any]:
     profile_name = _safe_profile_name(str(payload.get("profile_name") or "workspace"))
     workspace_payload = payload.get("workspace") or {}
@@ -621,6 +667,8 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
         current_worktable=root / "current_worktable.py",
         generation_yaml=root / "generation.profile.yaml",
         deck_skill=root / f"{deck_skill_name}.md",
+        modules_dir=root / MODULES_DIR_NAME,
+        modules_manifest=root / MANIFEST_NAME,
         readme=root / "README.md",
     )
     root.mkdir(parents=True, exist_ok=True)
@@ -643,6 +691,8 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
         "common_labware": common_labware,
         "liquid_class": {"name": liquid_class},
     }
+    module_manifest = _workspace_module_manifest(payload.get("workspace_modules"))
+    profile["workspace_modules"] = module_manifest["modules"]
     paths.profile_json.write_text(json.dumps(profile, indent=2), encoding="utf-8")
     _write_current_worktable_snapshot(
         paths.current_worktable,
@@ -658,6 +708,7 @@ def save_profile(payload: dict[str, Any], *, base_dir: Path | None = None) -> di
         _profile_deck_skill(deck_skill_name, profile, slots),
         encoding="utf-8",
     )
+    _write_workspace_modules(paths, module_manifest)
     paths.readme.write_text(_profile_readme(profile, paths), encoding="utf-8")
     return {"ok": True, "profile": profile, "paths": paths.to_dict()}
 
@@ -825,6 +876,38 @@ def _generation_profile(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _workspace_module_manifest(raw_modules: Any) -> dict[str, Any]:
+    """Normalize setup-approved workspace modules into a manifest.
+
+    V1 intentionally supports only the shipped SPRI helper. The setup wizard can
+    ask for it by sending ``{"name": "spri_cleanup", "approved": true}``.
+    """
+    modules: list[dict[str, Any]] = []
+    for raw in raw_modules or []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()
+        if name != "spri_cleanup" or not bool(raw.get("approved", False)):
+            continue
+        entry = dict(SPRI_MODULE_ENTRY)
+        entry["approved"] = True
+        entry["validation_status"] = "passed"
+        modules.append(entry)
+    return {"schema_version": 1, "modules": modules}
+
+
+def _write_workspace_modules(paths: ProfilePaths, manifest: dict[str, Any]) -> None:
+    paths.modules_dir.mkdir(parents=True, exist_ok=True)
+    if any(m.get("name") == "spri_cleanup" for m in manifest.get("modules", [])):
+        (paths.modules_dir / "workspace_modules.py").write_text(
+            SPRI_MODULE_SOURCE, encoding="utf-8"
+        )
+    paths.modules_manifest.write_text(
+        yaml.safe_dump(manifest, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 def _profile_deck_rules(profile: dict[str, Any]) -> dict[str, Any]:
     """Deck-physics guard rules for this workspace, keyed by name.
 
@@ -952,6 +1035,17 @@ def _profile_readme(profile: dict[str, Any], paths: ProfilePaths) -> str:
             f"Base deck component: {source.get('base_worktable_component_name')} / "
             f"{source.get('base_worktable_component_guid')}\n"
         )
+    module_names = [
+        str(item.get("name"))
+        for item in profile.get("workspace_modules") or []
+        if isinstance(item, dict) and item.get("approved")
+    ]
+    module_lines = (
+        f"\nWorkspace modules: `{paths.modules_manifest.name}` "
+        f"({', '.join(module_names)})\n"
+        if module_names
+        else f"\nWorkspace modules: `{paths.modules_manifest.name}` (none approved)\n"
+    )
     return (
         f"# {profile['profile_name']}\n\n"
         "Use this profile with fluentvibe authoring by setting:\n\n"
@@ -966,6 +1060,7 @@ def _profile_readme(profile: dict[str, Any], paths: ProfilePaths) -> str:
         "placement; the deck the LM binds to comes from the active deck skill, so\n"
         "drop this file into the active skills dir (replacing the default deck\n"
         "skill) to author against this workspace instead of the shipped default.\n"
+        f"{module_lines}"
     )
 
 

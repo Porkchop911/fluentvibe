@@ -462,6 +462,49 @@
       background: transparent;
       border: none;
     }
+    .module-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .module-item {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 8px;
+      background: var(--panel);
+    }
+    .module-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .module-title { font-weight: 700; }
+    .module-item label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .module-item input[type="checkbox"] {
+      width: auto;
+      min-height: auto;
+    }
+    .module-preview {
+      margin-top: 6px;
+      max-height: 150px;
+      overflow: auto;
+      white-space: pre;
+      font-size: 11px;
+      line-height: 1.35;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 6px;
+    }
     .author-pending { opacity: .65; }
     .author-pending .msg-title::after {
       content: '';
@@ -560,6 +603,10 @@
             <div class="common-list" id="commonList"></div>
             <label for="liquidClass">Default liquid class</label>
             <select id="liquidClass"></select>
+            <div class="actions" style="margin-top:12px">
+              <button id="scanModules" class="secondary" disabled>Scan modules</button>
+            </div>
+            <div class="module-list" id="workspaceModuleList"></div>
             <button id="saveProfile" style="margin-top:12px" disabled>Save profile</button>
             <div class="status" id="status"></div>
           </section>
@@ -725,6 +772,7 @@
       deckFrame: {},
       workspaceSource: null,
       commonLabware: [],
+      workspaceModules: [],
       categories: [],
       labwareOptions: [],
       liquidClasses: [],
@@ -954,6 +1002,7 @@
       $('loadProfile').addEventListener('click', () => loadProfile().catch(err => setStatus('status', err.message, 'error')));
       $('suggestCommon').addEventListener('click', useDefaults);
       $('addLabware').addEventListener('click', addSelectedLabware);
+      $('scanModules').addEventListener('click', proposeWorkspaceModules);
       $('saveProfile').addEventListener('click', saveProfile);
       $('categorySelect').addEventListener('change', () => refreshLabwareOptions().catch(err => setStatus('status', err.message, 'error')));
       let searchTimer = null;
@@ -1012,8 +1061,10 @@
       await loadWorkspace();
       $('profileName').value = profile.profile_name;
       if (Array.isArray(profile.common_labware)) state.commonLabware = profile.common_labware;
+      state.workspaceModules = Array.isArray(profile.workspace_modules) ? profile.workspace_modules : [];
       if (profile.liquid_class) $('liquidClass').value = profile.liquid_class;
       renderCommonLabware();
+      renderWorkspaceModules();
       renderDeck();
       setStatus('status', `Loaded profile "${profile.profile_name}".`, 'ok');
     }
@@ -1034,6 +1085,7 @@
       state.workspaceSource = data.workspace_source || null;
       state.categories = data.common_labware_categories || [];
       state.commonLabware = data.default_common_labware || [];
+      state.workspaceModules = [];
       $('categorySelect').innerHTML = state.categories.map(c =>
         `<option value="${escapeHtml(c.name)}">${escapeHtml(c.label)}</option>`
       ).join('');
@@ -1045,6 +1097,7 @@
       renderDeck();
       $('suggestCommon').disabled = false;
       $('addLabware').disabled = false;
+      $('scanModules').disabled = false;
       $('saveProfile').disabled = false;
       setStatus('status', 'Workspace loaded.', 'ok');
     }
@@ -1057,6 +1110,54 @@
       renderCommonLabware();
       renderDeck();
       setStatus('status', 'Default common labware loaded.', 'ok');
+    }
+
+    async function proposeWorkspaceModules() {
+      if (!state.workspace) return;
+      setStatus('status', 'Scanning workspace module opportunities...');
+      const data = await post('/api/propose-workspace-modules', {
+        profile_name: $('profileName').value,
+        configuration: state.configuration ? { guid: state.configuration.guid, name: state.configuration.name } : null,
+        workspace: { name: state.workspace.name, guid: state.workspace.guid },
+        workspace_source: state.workspaceSource,
+        common_labware: state.commonLabware,
+        liquid_class: $('liquidClass').value
+      });
+      state.workspaceModules = data.modules || [];
+      renderWorkspaceModules();
+      setStatus(
+        'status',
+        state.workspaceModules.length ? 'Review proposed workspace modules before saving.' : 'No workspace modules proposed for this setup.',
+        state.workspaceModules.length ? 'ok' : ''
+      );
+    }
+
+    function renderWorkspaceModules() {
+      const list = $('workspaceModuleList');
+      if (!list) return;
+      if (!state.workspaceModules.length) {
+        list.innerHTML = '<div class="small">No workspace modules approved.</div>';
+        return;
+      }
+      list.innerHTML = state.workspaceModules.map((mod, index) => {
+        const preview = mod.source_preview ? `<div class="module-preview">${escapeHtml(mod.source_preview)}</div>` : '';
+        return `<div class="module-item">
+          <div class="module-head">
+            <div>
+              <div class="module-title">${escapeHtml(mod.name || 'workspace module')}</div>
+              <div class="small">${escapeHtml(mod.description || '')}</div>
+            </div>
+            <label><input type="checkbox" data-module-index="${index}"${mod.approved ? ' checked' : ''}> approve</label>
+          </div>
+          ${preview}
+        </div>`;
+      }).join('');
+      list.querySelectorAll('input[data-module-index]').forEach(input => {
+        input.addEventListener('change', () => {
+          const mod = state.workspaceModules[Number(input.dataset.moduleIndex)];
+          mod.approved = input.checked;
+        });
+      });
     }
 
     async function refreshLabwareOptions() {
@@ -1145,6 +1246,7 @@
         workspace: { name: state.workspace.name, guid: state.workspace.guid },
         workspace_source: state.workspaceSource,
         common_labware: state.commonLabware,
+        workspace_modules: state.workspaceModules.filter(mod => mod.approved),
         liquid_class: $('liquidClass').value
       });
       setStatus('status', `Saved profile: ${data.paths.root}`, 'ok');

@@ -44,7 +44,6 @@ from .service import (
 )
 from .tools import AuthoringToolRegistry
 from .trace import ModelTraceConfig, ModelTraceRecorder
-from .validator import AuthoringValidator
 
 
 class PromptAuthoringSession:
@@ -101,11 +100,12 @@ class PromptAuthoringSession:
             output_dir=output_dir,
             workspace_name=workspace_name,
             workspace_guid=workspace_guid,
+            workspace_modules=tuple(_profile.workspace_modules) if _profile is not None else (),
         )
         # Narrowed-scope experiment: inert unless --lab-scope/env is set.
         # Stored on the registry so the Lever-B tool filter can consult it.
         self._registry.lab_scope = self._lab_scope
-        self._validator = AuthoringValidator()
+        self._validator = self._registry.validator
         self._helpers = PromptAuthoringService.__new__(PromptAuthoringService)
         self._messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
         # skills mode selects its context from the prompt, which isn't known
