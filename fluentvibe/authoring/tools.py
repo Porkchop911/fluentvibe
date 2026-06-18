@@ -1145,6 +1145,10 @@ class AuthoringToolRegistry:
         self._compile_attempt = 0
         self.current_intent: IntentSpec = IntentSpec()
         self.workflow_plan: ProtocolWorkflowPlan | None = None
+        # Set once declare_protocol_workflow succeeds: True ⇒ enforce per-group
+        # staged checkpoints; False ⇒ the declared plan is simple enough to draft
+        # in one pass (skills mode only — see graph._should_stage).
+        self.staged_drafting: bool = False
         self.source_protocol_plan: dict[str, Any] | None = None
         self.source_protocol_plan_approved: bool = False
         self.object_draft: dict[str, Any] | None = None
@@ -1493,6 +1497,15 @@ class AuthoringToolRegistry:
     def requires_source_protocol_plan(self) -> bool:
         text = self.current_prompt or self.user_history_text or self.latest_user_text or ""
         return "Attached file context:" in text
+
+    def _has_source_document_context(self) -> bool:
+        """True when the current prompt carries attached source-document text.
+
+        Used to compute document adherence in skills/enforce mode, where the
+        `present_source_protocol_plan` checkpoint never runs but the source
+        document text is still present in the prompt.
+        """
+        return "Attached file context:" in (self.current_prompt or "")
 
     def present_source_protocol_plan(
         self,
@@ -2773,6 +2786,15 @@ class AuthoringToolRegistry:
 
     def simulate_python_draft(self, source: str, strict: bool = True) -> dict[str, Any]:
         volume_rewrites: list[dict[str, Any]] = []
+        class_rewrites: list[dict[str, Any]] = []
+        source, class_rewrites = _autoground_labware_classes(
+            source, dict(getattr(self.lab_scope, "labware_classes", {}) or {})
+        )
+        for rewrite in class_rewrites:
+            print(
+                f"[autoground] labware class: {rewrite['from']} -> {rewrite['to']} "
+                f"for catalog {rewrite['catalog']!r} (line {rewrite['line']})"
+            )
         if self.lab_scope.enforces and self.object_draft_approved and self.object_draft:
             source, volume_rewrites = _autoground_pipetting_volume_literals(source, self.object_draft)
             for rewrite in volume_rewrites:
@@ -2822,19 +2844,31 @@ class AuthoringToolRegistry:
             "message": "Draft built and strict simulation passed.",
             "state_summary": _simulation_state_summary(report),
         }
-        if volume_rewrites:
+        if volume_rewrites or class_rewrites:
             # Surface the autogrounded source so the graph carries the
-            # variable-threaded version forward into compile_and_simulate,
-            # not the model's original hardcoded-literal draft.
+            # corrected version forward into compile_and_simulate, not the
+            # model's original draft.
             result["source"] = source
-            result["autoground"] = {"pipetting_volumes": volume_rewrites}
+            autoground: dict[str, Any] = {}
+            if volume_rewrites:
+                autoground["pipetting_volumes"] = volume_rewrites
+            if class_rewrites:
+                autoground["labware_classes"] = class_rewrites
+            result["autoground"] = autoground
         return result
 
     def compile_and_simulate(self, source: str) -> dict[str, Any]:
         self._compile_attempt += 1
+        profile_classes = dict(getattr(self.lab_scope, "labware_classes", {}) or {})
+        source, class_rewrites = _autoground_labware_classes(source, profile_classes)
+        for rewrite in class_rewrites:
+            print(
+                f"[autoground] labware class: {rewrite['from']} -> {rewrite['to']} "
+                f"for catalog {rewrite['catalog']!r} (line {rewrite['line']})"
+            )
         profile_contract_error = _check_source_against_profile_labware_classes(
             source,
-            dict(getattr(self.lab_scope, "labware_classes", {}) or {}),
+            profile_classes,
         )
         if profile_contract_error:
             return {
@@ -2859,7 +2893,17 @@ class AuthoringToolRegistry:
         )
         payload = report.to_dict()
         payload["ok"] = report.success
-        if self.source_protocol_plan is not None:
+        if class_rewrites:
+            # Surface the corrected source/import so callers carry the
+            # profile-pinned classes forward, not the model's generic draft.
+            payload["source"] = source
+            payload.setdefault("autoground", {})["labware_classes"] = class_rewrites
+        # Compute source-document adherence whenever a source document is in
+        # play — either via an approved plan (staged flow) or an attached file
+        # context (skills/enforce flow, where no plan checkpoint runs). Without
+        # this, profile-mode runs never compute adherence and silently accept
+        # protocols that drop automatable source stages.
+        if self.source_protocol_plan is not None or self._has_source_document_context():
             from .document_adherence import document_adherence_report
 
             payload["document_adherence"] = document_adherence_report(
@@ -3536,6 +3580,141 @@ def _check_source_against_profile_labware_classes(
                 f"on line {getattr(labware_call, 'lineno', '?')}."
             )
     return None
+
+
+def _labware_class_swap_is_safe(used: str, required: str) -> bool:
+    """True when swapping ``used`` -> ``required`` is behaviour-preserving.
+
+    The profile-pinned classes (FCA1000Box, Trough25mL, MCA100Box, ...) are
+    drop-in subclasses of the generic constructors the model reaches for
+    (TipBox, Trough, ...) with identical ``__init__`` signatures — they only
+    pin geometry/capacity. A swap is safe precisely when the two classes are in
+    a subclass relationship (either direction). When the model used a wholly
+    unrelated class (e.g. ``Plate96`` for a trough catalog) the classes are not
+    related, so we do not silently rewrite and the contract check still fires.
+    """
+    try:
+        import fluentvibe as _fv
+
+        used_cls = getattr(_fv, used, None)
+        required_cls = getattr(_fv, required, None)
+    except Exception:
+        return False
+    if not isinstance(used_cls, type) or not isinstance(required_cls, type):
+        return False
+    return issubclass(required_cls, used_cls) or issubclass(used_cls, required_cls)
+
+
+def _autoground_labware_classes(
+    source: str, profile_classes: dict[str, str]
+) -> tuple[str, list[dict[str, Any]]]:
+    """Rewrite a generic labware class to the profile's required subclass.
+
+    The profile labware-class contract (`_check_source_against_profile_labware_classes`)
+    rejects ``wt.place(TipBox(..., catalog="FCA, 1000ul SBS"), ...)`` because the
+    profile pins that catalog to ``FCA1000Box``. The required class is a drop-in
+    subclass with an identical constructor, so the mismatch is a mechanical
+    rename — but as a hard PYTHON_BUILD_FAILURE it pushes the model to drop the
+    labware (and its protocol steps) entirely rather than swap the name. Instead
+    we rewrite the constructor (and import) to the required class, the same way
+    `_autoground_pipetting_volume_literals` repairs volume literals.
+
+    Only safe swaps are applied (see `_labware_class_swap_is_safe`); an
+    unrelated class is left for the contract check to reject. Replacement is
+    surgical span editing so the model's formatting and comments survive.
+    """
+    if not profile_classes:
+        return source, []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source, []
+
+    # (lineno, col, end_col, new_name) for each constructor identifier to swap.
+    replacements: list[tuple[int, int, int, str]] = []
+    introduced: list[dict[str, Any]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "place":
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Call):
+            continue
+        labware_call = node.args[0]
+        used = _call_name(labware_call.func)
+        catalog_name = _catalog_kwarg_value(labware_call)
+        if not used or not catalog_name:
+            continue
+        required = profile_classes.get(catalog_name)
+        if not required or required == used:
+            continue
+        if not _labware_class_swap_is_safe(used, required):
+            continue
+        func = labware_call.func
+        if isinstance(func, ast.Name):
+            target = func
+        elif isinstance(func, ast.Attribute):
+            # Rewrite the trailing attribute identifier (e.g. fv.TipBox).
+            target = func  # span handled below via end_col of the attribute
+        else:
+            continue
+        if target.lineno != target.end_lineno:
+            continue
+        # For an attribute the identifier is the last `.attr`; recompute its
+        # start as end_col_offset - len(attr).
+        if isinstance(func, ast.Attribute):
+            start_col = func.end_col_offset - len(func.attr)
+        else:
+            start_col = target.col_offset
+        replacements.append((target.lineno, start_col, target.end_col_offset, required))
+        introduced.append({"catalog": catalog_name, "from": used, "to": required, "line": target.lineno})
+
+    if not replacements:
+        return source, []
+
+    lines = source.splitlines(keepends=True)
+    # Apply class-name swaps bottom-up so earlier edits don't shift later spans.
+    for lineno, col, end_col, new_name in sorted(replacements, reverse=True):
+        line = lines[lineno - 1]
+        lines[lineno - 1] = line[:col] + new_name + line[end_col:]
+    rewritten = "".join(lines)
+    rewritten = _ensure_fluentvibe_imports(rewritten, [item["to"] for item in introduced])
+    return rewritten, introduced
+
+
+def _ensure_fluentvibe_imports(source: str, names: list[str]) -> str:
+    """Add ``names`` to the ``from fluentvibe import ...`` statement if absent."""
+    wanted = list(dict.fromkeys(names))
+    if not wanted:
+        return source
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    import_node: ast.ImportFrom | None = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "fluentvibe":
+            import_node = node
+            break
+    if import_node is None:
+        missing = [n for n in wanted]
+        if not missing:
+            return source
+        return f"from fluentvibe import {', '.join(missing)}\n" + source
+    already = {alias.name for alias in import_node.names}
+    missing = [n for n in wanted if n not in already]
+    if not missing:
+        return source
+    lines = source.splitlines(keepends=True)
+    # Only edit single-line imports surgically; otherwise prepend a new import.
+    if import_node.lineno == import_node.end_lineno:
+        idx = import_node.lineno - 1
+        line = lines[idx]
+        newline = "\n" if line.endswith("\n") else ""
+        stripped = line.rstrip("\n").rstrip()
+        lines[idx] = f"{stripped}, {', '.join(missing)}{newline}"
+        return "".join(lines)
+    return f"from fluentvibe import {', '.join(missing)}\n" + source
 
 
 def _call_name(func: ast.expr) -> str | None:

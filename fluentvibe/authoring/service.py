@@ -133,6 +133,13 @@ manual_off_deck, or unsupported. Do not omit unsupported or off-deck steps;
 surface them for approval and represent approved manual steps as explicit
 comments/waits where needed.
 
+Regardless of whether a plan checkpoint runs, when authoring from an attached
+source document you must cover every stage it describes. Automate each stage
+on-deck where the deck allows; for any stage you do not automate, add an explicit
+wt.add_comment(...) stating it is performed manually/off-deck. Never silently drop
+a stage. A protocol that simulates but covers only one part of the document is not
+acceptable.
+
 When FluentControl shell validation is requested or available as the final
 vendor gate, use validate_fluentcontrol_shell only after compile_and_simulate
 has passed. Treat zero load failures and zero InfoPad error lines as vendor

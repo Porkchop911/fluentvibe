@@ -1443,3 +1443,79 @@ def test_live_lm_simple_worklist_script_generation() -> None:
     assert ".dispense(" not in result.generated_code
     assert result.validation is not None
     assert result.validation.compile_ok is True
+
+
+# ── accept-with-gaps fallback reaches the session (webapp) path ──────────
+
+def _mk_session_with_fake_graph(tmp_path, monkeypatch, final_state):
+    """Build an off-scope session whose graph.invoke returns ``final_state``."""
+    from fluentvibe.authoring import session as session_mod
+
+    fake_client = FakeMessagesListChatModel(responses=[AIMessage(content="noop")])
+    sess = PromptAuthoringSession(
+        output_dir=tmp_path, retry_budget=1, lab_scope="off", client=fake_client
+    )
+    monkeypatch.setattr(sess, "_start_prefetch", lambda *a, **k: None)
+    monkeypatch.setattr(sess, "_inject_skill_context", lambda *a, **k: None)
+
+    class _FakeGraph:
+        def invoke(self, state):
+            base = {"messages": state.get("messages", []), "iterations": 1}
+            base.update(final_state)
+            return base
+
+    monkeypatch.setattr(session_mod, "build_authoring_graph", lambda **kw: _FakeGraph())
+    return sess
+
+
+def test_session_returns_fallback_when_run_fails_after_nudge(tmp_path, monkeypatch):
+    # Regression: the webapp uses PromptAuthoringSession.send, which builds the
+    # graph and reads final_state itself — it must apply the same accept-with-gaps
+    # fallback as run_graph, or a nudged-then-failed run discards the good draft.
+    from fluentvibe.authoring.models import (
+        AuthoringResult,
+        AuthoringStatus,
+        FailureCategory,
+    )
+
+    failure = AuthoringResult(
+        status=AuthoringStatus.FAILURE, prompt="p", spec=None, generated_code=None,
+        validation=None, compiled_xscr=None,
+        failure_category=FailureCategory.MODEL_AUTHORING_FAILURE,
+        failure_message="Model returned no Python draft.",
+    )
+    fallback = AuthoringResult(
+        status=AuthoringStatus.SUCCESS, prompt="p", spec=None,
+        generated_code="def build_worktable():\n    return wt\n",
+        validation=None, compiled_xscr=None,
+        coverage_gaps=({"code": "missing_pooling", "severity": "warning"},),
+    )
+    sess = _mk_session_with_fake_graph(
+        tmp_path, monkeypatch,
+        {"result": failure, "fallback_result": fallback, "best_code": fallback.generated_code},
+    )
+
+    result = sess.send("automate the library prep")
+    assert result.status is AuthoringStatus.SUCCESS
+    assert [g["code"] for g in result.coverage_gaps] == ["missing_pooling"]
+
+
+def test_session_failure_stands_without_fallback(tmp_path, monkeypatch):
+    from fluentvibe.authoring.models import (
+        AuthoringResult,
+        AuthoringStatus,
+        FailureCategory,
+    )
+
+    failure = AuthoringResult(
+        status=AuthoringStatus.FAILURE, prompt="p", spec=None, generated_code=None,
+        validation=None, compiled_xscr=None,
+        failure_category=FailureCategory.MODEL_AUTHORING_FAILURE,
+        failure_message="Model returned no Python draft.",
+    )
+    sess = _mk_session_with_fake_graph(
+        tmp_path, monkeypatch, {"result": failure, "fallback_result": None},
+    )
+
+    result = sess.send("automate the library prep")
+    assert result.status is AuthoringStatus.FAILURE
