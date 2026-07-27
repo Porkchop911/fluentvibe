@@ -1,328 +1,184 @@
 # Development
 
-## Toolchain
+## Supported environment
 
-Install the dev extras, then lint, type-check, and test:
+- Python 3.11 and 3.12 are the blocking CI versions.
+- Python 3.14 currently passes the offline suite locally, but LangChain emits a
+  compatibility warning. Treat it as best-effort until the dependency warning
+  is resolved or CI coverage is expanded.
+- Windows is the primary integration platform because FluentControl, its
+  datastore, and shell validation are Windows-specific.
 
-```
+Install the package with development dependencies:
+
+```powershell
 python -m pip install -e ".[dev]"
-python -m ruff check .          # lint (E/F/W/I); must pass
-python -m mypy fluentvibe       # type-check (non-blocking baseline, see below)
-python -m pytest -q             # offline test suite
 ```
 
-Ruff config lives in `pyproject.toml` (`[tool.ruff]`). The enforced rule set is
-deliberately scoped to real-bug and import-hygiene rules (`E`, `F`, `W`, `I`); a
-pyupgrade/bugbear (`UP`/`B`) modernization sweep is a deferred follow-up. CI runs
-`ruff check .` as a blocking gate.
+## Verification commands
 
-Mypy is **non-blocking** today: the baseline is ~1.5k errors across 21 files
-(mostly missing annotations and dict-vs-dataclass attribute access in `cli.py`).
-The goal is to drive this count down incrementally — new code should type-check
-clean. CI runs mypy with `continue-on-error` so the count is visible without
-blocking merges. `ruff format` has **not** been applied repo-wide yet, so it is
-not part of the CI gate.
+Run the blocking local checks:
 
-## Test baseline
-
-The default offline suite requires no FluentControl install or local LM and is
-deterministic across runs:
-
-```
-python -m pytest -q
-# 555 passed, 7 skipped, 6 deselected
+```powershell
+python -m ruff check .
+python -m pytest tests -q
+python -m pip wheel . --no-deps --wheel-dir build/package-check
 ```
 
-Live and shell tests are deselected by default (see `addopts` in
-`pyproject.toml`); run them explicitly with `pytest -m live_lm` or
-`pytest -m fluentcontrol_shell`. Install-backed tests skip automatically unless a
-local FluentControl install is reachable, and assert install-independent
-invariants rather than pinning a specific install's GUIDs.
+Mypy is visible but non-blocking while the historical baseline is reduced:
 
-## Repo layout
-
-```
-fluentvibe\
-├── pyproject.toml          ← Build config + console_scripts entry
-├── README.md
-├── docs\                   ← This documentation set (markdown)
-├── examples\
-│   └── simple_transfer.py  ← End-to-end example, exercised by parity test
-├── fluentvibe\               ← The package
-│   ├── __init__.py         ← Public API + first-import index build
-│   ├── reagent.py          ← Reagent dataclass (33 LOC)
-│   ├── worktable.py        ← Worktable + from_workspace + place/group/compile (261 LOC)
-│   ├── gripper.py          ← Gripper (52 LOC)
-│   ├── cli.py              ← `fluentvibe` CLI (161 LOC)
-│   ├── labware\            ← 10 behavioral families (~511 LOC total)
-│   │   ├── base.py         ← Labware + Layer + Well + offline-synthesis (290 LOC)
-│   │   ├── plates.py       ← Plate, Plate96, Plate96Deep, Plate384 (37 LOC)
-│   │   ├── troughs.py      ← Trough, Trough25mL, Trough100mL, Waste (47 LOC)
-│   │   ├── tipboxes.py     ← TipBox, MCA*Box, FCA*Box (40 LOC)
-│   │   ├── adapters.py     ← Adapter, EvaAdapter (21 LOC)
-│   │   ├── magnet.py       ← MagnetRack (17 LOC)
-│   │   ├── tuberack.py     ← TubeRack (20 LOC)
-│   │   └── deckitems.py    ← WashStation, WasteChute, Hotel, FixedDeck (39 LOC)
-│   ├── heads\              ← Pipetting heads
-│   │   └── mca96.py        ← MCA96Head + Tip (105 LOC)
-│   ├── ir\                 ← Vendored Pydantic step models
-│   │   └── schema.py       ← (611 LOC)
-│   ├── compiler\           ← Vendored XML renderer
-│   │   └── renderer.py     ← (1787 LOC)
-│   ├── decompiler\         ← Phase B: .xscr → .py
-│   │   ├── xscr_parser.py  ← XML → Pydantic Protocol IR (~330 LOC)
-│   │   └── codegen.py      ← Protocol → Python source string (~280 LOC)
-│   ├── catalog\            ← v1.1 catalog system
-│   │   ├── catalog.py      ← SQL queries (~210 LOC)
-│   │   ├── indexer.py      ← Walk install + write rows (~210 LOC)
-│   │   ├── inference.py    ← Category rules (157 LOC)
-│   │   ├── xcmp.py         ← .xcmp / .xwsp parser (597 LOC)
-│   │   ├── xlqc.py         ← .xlqc liquid-class loader (Phase C.2, ~60 LOC)
-│   │   ├── database.py     ← Vendored fluentdsl tecan.db (legacy, unused by v1.1)
-│   │   ├── fc_install.py   ← Bridge to fluentcontrol_core (78 LOC)
-│   │   └── install_index.db   ← Built artifact (gitignored)
-│   ├── _assets\            ← Vendored: templates / reference / config
-│   └── simulator\          ← The IR walker
-│       ├── walk.py         ← Simulator class (346 LOC)
-│       ├── snapshots.py    ← Snapshot dataclass (53 LOC)
-│       └── invariants.py   ← Exception hierarchy (40 LOC)
-└── tests\                  ← 61 tests across 10 files
-    ├── fixtures\
-    │   └── simple_transfer_fluentdsl_reference.py   ← Parity reference (fluentdsl flat-fn)
-    ├── test_catalog_index_build.py                  ← v1.1: index build against real install
-    ├── test_inference_known_samples.py              ← v1.1: 23 parametrized inference cases
-    ├── test_physical_invariants.py                  ← v1: 7 simulator invariants
-    ├── test_plate_construction_from_catalog.py      ← v1.1: catalog-driven labware
-    ├── test_simple_transfer_parity.py               ← v1: byte-equal XML parity
-    ├── test_snapshot_introspection.py               ← v1: layered well + magnet stacking
-    ├── test_worktable_from_workspace.py             ← v1.1: from_workspace + InvalidSlotError
-    ├── test_examples.py                             ← Phase A: pinning tests for the 4 example protocols
-    ├── test_xscr_roundtrip.py                       ← Phase B: .xscr → .py → .xscr byte-equal parity
-    ├── test_auto_rebuild.py                         ← Phase C.1: fingerprint drift triggers rebuild
-    └── test_liquid_class_index.py                   ← Phase C.2: 38 .xlqc rows + GUID lookup
+```powershell
+python -m mypy fluentvibe
 ```
 
-## Conventions
+The 2026-07-21 baseline is 1,568 errors across 27 files. New work should not
+increase that count, and edited safety-critical modules should be tightened as
+part of their change.
 
-### Coding style
+For isolated supported-version runs with `uv`:
 
-- Python ≥ 3.11. Module-level `from __future__ import annotations` everywhere.
-- Pydantic v2 for IR schema; dataclasses for everything else.
-- Public types are `frozen=True` when they represent values (Reagent,
-  XcmpComponent, CatalogEntry).
-- Module imports at top; lazy imports inside functions only when needed to
-  break a circular dependency (e.g. `Labware.is_magnetized` lazily imports
-  `MagnetRack` to avoid a circular import).
-
-### Naming
-
-- Internal helpers prefixed with `_`. `_warn_offline_once`, `_walk`,
-  `_aspirate_one`.
-- IR step types end in `Step` (`AddLabwareStep`, `AspirateStep`).
-- Exception types end in `Error` (`MissingTipsError`).
-- Behavioral classes are nouns (`Plate`, `Trough`, `MagnetRack`).
-- Convenience subclasses fix shape: `Plate96`, `Plate384`, `MCA100Box`.
-
-### Testing
-
-- `pytest`. Tests use `PYTHONPATH=.`-style imports for in-place runs:
-  `cd fluentvibe && PYTHONPATH=. python -m pytest tests/ -v`
-- Tests that touch the real FluentControl install are guarded with
-  `@pytest.mark.skipif(not _install_present(), ...)` so CI runs work
-  unmodified.
-- Tests should never rebuild the catalog index (the fixture is the
-  install-driven build inside `ensure_index`); they query whatever is
-  already there.
-
-## Running tests
-
-```
-cd D:\python\fluentvibe
-PYTHONPATH=. python -m pytest tests/ -v
+```powershell
+$env:FLUENTVIBE_NO_AUTO_REBUILD = "1"
+uv run --isolated --python 3.11 --extra dev python -m pytest tests -q
+uv run --isolated --python 3.12 --extra dev python -m pytest tests -q
 ```
 
-Expected output (truncated):
+The current verified offline result on both versions is:
 
-```
-tests\test_catalog_index_build.py ...                           [  6%]
-tests\test_inference_known_samples.py .......................   [ 55%]
-tests\test_physical_invariants.py .......                       [ 70%]
-tests\test_plate_construction_from_catalog.py ......            [ 82%]
-tests\test_simple_transfer_parity.py ..                         [ 87%]
-tests\test_snapshot_introspection.py ..                         [ 91%]
-tests\test_worktable_from_workspace.py ....                     [100%]
-
-============================== 61 passed ==============================
+```text
+694 passed, 1 skipped, 6 deselected
 ```
 
-The parity test (`test_simple_transfer_parity_xml`) requires the
-`fluentdsl` repo to be available at `D:\python\fluentdsl`; otherwise it
-skips. The catalog tests skip when the install isn't reachable.
+See [reliability-scorecard.md](reliability-scorecard.md) for the dated baseline.
 
-## Test inventory
+## Test classes
 
-| File | Tests | What it proves |
-|---|---|---|
-| `test_simple_transfer_parity.py` | 2 | fluentvibe's OO-authored simple_transfer renders to identical XML as fluentdsl's flat-function version (modulo random GUID); IR shape matches expectations. |
-| `test_snapshot_introspection.py` | 2 | Layered well contents flow source → tip → dest; magnetized state toggles correctly with gripper stacking. |
-| `test_physical_invariants.py` | 7 | Each invariant raises (occupied slot, missing adapter, missing tips, insufficient volume, overdraw, pinned aspirate on magnet). |
-| `test_catalog_index_build.py` | 3 | Index builds against real install with expected category counts and known catalog entries. |
-| `test_inference_known_samples.py` | 23 | Category inference correctly classifies a curated list of catalog names spanning every category. |
-| `test_plate_construction_from_catalog.py` | 6 | Catalog-driven `Plate96` / `Trough100mL` / `MCA100Box` populate from real .xcmp data; offline behavior; error paths. |
-| `test_worktable_from_workspace.py` | 4 | `from_workspace` registers valid slots; `InvalidSlotError` fires correctly; valid slots accepted. |
+The default suite excludes tests that need a live model or FluentControl shell:
 
-## Adding a new labware family
-
-1. Subclass `Labware` in `fluentvibe/labware/<your_module>.py`.
-2. Set `category = "..."`, `taxonomic_grid = (rows, cols)` if applicable,
-   `offline_max_well_volume_ul = ...`.
-3. Override `_post_populate(...)` if your family has special state to set
-   up after the wells/dimensions are populated (see `Trough._post_populate`
-   for an example that collapses parsed wells into a single pool).
-4. Add the class to `fluentvibe/labware/__init__.py`'s exports + `CATEGORY_TO_CLASS`.
-5. Re-export from `fluentvibe/__init__.py` if it should be in the top-level
-   public API.
-6. Update inference rules in `fluentvibe/catalog/inference.py` if your
-   category requires new logic.
-
-## Adding a new IR step type
-
-The IR is vendored from fluentdsl; if you need a new step type, the
-canonical answer is to upstream it into fluentdsl first. If you must add
-locally:
-
-1. Add the step class to `fluentvibe/ir/schema.py` (Pydantic model with
-   `step_type: Literal[StepType.X]`).
-2. Add the StepType enum value.
-3. Add it to the `Step` discriminated union.
-4. Add to `STEP_TO_COMMAND_ID` if the renderer needs a command-ID mapping.
-5. Wire a handler in `fluentvibe/simulator/walk.py:_dispatch`.
-6. Add an authoring method on the appropriate object (Worktable, head,
-   gripper).
-
-The renderer is the part most likely to need updates — extending it means
-editing `fluentvibe/compiler/renderer.py` and possibly
-`fluentvibe/_assets/reference/commands.yaml`.
-
-## Known limits / v1.2 candidates
-
-These are visible from the v1.1 codebase; documenting so contributors
-know what's already been thought through.
-
-### Authoring
-
-- **`Plate96('Source')` without `catalog=`** raises when the catalog index
-  is built. This is intentional (refuse-to-guess) but verbose for the
-  most-common cases. A future "default catalog per class" mechanism could
-  let `Plate96(...)` resolve to a sensible default catalog name when the
-  index has multiple matches — opt-in only, never a silent guess.
-- **`labware_by_label`** is needed when you don't keep a Python reference
-  to placed labware. The `examples/simple_transfer.py` example uses it for
-  the destination plate; cleaner authoring captures all `place()` returns.
-- **No FluentControl variable references** in fluentvibe authoring. The
-  parity test's reference protocol omits `var("PlateType", ...)` for that
-  reason. v1.2: add `wt.declare_fc_variable(...)` returning a token that's
-  acceptable as `labware_type` in IR steps.
-
-### Simulator
-
-- **`CannotAspirateError` is reserved but currently unused.** Pinned-only
-  aspirates on magnetized plates raise `InsufficientVolumeError` because
-  the layered loop runs out of skippable layers. v1.2: emit
-  `CannotAspirateError` explicitly when the targeted-layer's reagent has
-  `pinned_when_magnetized=True` and the plate is magnetized, so the error
-  message points at the actual cause.
-- **Subroutine descent.** External `.smt` subroutines are not parsed; the
-  simulator passes through them as opaque steps. v1.2: descend into
-  subroutines whose body is available as IR (locally authored).
-- **Snapshot deepcopy cost** is linear per step in slot map + tip count.
-  Long protocols with many large `TubeRack`s can produce snapshot lists
-  >100 MB. v1.2: structural sharing or copy-on-write snapshots.
-
-### Catalog
-
-- **Auto-rebuild on install drift** — *shipped (Phase C.1).*
-  `ensure_index()` consults `fingerprint_matches()` on every import and
-  rebuilds when the on-disk install differs from the indexed snapshot.
-  Opt out via `FLUENTVIBE_NO_AUTO_REBUILD=1`.
-- **Liquid-class catalog** — *shipped (Phase C.2).* Walks
-  `SystemSpecific/LiquidClasses/*.xlqc` and populates a `liquid_classes`
-  table. Renderer resolves the liquid-class GUID via SQL by name. The
-  vendored `_assets/reference/liquid_classes.yaml` (which the renderer
-  never actually loaded) was deleted.
-- **Multiple FluentControl installs on one machine** isn't handled —
-  the index only stores one install_path row. v1.2: keyed index (one
-  row set per install_path).
-- **Category inference** has no override file. Per the plan, the rules
-  use FunctionalGroup + structure + name fallback only. If a real install
-  contains a name the rules mis-classify, the only fix today is a code
-  change to `inference.py`. v1.2 candidate: optional
-  `category_overrides.toml` for user corrections.
-- **Connector graph** (`.xcon` files: 14k+ in a typical install) is not
-  parsed. Lookups currently rely on the workspace's site/labware
-  references being self-consistent.
-
-### Compile path
-
-- **Random `WorkspaceDelta` GUID** in the renderer breaks byte-equal
-  parity by 36 bytes per render. The parity test normalizes it. A future
-  renderer option to fix the GUID for reproducibility would simplify
-  cross-tool diffs.
-
-### Hardware coverage
-
-- **MCA96 head only.** `fluentvibe/heads/` has `mca96.py` and an empty
-  `__init__.py`. The IR schema covers MCA384, FCA, and LiHa step types,
-  and the renderer handles them — but fluentvibe doesn't expose authoring
-  methods for them yet. v1.2: add `MCA384Head`, `FCAHead`, `LiHaHead`
-  classes with the same emit-IR pattern.
-- **Partial-column tip pickup** — *shipped.* `TipBox` tracks per-column
-  occupancy; `MCA96Head.pick_up(box, columns=[...])` / `return_tips(...)`
-  support partial-column pickup and tip sorting, with the simulator
-  enforcing the physical peel-edge rule. See `examples/tip_sort_partial.py`.
-
-### Tests / CI
-
-- The parity test depends on an out-of-tree path (`D:\python\fluentdsl`).
-  CI would need to either install fluentdsl as a sibling repo or pin the
-  expected XML as a fixture (with the GUID-normalized form).
-
-## Quick recipes
-
-### "How do I find the catalog name for a 96-deep-well plate?"
-
-```
-fluentvibe catalog find "deep" --category plate
+```toml
+addopts = "-m 'not live_lm and not fluentcontrol_shell'"
 ```
 
-### "How do I check what fluentvibe loaded from a specific .xcmp?"
+Markers:
 
-```python
-from fluentvibe.catalog import resolve_by_name, load_xcmp
-entry = resolve_by_name("96 Well Flat")
-comp = load_xcmp(entry.file_path)
-print(comp.dim_mm, comp.functional_group, comp.pipettable.cavity.volume_ul)
+- `live_lm`: requires a reachable OpenAI-compatible model endpoint.
+- `fluentcontrol_shell`: requires a running local FluentControl UI and shell
+  XSCR.
+- `slow`: longer-running deterministic tests.
+- `integration`: exercises multiple layers end to end.
+
+Install-backed tests skip when the local FluentControl installation is absent.
+They must not silently weaken assertions merely because an install is present.
+
+Tests that alter catalog metadata must operate on a copied temporary index.
+Never poison or rebuild the package-wide `install_index.db` from a mutation
+test: parallel interpreters and editor processes may be reading it.
+
+## Repository layout
+
+```text
+fluentvibe/
+├── fluentvibe/          Python package
+│   ├── authoring/       model orchestration, tools, validation, repair
+│   ├── catalog/         FluentControl index and XML parsers
+│   ├── compiler/        protocol IR to XSCR
+│   ├── copilot/         diagnostics, completion, editing, fixes
+│   ├── decompiler/      XSCR to IR and Python
+│   ├── heads/           MCA96 and LiHa authoring facades
+│   ├── ir/              typed protocol schema and source positions
+│   ├── labware/         labware families and liquid state
+│   ├── lsp/             language-server integration
+│   ├── simulator/       state walker, snapshots, invariants, reports
+│   └── workspace_app/   local web service and frontend
+├── tests/               offline, integration, and opt-in live tests
+├── examples/            executable protocol examples
+├── scripts/             evaluation and maintenance harnesses
+├── editors/vscode/      VS Code extension
+└── docs/                user, reviewer, and developer documentation
 ```
 
-### "How do I rebuild the catalog after a FluentControl update?"
+The maintained subsystem map is [repository-overview.md](repository-overview.md).
+Do not add hand-maintained file or line counts here; they become stale quickly.
 
+## Design conventions
+
+- Python modules use `from __future__ import annotations`.
+- Pydantic models define protocol IR; dataclasses are preferred for ordinary
+  value objects and runtime state.
+- Authoring APIs emit IR. They do not render XML or directly mutate simulator
+  state.
+- The simulator consumes IR and must make modeled, pass-through, warning, and
+  opaque behavior distinguishable.
+- The compiler and decompiler preserve unsupported behavior explicitly rather
+  than silently pretending it was modeled.
+- Lazy imports are reserved for real circular dependencies or expensive
+  optional integrations.
+- Public errors should describe the failed invariant, the relevant object or
+  step, and a repair direction.
+
+## Adding or extending a capability
+
+Treat features as vertical slices:
+
+1. Define or reuse the public authoring API.
+2. Add or validate the typed IR representation.
+3. Implement simulator effects or classify the step explicitly as pass-through
+   or opaque.
+4. Render the command in the compiler.
+5. Parse and emit it in the decompiler where the XSCR carries enough data.
+6. Surface diagnostics through the CLI, LSP, and workspace app as appropriate.
+7. Add focused unit tests and at least one end-to-end or golden fixture.
+8. Update the capability matrix and user documentation.
+
+IR and renderer code originated in the related `fluentdsl` project. Changes to
+vendored paths should record whether they are intended to be upstreamed or are
+deliberate local divergence.
+
+## Live generation regression testing
+
+The local authoring endpoint defaults to `http://localhost:1234` and the model
+defaults to `qwen3.6-27b`. Keep live artifacts outside the package tree, under a
+timestamped `build/live-regression/` directory.
+
+Run a small profile-bound smoke case after meaningful authoring changes, then a
+more complex benchmark when changes affect workflow planning, skills, repair,
+or domain validation. Record:
+
+- model and endpoint configuration;
+- profile and lab-scope mode;
+- model turns and tool sequence;
+- Python build, strict simulation, and compile status;
+- repair attempts and repeated/non-advancing calls;
+- domain-specific rubric outcomes;
+- artifact and model-trace paths.
+
+Model calls default to a 240-second response limit. Override it with
+`FLUENTVIBE_LM_TIMEOUT_S` or `--request-timeout`. The evaluation harness also
+accepts `--run-timeout` to cap the combined skill-selection and authoring calls;
+it always creates `run-status.json` and model traces before generation begins.
+
+Live success is evidence, not a deterministic gate. Offline regression tests
+must encode every defect that can be reproduced without the model.
+
+## FluentControl integration
+
+The default install path is:
+
+```text
+C:\ProgramData\Tecan\VisionX\Database
 ```
-fluentvibe catalog refresh
-```
 
-### "How do I test offline (no FluentControl install)?"
+Override it with `FLUENTVIBE_FC_INSTALL`. Set
+`FLUENTVIBE_NO_AUTO_REBUILD=1` for deterministic test runs that should never
+refresh the shared catalog automatically.
 
-Set `FLUENTVIBE_FC_INSTALL` to a directory that doesn't exist (or just rename
-your install). On next import, `ensure_index` will be a no-op, and labware
-classes will use the offline-synthesis path. A `CatalogIndexMissing`
-warning fires once per process the first time a labware is constructed.
+Deployment and shell validation are opt-in. Generated artifacts must retain an
+explicit distinction between structural validation, simulation validation,
+FluentControl validation, and hardware validation.
 
-### "How do I see what state was true at a given step?"
+## Current gaps
 
-```python
-wt.simulate()
-for snap in wt.snapshots:
-    if type(snap.step).__name__ == "DispenseStep":
-        plate = snap.labware("DestPlate")
-        print(f"step {snap.step_index}: A1 = {plate.well('A1').layers}")
-```
+The maintained feature status and high-priority gaps are in
+[capability-matrix.md](capability-matrix.md). Design and product risks are
+tracked in [repository-overview.md](repository-overview.md) and
+[REVIEW_NOTES.md](../REVIEW_NOTES.md).

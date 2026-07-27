@@ -7,7 +7,7 @@ unless ``FLUENTVIBE_NO_AUTO_REBUILD`` is set.
 
 from __future__ import annotations
 
-import os
+import shutil
 import sqlite3
 import sys
 import warnings
@@ -48,53 +48,58 @@ def _set_fingerprint(db_path: Path, fingerprint: str) -> None:
         conn.close()
 
 
-@pytest.mark.skipif(not index_exists(), reason="catalog index empty")
-def test_fingerprint_mismatch_triggers_rebuild() -> None:
+@pytest.fixture
+def isolated_index(tmp_path: Path) -> Path:
+    """Copy the install index so fingerprint tests never mutate shared state."""
+    if not index_exists():
+        pytest.skip("catalog index empty")
+    target = tmp_path / "install_index.db"
+    shutil.copy2(DEFAULT_INDEX_PATH, target)
+    return target
+
+
+def test_fingerprint_mismatch_triggers_rebuild(
+    isolated_index: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Forcing a stale fingerprint causes ensure_index() to rebuild."""
-    before = _read_install_row(DEFAULT_INDEX_PATH)
+    before = _read_install_row(isolated_index)
     assert before, "expected an install row in the index"
     real_fingerprint = before["fingerprint"]
     real_built_at = before["built_at"]
 
     # Poison the stored fingerprint so it no longer matches the on-disk install.
-    _set_fingerprint(DEFAULT_INDEX_PATH, "stale-fingerprint-test-marker")
-    assert not fingerprint_matches(install_path_default())
+    _set_fingerprint(isolated_index, "stale-fingerprint-test-marker")
+    assert not fingerprint_matches(install_path_default(), db_path=isolated_index)
 
     # ensure_index() should detect the drift and rebuild.
-    os.environ.pop("FLUENTVIBE_NO_AUTO_REBUILD", None)
-    ensure_index()
+    monkeypatch.delenv("FLUENTVIBE_NO_AUTO_REBUILD", raising=False)
+    ensure_index(db_path=isolated_index)
 
-    after = _read_install_row(DEFAULT_INDEX_PATH)
+    after = _read_install_row(isolated_index)
     assert after["fingerprint"] == real_fingerprint, (
         "fingerprint should be restored to the on-disk install's hash"
     )
     assert after["built_at"] != real_built_at or after["fingerprint"] != "stale-fingerprint-test-marker"
-    assert fingerprint_matches(install_path_default())
+    assert fingerprint_matches(install_path_default(), db_path=isolated_index)
 
 
-@pytest.mark.skipif(not index_exists(), reason="catalog index empty")
-def test_no_auto_rebuild_env_var_keeps_stale_index() -> None:
+def test_no_auto_rebuild_env_var_keeps_stale_index(
+    isolated_index: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """With FLUENTVIBE_NO_AUTO_REBUILD=1, drift is warned but not rebuilt."""
-    before = _read_install_row(DEFAULT_INDEX_PATH)
+    before = _read_install_row(isolated_index)
     assert before
-    real_fingerprint = before["fingerprint"]
-
     # Snapshot real fingerprint, then poison and set the env var.
-    _set_fingerprint(DEFAULT_INDEX_PATH, "another-stale-marker")
+    _set_fingerprint(isolated_index, "another-stale-marker")
 
-    os.environ["FLUENTVIBE_NO_AUTO_REBUILD"] = "1"
-    try:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            ensure_index()
-        warning_msgs = [str(w.message) for w in caught]
-        assert any("fingerprint" in m.lower() for m in warning_msgs), (
-            f"expected a fingerprint-drift warning; got {warning_msgs!r}"
-        )
-        # Index was NOT rebuilt — fingerprint is still the marker.
-        intermediate = _read_install_row(DEFAULT_INDEX_PATH)
-        assert intermediate["fingerprint"] == "another-stale-marker"
-    finally:
-        os.environ.pop("FLUENTVIBE_NO_AUTO_REBUILD", None)
-        # Restore the index to a healthy state for downstream tests.
-        _set_fingerprint(DEFAULT_INDEX_PATH, real_fingerprint)
+    monkeypatch.setenv("FLUENTVIBE_NO_AUTO_REBUILD", "1")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        ensure_index(db_path=isolated_index)
+    warning_msgs = [str(w.message) for w in caught]
+    assert any("fingerprint" in m.lower() for m in warning_msgs), (
+        f"expected a fingerprint-drift warning; got {warning_msgs!r}"
+    )
+    # Index was NOT rebuilt — fingerprint is still the marker.
+    intermediate = _read_install_row(isolated_index)
+    assert intermediate["fingerprint"] == "another-stale-marker"

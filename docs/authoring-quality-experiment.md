@@ -1,6 +1,8 @@
 # Authoring quality experiment — handoff for review
 
-**Branch:** `partial-mca-pipetting` (all work below is **uncommitted**)
+**Historical branch:** `partial-mca-pipetting`; the experiment was later
+incorporated into `review/authoring-quality-experiment`. Sections 1–6 describe
+the state measured on 2026-06-18; section 7 records the current disposition.
 **Model:** `qwen3.6-27b` via LM Studio @ `http://127.0.0.1:1234`, **KV cache f16**
 **Date:** 2026-06-18
 **Canonical case:** Oxford Nanopore SQK-RBK114 V14 rapid amplicon library prep
@@ -190,7 +192,7 @@ this model scale, **disproven by the data**.
 
 ---
 
-## 5. Files changed (all uncommitted on `partial-mca-pipetting`)
+## 5. Files involved in the original experiment
 
 **New (this experiment):**
 - `fluentvibe/authoring/eval_rubric.py` — rubric
@@ -207,8 +209,8 @@ this model scale, **disproven by the data**.
   REQUIRED INVARIANTS block
 - `tests/test_lab_skills.py` — updated tool-surface assertion
 
-**Also uncommitted on the branch (PRIOR sessions, not this experiment — review
-separately):** labware auto-rewrite + coverage gate + accept-with-gaps fallback +
+**Related work already present on the branch at the time (not part of this
+experiment):** labware auto-rewrite + coverage gate + accept-with-gaps fallback +
 timestamped webapp output + brand-neutral skill rename, touching
 `graph.py`, `tools.py`, `document_adherence.py`, `models.py`, `service.py`,
 `session.py`, `workspace_app/service.py`, and several skill/test files. (This is
@@ -240,6 +242,14 @@ Saved evidence: `build/eval/batch-after-skill/` (monolith) and
 
 ## 7. Recommendation + open questions for the reviewer
 
+> **Update (2026-06-18): staging shelved.** Per-group staging is now **disabled
+> in skills mode**. It was making every real generation
+> (all bead/SPRI cleanups trip the trigger) run 10–30 model turns instead of one
+> — ~3× slower for no quality gain. `graph._should_stage` now returns `False` for
+> skills (declare the workflow once, then draft in one pass); the skills empty-turn
+> re-nudge and the staged `_SKILLS_HEADER` group-by-group language were removed.
+> `off`/`cheatsheet` still stage (unchanged baseline); `enforce` stays one-shot.
+
 **Recommendation:** do **not** enable staging by default — shelve it (code +
 tests are sound, behind the skills path, but net-negative here). The evidence
 across monolith / skill-tightening / staging points to the only
@@ -263,5 +273,6 @@ the structural round-trip/recovery checks would be the sibling.
    mode **cap consecutive non-advancing `simulate` calls** (detect "spinning on
    the same stage") and bail to accept-with-gaps earlier instead of burning the
    whole budget?
-4. Is shelving vs reverting the staging changes preferable given the prior
-   uncommitted work tangled in the same files?
+4. The current implementation shelves skills-mode staging while retaining the
+   reusable staging engine for the modes that still exercise it. Revisit that
+   decision only with new measured evidence.

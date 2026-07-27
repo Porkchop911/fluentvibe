@@ -149,6 +149,19 @@
     .status { min-height: 20px; margin-top: 10px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
     .status.error { color: var(--bad); }
     .status.ok { color: var(--good); }
+    .status.running { color: var(--accent); }
+    .status.running::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 7px;
+      border: 2px solid var(--accent-border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: status-spin .8s linear infinite;
+    }
+    @keyframes status-spin { to { transform: rotate(360deg); } }
     .pre {
       min-height: 120px;
       max-height: 520px;
@@ -368,7 +381,7 @@
     }
     .author-sb-fields {
       display: grid;
-      grid-template-columns: 1.5fr 1fr .8fr 1fr auto;
+      grid-template-columns: 1.4fr .8fr .65fr 1fr .7fr auto;
       gap: 10px;
       align-items: end;
     }
@@ -647,6 +660,10 @@
               <label for="authorModel">Model</label>
               <input id="authorModel" placeholder="default">
             </div>
+            <div>
+              <label for="authorTimeout">Response limit (s)</label>
+              <input id="authorTimeout" type="number" min="15" step="15" value="240">
+            </div>
             <div class="author-sb-action">
               <label>&nbsp;</label>
               <button id="startAuthor">Start session</button>
@@ -804,8 +821,17 @@
 
     function setStatus(id, text, kind) {
       const el = $(id);
-      el.className = `status ${kind === 'error' ? 'error' : kind === 'ok' ? 'ok' : ''}`;
+      el.className = `status ${['error', 'ok', 'running'].includes(kind) ? kind : ''}`;
       el.textContent = text || '';
+    }
+
+    function formatDuration(seconds) {
+      if (seconds === null || seconds === undefined) return '';
+      const total = Math.max(0, Math.round(Number(seconds) || 0));
+      if (total < 60) return `${total}s`;
+      const minutes = Math.floor(total / 60);
+      const remainder = total % 60;
+      return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
     }
 
     function showJson(id, value) {
@@ -912,18 +938,30 @@
     }
 
     async function submitAndPoll(kind, payload, statusId, resultId, done) {
-      setStatus(statusId, `Starting ${kind}...`);
+      setStatus(statusId, `Starting ${kind}…`, 'running');
       const created = await post(`/api/jobs/${kind}`, payload);
       const jobId = created.job.id;
       return pollJob(jobId, statusId, resultId, done);
     }
 
     async function pollJob(jobId, statusId, resultId, done) {
+      let transientFailures = 0;
       while (true) {
-        const data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
+        let data;
+        try {
+          data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
+          transientFailures = 0;
+        } catch (err) {
+          transientFailures += 1;
+          if (transientFailures >= 4) throw err;
+          setStatus(statusId, `Connection interrupted; retrying (${transientFailures}/3)…`, 'running');
+          await sleep(1000 * transientFailures);
+          continue;
+        }
         const job = data.job;
         if (job.status === 'queued' || job.status === 'running') {
-          setStatus(statusId, `${job.kind}: ${job.status}`);
+          const elapsed = job.status === 'queued' ? job.queue_s : job.elapsed_s;
+          setStatus(statusId, `${job.kind}: ${job.status} · ${formatDuration(elapsed)}`, 'running');
           await sleep(750);
           continue;
         }
@@ -1265,7 +1303,8 @@
           profile_name: $('authorProfile').value,
           retry_budget: Number($('authorRetry').value || 8),
           model: $('authorModel').value,
-          lab_scope: $('authorLabScope').value
+          lab_scope: $('authorLabScope').value,
+          request_timeout_s: Number($('authorTimeout').value || 240)
         };
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
@@ -1275,7 +1314,7 @@
           pushAuthorMessage(
             'system',
             'Session started',
-            `Profile: ${result.profile_name || 'none'}\nOutput: ${result.output_dir}\nSession: ${result.session_id}`
+            `Profile: ${result.profile_name || 'none'}\nOutput: ${result.output_dir}\nResponse limit: ${result.request_timeout_s || 240}s\nSession: ${result.session_id}`
           );
           $('authorPrompt').focus();
         });

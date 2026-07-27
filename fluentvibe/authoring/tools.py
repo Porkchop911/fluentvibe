@@ -880,6 +880,8 @@ def tool_definitions() -> list[dict[str, Any]]:
         _tool("declare_protocol_workflow",
               "Declare the high-level protocol plan before drafting Python. "
               "The first two groups must be exactly Variables and Labware Placement. "
+              "After those scaffold groups, include every requested functional stage; "
+              "at least one non-scaffold group is required. "
               "Variables are emitted as wt.declare_variable and wt.set_sim_value "
               "before any wt.group call.", {
             "protocol_name": {"type": "string"},
@@ -897,7 +899,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "groups": {
                 "type": "array",
                 "items": {"type": "object"},
-                "description": "Ordered functional groups. The first two must be Variables and Labware Placement.",
+                "description": "At least three ordered groups. The first two must be Variables and Labware Placement; the remaining groups name every requested protocol stage.",
             },
         }, required=("protocol_name", "summary", "variables", "labware", "groups")),
         _tool("present_object_draft",
@@ -1584,23 +1586,34 @@ class AuthoringToolRegistry:
         summary: str,
         variables: list[dict[str, Any]] | None,
         labware: list[dict[str, Any]] | None,
-        groups: list[dict[str, Any]] | None,
+        groups: list[dict[str, Any] | str] | None,
     ) -> dict[str, Any]:
-        group_plans = tuple(
-            FunctionalGroupPlan(
-                name=str(group.get("name") or "").strip(),
-                objective=str(group.get("objective") or "").strip(),
-                expected_steps=tuple(str(item) for item in (group.get("expected_steps") or ())),
+        group_plans: tuple[FunctionalGroupPlan, ...] = tuple(
+            (
+                FunctionalGroupPlan(name=group.strip())
+                if isinstance(group, str)
+                else FunctionalGroupPlan(
+                    name=str(group.get("name") or "").strip(),
+                    objective=str(group.get("objective") or "").strip(),
+                    expected_steps=tuple(
+                        str(item) for item in (group.get("expected_steps") or ())
+                    ),
+                )
             )
             for group in (groups or ())
-            if isinstance(group, dict)
+            if isinstance(group, dict) or (isinstance(group, str) and group.strip())
         )
         group_names = [group.name for group in group_plans]
-        if len(group_names) < 2:
+        if len(group_names) < 3:
             return {
                 "ok": False,
                 "category": "workflow_plan_invalid",
-                "message": "declare_protocol_workflow requires at least Variables and Labware Placement groups.",
+                "message": (
+                    "declare_protocol_workflow requires `Variables`, `Labware Placement`, "
+                    "and at least one functional protocol group. Add every requested "
+                    "stage after the two scaffold groups before drafting."
+                ),
+                "received_groups": group_names,
             }
         if group_names[:2] != ["Variables", "Labware Placement"]:
             return {
@@ -1627,7 +1640,7 @@ class AuthoringToolRegistry:
             name = str(item.get("name") or "").strip()
             if not name:
                 continue
-            default = item.get("default")
+            default = item.get("default", item.get("default_value"))
             sim_value = item.get("sim_value", default)
             variable_bindings.append(VariableBinding(name=name, default=default, sim_value=sim_value))
         if not variable_bindings:
@@ -2349,7 +2362,7 @@ class AuthoringToolRegistry:
         summary: str,
         variables: list[dict[str, Any]] | None,
         labware: list[dict[str, Any]] | None,
-        groups: list[dict[str, Any]] | None,
+        groups: list[dict[str, Any] | str] | None,
     ) -> dict[str, Any]:
         if not self.object_draft_approved:
             return {

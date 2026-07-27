@@ -8,12 +8,11 @@ import and call known-good routines instead of re-authoring complex stages.
 from __future__ import annotations
 
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 MANIFEST_NAME = "workspace_modules.yaml"
 MODULES_DIR_NAME = "modules"

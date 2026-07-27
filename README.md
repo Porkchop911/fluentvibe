@@ -159,6 +159,9 @@ fluentvibe author "..." --endpoint http://localhost:1234/v1/chat/completions --m
 
 ## Documentation
 
+- [Repository overview](docs/repository-overview.md)
+- [Capability matrix](docs/capability-matrix.md)
+- [Reliability scorecard](docs/reliability-scorecard.md)
 - [Reviewer guide](docs/reviewer-guide.md)
 - [Architecture](docs/architecture.md)
 - [Authoring API](docs/authoring.md)
