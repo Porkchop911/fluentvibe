@@ -165,8 +165,8 @@ class LabScope:
 
 
 # Header text prepended to the injected context block. Factored out of
-# ``as_context_message`` so ``lab_skills.assemble_context`` can reuse the
-# enforce header verbatim for ``skills`` mode (which shares enforce's posture).
+# ``as_context_message`` so ``lab_skills.assemble_context`` can select the
+# ``skills`` header (declare once, then one-pass draft) for ``skills`` mode.
 _ENFORCE_HEADER = (
     "LAB SCOPE (authoritative — this IS the catalog for this run). "
     "Grounding, planning, and approval tools are intentionally "
@@ -211,25 +211,26 @@ _SKILLS_HEADER = (
     "ORDERED functional groups. The first two groups must be exactly "
     "`Variables` then `Labware Placement`; after them, name EVERY stage the "
     "request describes as its own group (e.g. a bead/SPRI cleanup, ethanol "
-    "washes, elution, barcoding) — do not collapse or omit a stage. For a "
-    "multi-stage protocol you will then be guided to draft and "
-    "`simulate_python_draft` ONE group at a time, keeping prior accepted "
-    "code and extending it, until every group passes; only then call "
-    "`compile_and_simulate` on the full source. Fix any simulator error and "
-    "re-call `simulate_python_draft`. Use the exact `catalog=` names and "
-    "`python_class` values listed below. If the request needs labware not "
-    "in this list, say so explicitly and stop rather than substituting.\n\n"
+    "washes, elution, barcoding) — do not collapse or omit a stage. Then "
+    "write the COMPLETE protocol as a single `build_worktable()` in one "
+    "pass — all variables, labware, and every declared group — and call "
+    "`simulate_python_draft` with the full source. Fix any simulator error "
+    "and re-call `simulate_python_draft`; once it passes, call "
+    "`compile_and_simulate` on the same source. Use the exact `catalog=` "
+    "names and `python_class` values listed below. If the request needs "
+    "labware not in this list, say so explicitly and stop rather than "
+    "substituting.\n\n"
 )
 
 
-def context_header(enforces: bool, *, staged: bool = False) -> str:
+def context_header(enforces: bool, *, skills: bool = False) -> str:
     """The header block for an injected lab-scope context message.
 
-    ``staged`` selects the skills group-by-group workflow header (only skills
-    mode passes it); otherwise enforce's one-pass header or the cheatsheet
-    header is used.
+    ``skills`` selects the skills workflow header — declare the workflow once,
+    then draft the whole protocol in one pass (only skills mode passes it);
+    otherwise enforce's one-pass header or the cheatsheet header is used.
     """
-    if staged:
+    if skills:
         return _SKILLS_HEADER
     return _ENFORCE_HEADER if enforces else _CHEATSHEET_HEADER
 

@@ -1265,6 +1265,21 @@ def test_declare_protocol_workflow_requires_mandatory_prefix() -> None:
     assert bad["ok"] is False
     assert bad["category"] == "workflow_plan_invalid"
 
+    incomplete = tools.declare_protocol_workflow(
+        protocol_name="Incomplete",
+        summary="missing the actual protocol stage",
+        variables=[{"name": "RunId", "default": "test", "sim_value": "test"}],
+        labware=[{"label": "Plate"}],
+        groups=[
+            {"name": "Variables"},
+            {"name": "Labware Placement"},
+        ],
+    )
+    assert incomplete["ok"] is False
+    assert incomplete["category"] == "workflow_plan_invalid"
+    assert "at least one functional protocol group" in incomplete["message"]
+    assert incomplete["received_groups"] == ["Variables", "Labware Placement"]
+
     ok = tools.declare_protocol_workflow(
         protocol_name="Good",
         summary="good order",
@@ -1279,6 +1294,33 @@ def test_declare_protocol_workflow_requires_mandatory_prefix() -> None:
     assert ok["ok"] is True
     assert tools.workflow_plan is not None
     assert [group["name"] for group in ok["workflow"]["groups"]][:2] == ["Variables", "Labware Placement"]
+
+
+def test_declare_protocol_workflow_normalizes_compact_model_arguments() -> None:
+    """Small models commonly send string groups and ``default_value`` fields."""
+    tools = AuthoringToolRegistry(
+        output_dir=Path("build") / "test_prompt_authoring" / "workflow_compact_args"
+    )
+
+    result = tools.declare_protocol_workflow(
+        protocol_name="Compact",
+        summary="compact model-shaped arguments",
+        variables=[
+            {"name": "TARGET_VOLUME_UL", "type": "float", "default_value": 10.0},
+        ],
+        labware=[{"label": "SourcePlate"}, {"label": "DestPlate"}],
+        groups=["Variables", "Labware Placement", "Transfer"],
+    )
+
+    assert result["ok"] is True
+    assert [group["name"] for group in result["workflow"]["groups"]] == [
+        "Variables",
+        "Labware Placement",
+        "Transfer",
+    ]
+    assert result["workflow"]["variables"] == [
+        {"name": "TARGET_VOLUME_UL", "default": 10.0, "sim_value": 10.0}
+    ]
 
 
 def test_compile_and_simulate_passes_intent_when_satisfied() -> None:

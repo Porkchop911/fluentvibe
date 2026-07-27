@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -19,6 +20,20 @@ DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get(
     "FLUENTVIBE_LM_ENDPOINT", "http://localhost:1234/v1/chat/completions"
 )
 DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.6-27b")
+DEFAULT_REQUEST_TIMEOUT_S = 240.0
+
+
+def _request_timeout_from_env() -> float:
+    raw = os.environ.get("FLUENTVIBE_LM_TIMEOUT_S")
+    if raw is None:
+        return DEFAULT_REQUEST_TIMEOUT_S
+    try:
+        timeout = float(raw)
+    except ValueError as exc:
+        raise ValueError("FLUENTVIBE_LM_TIMEOUT_S must be a positive number") from exc
+    if timeout <= 0:
+        raise ValueError("FLUENTVIBE_LM_TIMEOUT_S must be a positive number")
+    return timeout
 
 
 @dataclass(frozen=True)
@@ -38,10 +53,29 @@ class LMStudioChatClient:
         endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
         model: str = DEFAULT_LM_STUDIO_MODEL,
         trace_recorder: ModelTraceRecorder | None = None,
+        request_timeout_s: float | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
         self.trace_recorder = trace_recorder
+        self.request_timeout_s = (
+            _request_timeout_from_env()
+            if request_timeout_s is None
+            else float(request_timeout_s)
+        )
+        if self.request_timeout_s <= 0:
+            raise ValueError("request_timeout_s must be a positive number")
+        self._run_deadline: float | None = None
+
+    def start_run_budget(self, timeout_s: float) -> None:
+        """Bound all model calls made by one authoring run."""
+        timeout = float(timeout_s)
+        if timeout <= 0:
+            raise ValueError("run timeout must be a positive number")
+        self._run_deadline = time.monotonic() + timeout
+
+    def clear_run_budget(self) -> None:
+        self._run_deadline = None
 
     def complete(
         self,
@@ -71,15 +105,51 @@ class LMStudioChatClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        started = time.monotonic()
+        effective_timeout = self.request_timeout_s
+        if self._run_deadline is not None:
+            remaining = self._run_deadline - started
+            if remaining <= 0:
+                message = "LM Studio authoring run timed out before the next model request"
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record(
+                        "request_error", error=message, error_type="run_timeout"
+                    )
+                raise LMStudioError(message)
+            effective_timeout = min(effective_timeout, remaining)
+        deadline = started + effective_timeout
         try:
-            with urllib.request.urlopen(req, timeout=None) as response:
+            with urllib.request.urlopen(req, timeout=effective_timeout) as response:
                 content_type = response.headers.get("Content-Type", "")
                 if "text/event-stream" in content_type:
-                    return self._read_stream(response)
+                    return self._read_stream(response, deadline=deadline)
                 data = json.loads(response.read().decode("utf-8"))
-        except urllib.error.URLError as exc:
+        except TimeoutError as exc:
+            message = f"LM Studio request timed out after {effective_timeout:g}s"
             if self.trace_recorder is not None:
-                self.trace_recorder.record("request_error", error=str(exc))
+                self.trace_recorder.record(
+                    "request_error",
+                    error=message,
+                    error_type="timeout",
+                    duration_ms=(time.monotonic() - started) * 1000,
+                )
+            raise LMStudioError(message) from exc
+        except urllib.error.URLError as exc:
+            is_timeout = isinstance(getattr(exc, "reason", None), TimeoutError)
+            error = (
+                f"LM Studio request timed out after {effective_timeout:g}s"
+                if is_timeout
+                else str(exc)
+            )
+            if self.trace_recorder is not None:
+                self.trace_recorder.record(
+                    "request_error",
+                    error=error,
+                    error_type="timeout" if is_timeout else type(exc).__name__,
+                    duration_ms=(time.monotonic() - started) * 1000,
+                )
+            if is_timeout:
+                raise LMStudioError(error) from exc
             raise LMStudioError(f"LM Studio request failed: {exc}") from exc
         except json.JSONDecodeError as exc:
             if self.trace_recorder is not None:
@@ -99,13 +169,15 @@ class LMStudioChatClient:
             )
         return message
 
-    def _read_stream(self, response) -> dict[str, Any]:
+    def _read_stream(self, response, *, deadline: float | None = None) -> dict[str, Any]:
         content_parts: list[str] = []
         tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason: str | None = None
         reasoning_parts: dict[str, list[str]] = {}
 
         for raw_line in response:
+            if deadline is not None and time.monotonic() > deadline:
+                raise TimeoutError
             line = raw_line.decode("utf-8").strip()
             if not line or line.startswith(":"):
                 continue
@@ -122,6 +194,16 @@ class LMStudioChatClient:
                 if self.trace_recorder is not None:
                     self.trace_recorder.record("request_error", error=str(exc), raw_line=data_text)
                 raise LMStudioError(f"LM Studio stream returned invalid JSON: {exc}") from exc
+            provider_error = _provider_error_message(chunk)
+            if provider_error is not None:
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record(
+                        "request_error",
+                        error=provider_error,
+                        error_type="provider_error",
+                        response=chunk,
+                    )
+                raise LMStudioError(f"LM Studio provider error: {provider_error}")
             if self.trace_recorder is not None:
                 self.trace_recorder.record("raw_stream_chunk", chunk=chunk)
             choice = (chunk.get("choices") or [{}])[0]
@@ -270,6 +352,21 @@ def _reasoning_fields(data: dict[str, Any]) -> dict[str, Any]:
         for key, value in data.items()
         if "reasoning" in key.lower() and value not in (None, "")
     }
+
+
+def _provider_error_message(data: dict[str, Any]) -> str | None:
+    """Return an OpenAI-compatible error message embedded in a stream chunk."""
+    if data.get("choices"):
+        return None
+    error = data.get("error")
+    if isinstance(error, dict):
+        message = error.get("message") or error.get("detail") or error.get("type")
+        if message:
+            return str(message)
+    if isinstance(error, str) and error.strip():
+        return error.strip()
+    message = data.get("message")
+    return str(message).strip() if message else None
 
 
 def _endpoint_to_base_url(endpoint: str) -> str:

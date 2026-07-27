@@ -224,6 +224,9 @@ def test_workbench_authoring_session_job_finishes_without_model_call() -> None:
     assert job["status"] == "success"
     assert job["result"]["ok"] is True
     assert job["result"]["session_id"]
+    assert job["elapsed_s"] is not None
+    assert job["elapsed_s"] >= 0
+    assert job["queue_s"] >= 0
 
 
 def test_workspace_app_capabilities_expose_attachment_support() -> None:

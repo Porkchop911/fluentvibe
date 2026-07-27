@@ -319,8 +319,10 @@ def assemble_context(scope: LabScope, names: list[str]) -> str | None:
         + bodies
     )
     # assemble_context only runs for ``skills`` mode (see build_initial_scope_message),
-    # which stages multi-stage protocols group-by-group — use the staged header.
-    return context_header(scope.enforces, staged=True) + _BODY_SEP.join(pieces)
+    # which declares the workflow once and then drafts the whole protocol in one
+    # pass (per-group staging is shelved — see graph._should_stage) — use the
+    # skills header.
+    return context_header(scope.enforces, skills=True) + _BODY_SEP.join(pieces)
 
 
 def _profile_labware_class_table(scope: LabScope) -> str | None:

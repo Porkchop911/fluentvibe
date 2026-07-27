@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 import time
@@ -82,7 +83,8 @@ def _build_prompt(user_text: str, pdf: Path) -> tuple[str, str]:
 
 
 def _run_once(service, prompt: str, source_text: str, run_dir: Path, ws_name: str,
-              ws_guid: str, lab_scope: str, simulate: bool, retry_budget: int):
+              ws_guid: str, lab_scope: str, simulate: bool, retry_budget: int,
+              trace_config, run_timeout_s: float):
     run_dir.mkdir(parents=True, exist_ok=True)
     result = service.author(
         prompt,
@@ -91,6 +93,8 @@ def _run_once(service, prompt: str, source_text: str, run_dir: Path, ws_name: st
         workspace_guid=ws_guid,
         lab_scope=lab_scope,
         retry_budget=retry_budget,
+        trace_config=trace_config,
+        run_timeout_s=run_timeout_s,
     )
     py_path = None
     if result.validation is not None and result.validation.python_path:
@@ -164,6 +168,23 @@ def main() -> int:
                          "(max_iterations = max(8, retry_budget + 8))")
     ap.add_argument("--model", default=None)
     ap.add_argument("--endpoint", default=None)
+    ap.add_argument(
+        "--request-timeout",
+        type=float,
+        default=240.0,
+        help="maximum seconds for one model response (default: 240)",
+    )
+    ap.add_argument(
+        "--no-live-trace",
+        action="store_true",
+        help="retain model traces without printing events while running",
+    )
+    ap.add_argument(
+        "--run-timeout",
+        type=float,
+        default=600.0,
+        help="maximum seconds across all model calls in one run (default: 600)",
+    )
     ap.add_argument("--no-simulate", action="store_true", help="source tier only")
     args = ap.parse_args()
 
@@ -189,17 +210,41 @@ def main() -> int:
         service_kwargs["endpoint"] = args.endpoint
     if args.model:
         service_kwargs["model"] = args.model
+    service_kwargs["request_timeout_s"] = args.request_timeout
     service = PromptAuthoringService(**service_kwargs)
+
+    from fluentvibe.authoring.trace import ModelTraceConfig
 
     rows: list[dict] = []
     for i in range(1, args.runs + 1):
         run_dir = out / f"run-{i:02d}"
+        run_dir.mkdir(parents=True, exist_ok=True)
         row: dict = {"run": i}
+        started = time.monotonic()
+        run_status = {
+            "run": i,
+            "status": "running",
+            "profile": ws_name,
+            "model": args.model,
+            "endpoint": args.endpoint,
+            "request_timeout_s": args.request_timeout,
+            "run_timeout_s": args.run_timeout,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }
+        status_path = run_dir / "run-status.json"
+        status_path.write_text(json.dumps(run_status, indent=2), encoding="utf-8")
+        trace_config = ModelTraceConfig(
+            enabled=True,
+            live=not args.no_live_trace,
+            output_dir=run_dir,
+            session_id=f"eval-run-{i:02d}",
+        )
         print(f"[eval] run {i}/{args.runs} …", flush=True)
         try:
             result, rubric, py_path = _run_once(
                 service, prompt, source_text, run_dir, ws_name, ws_guid,
-                args.lab_scope, not args.no_simulate, args.retry_budget,
+                args.lab_scope, not args.no_simulate, args.retry_budget, trace_config,
+                args.run_timeout,
             )
             row["status"] = result.status.value
             if result.failure_category is not None:
@@ -215,6 +260,13 @@ def main() -> int:
             else:
                 row["score"] = ""
                 print(f"        status={row['status']} (no protocol produced)")
+            run_status.update(
+                status=row["status"],
+                error=row.get("error"),
+                score=row.get("score"),
+                elapsed_s=round(time.monotonic() - started, 3),
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            )
         except Exception as exc:  # noqa: BLE001 - record, never abort the batch
             row["status"] = "error"
             row["score"] = ""
@@ -222,6 +274,14 @@ def main() -> int:
             (run_dir / "error.txt").parent.mkdir(parents=True, exist_ok=True)
             (run_dir / "error.txt").write_text(traceback.format_exc(), encoding="utf-8")
             print(f"        ERROR: {row['error']}")
+            run_status.update(
+                status="error",
+                error=row["error"],
+                elapsed_s=round(time.monotonic() - started, 3),
+                finished_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            )
+        finally:
+            status_path.write_text(json.dumps(run_status, indent=2), encoding="utf-8")
         rows.append(row)
 
     _write_reports(out, rows)

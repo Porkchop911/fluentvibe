@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from fluentvibe.authoring.graph import build_authoring_graph
-from fluentvibe.authoring.lm_client import LMStudioChatClient
+from fluentvibe.authoring.lm_client import LMStudioChatClient, LMStudioError
 from fluentvibe.authoring.models import AuthoringStatus
 from fluentvibe.authoring.tools import AuthoringToolRegistry
 from fluentvibe.authoring.trace import ModelTraceConfig, ModelTraceRecorder, render_model_trace_file
@@ -116,6 +117,73 @@ def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -
     assert "Provider-Exposed Reasoning" in rendered
     assert "visible reasoning" in rendered
     assert "`lookup_workspace`" in rendered
+
+
+def test_lmstudio_request_timeout_is_bounded_and_traced(monkeypatch, tmp_path: Path) -> None:
+    seen: dict[str, float] = {}
+
+    def time_out(req, timeout=None):
+        seen["timeout"] = timeout
+        raise TimeoutError
+
+    monkeypatch.setattr("urllib.request.urlopen", time_out)
+    recorder = ModelTraceRecorder(
+        ModelTraceConfig(enabled=True, output_dir=tmp_path, session_id="timeout")
+    )
+    recorder.start_turn(1)
+    client = LMStudioChatClient(
+        trace_recorder=recorder,
+        request_timeout_s=12.5,
+    )
+
+    with pytest.raises(LMStudioError, match="timed out after 12.5s"):
+        client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    assert seen["timeout"] == 12.5
+    events = _events(next((tmp_path / "model_traces").glob("*.jsonl")))
+    error = [event for event in events if event["event"] == "request_error"][-1]
+    assert error["error_type"] == "timeout"
+
+
+def test_lmstudio_run_budget_caps_the_next_request(monkeypatch) -> None:
+    seen: dict[str, float] = {}
+
+    def time_out(req, timeout=None):
+        seen["timeout"] = timeout
+        raise TimeoutError
+
+    monkeypatch.setattr("urllib.request.urlopen", time_out)
+    client = LMStudioChatClient(request_timeout_s=120)
+    client.start_run_budget(7.5)
+
+    with pytest.raises(LMStudioError, match="timed out"):
+        client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    assert 0 < seen["timeout"] <= 7.5
+
+
+def test_lmstudio_stream_surfaces_provider_error(monkeypatch) -> None:
+    class FakeHeaders:
+        def get(self, name, default=None):
+            return "text/event-stream" if name == "Content-Type" else default
+
+    class FakeResponse:
+        headers = FakeHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def __iter__(self):
+            yield b'data: {"error":{"message":"Model unloaded."}}\n'
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=None: FakeResponse())
+    client = LMStudioChatClient()
+
+    with pytest.raises(LMStudioError, match="provider error: Model unloaded"):
+        client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])
 
 
 def test_trace_disabled_creates_no_files(tmp_path: Path) -> None:

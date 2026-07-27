@@ -322,15 +322,33 @@ class _Nodes:
                 messages=[_message_to_trace_dict(m) for m in state["messages"]],
             )
         t0 = _time.monotonic()
+        model_error: Exception | None = None
         try:
             response = self.client_with_tools.invoke(state["messages"])
         except Exception as exc:
+            model_error = exc
+            if _is_transient_model_error(exc):
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record(
+                        "model_retry",
+                        request_id=request_id,
+                        iteration=iterations,
+                        error=str(exc),
+                    )
+                _time.sleep(0.5)
+                try:
+                    response = self.client_with_tools.invoke(state["messages"])
+                except Exception as retry_exc:
+                    model_error = retry_exc
+                else:
+                    model_error = None
+        if model_error is not None:
             if self.trace_recorder is not None:
                 self.trace_recorder.record(
                     "request_error",
                     request_id=request_id,
-                    error=str(exc),
-                    error_type=type(exc).__name__,
+                    error=str(model_error),
+                    error_type=type(model_error).__name__,
                 )
             return {
                 "iterations": iterations,
@@ -338,7 +356,7 @@ class _Nodes:
                     registry=self.registry,
                     state=state,
                     category=FailureCategory.MODEL_AUTHORING_FAILURE,
-                    message=str(exc),
+                    message=str(model_error),
                 ),
             }
         dt = _time.monotonic() - t0
@@ -746,21 +764,9 @@ class _Nodes:
                     },
                     goto=END,
                 )
-            # Skills staged drafting: a turn with neither a tool call nor a fenced
-            # draft is the model "thinking out loud" mid-plan. Re-nudge with the
-            # current group's instruction instead of aborting the whole run; the
-            # (staging-scaled) iteration budget remains the hard backstop. Scoped
-            # to skills so enforce/default keep their immediate-failure behavior.
-            _scope = getattr(self.registry, "lab_scope", None)
-            if _scope is not None and _scope.mode == "skills":
-                return Command(
-                    update={
-                        "messages": [_workflow_next_group_message(
-                            self.registry, state.get("current_group_index", 0)
-                        )],
-                    },
-                    goto="model_call",
-                )
+            # A turn with neither a tool call nor a fenced draft is a hard failure
+            # in every mode (baseline behavior). The skills empty-turn re-nudge
+            # was part of the shelved staged-drafting experiment and is removed.
             return Command(
                 update={
                     "result": _build_failure(
@@ -1247,13 +1253,6 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
     return [group.name for group in plan.groups]
 
 
-_SCAFFOLD_GROUPS = ("Variables", "Labware Placement")
-# Stage names that signal a protocol whose late stages carry order- and
-# volume-dependent detail the one-shot draft tends to botch — bead cleanups,
-# washes, elutions. Any match forces staged drafting in skills mode.
-_STAGE_TRIGGER_RE = re.compile(r"bead|clean|elut|wash|magnet|spri|ampure", re.IGNORECASE)
-
-
 def _requires_workflow_declaration(registry: AuthoringToolRegistry) -> bool:
     """True for every active mode except ``enforce``.
 
@@ -1269,18 +1268,15 @@ def _requires_workflow_declaration(registry: AuthoringToolRegistry) -> bool:
 def _should_stage(registry: AuthoringToolRegistry) -> bool:
     """Whether to enforce per-group checkpoints for the declared plan.
 
-    off/cheatsheet always stage (preserved baseline). ``skills`` stages only when
-    the plan is genuinely multi-stage — ≥3 non-scaffold groups, or any group that
-    names a bead/cleanup/wash/elution stage — so simple protocols still one-shot
-    after the (cheap) declaration.
+    off/cheatsheet always stage (preserved baseline). ``skills`` **never** stages:
+    it declares the workflow once (cheap, anti-punt) and then drafts the whole
+    protocol in one pass. Per-group staging was measured at ~3× latency for no
+    quality gain (see ``docs/authoring-quality-experiment.md`` §7) and is shelved.
     """
     scope = getattr(registry, "lab_scope", None)
-    if scope is None or scope.mode != "skills":
-        return True
-    non_scaffold = [g for g in _workflow_groups(registry) if g not in _SCAFFOLD_GROUPS]
-    if len(non_scaffold) >= 3:
-        return True
-    return any(_STAGE_TRIGGER_RE.search(g) for g in non_scaffold)
+    if scope is not None and scope.mode == "skills":
+        return False
+    return True
 
 
 def _workflow_complete(registry: AuthoringToolRegistry, current_group_index: int) -> bool:
@@ -1671,6 +1667,22 @@ def _message_to_trace_dict(message: BaseMessage) -> dict[str, Any]:
 
 
 # ── Legacy-client adapter ────────────────────────────────────────────
+
+def _is_transient_model_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "model unloaded",
+            "temporarily unavailable",
+            "server busy",
+            "too many requests",
+            "http error 429",
+            "http error 502",
+            "http error 503",
+        )
+    )
+
 
 class LegacyClientAdapter:
     """Adapt an old-style `LMStudioChatClient` (`.complete(messages, tools)`)

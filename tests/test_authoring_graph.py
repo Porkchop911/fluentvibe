@@ -76,6 +76,7 @@ def _set_workflow(registry: AuthoringToolRegistry, groups=None) -> None:
         groups=groups or [
             {"name": "Variables", "objective": "Declare variables"},
             {"name": "Labware Placement", "objective": "Place labware"},
+            {"name": "Transfer", "objective": "Move liquid"},
         ],
     )
     assert result["ok"] is True

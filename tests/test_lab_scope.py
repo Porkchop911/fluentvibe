@@ -246,6 +246,8 @@ def test_system_prompt_drops_search_and_subagent_mandate():
     assert "def build_worktable" in SYSTEM_PROMPT
     assert "Labware Placement" in SYSTEM_PROMPT
     assert "present_object_draft" in SYSTEM_PROMPT
+    assert "WORKFLOW MODE HAS PRIORITY" in SYSTEM_PROMPT
+    assert "later workflow as authoritative" in SYSTEM_PROMPT
     # Domain-vocab guard still green on the edited constant.
     assert_no_domain_vocabulary_in_prompt()
 

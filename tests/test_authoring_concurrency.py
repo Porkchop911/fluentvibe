@@ -912,6 +912,7 @@ class TestSpeculativeCompile:
             groups=[
                 {"name": "Variables", "objective": "v"},
                 {"name": "Labware Placement", "objective": "lp"},
+                {"name": "Transfer", "objective": "move liquid"},
             ],
         )
         registry.object_draft_approved = True

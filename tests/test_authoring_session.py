@@ -29,6 +29,7 @@ def _workflow_args(groups=None):
         "groups": groups or [
             {"name": "Variables", "objective": "Declare runtime variables"},
             {"name": "Labware Placement", "objective": "Place all labware"},
+            {"name": "Transfer", "objective": "Move liquid"},
         ],
     }
 

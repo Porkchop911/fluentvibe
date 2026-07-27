@@ -148,6 +148,11 @@ def main(argv: Optional[list[str]] = None) -> int:
                                "env FLUENTVIBE_LM_ENDPOINT or http://localhost:1234)")
     p_author.add_argument("--model", default=None,
                           help="model name (default: env FLUENTVIBE_LM_MODEL)")
+    p_author.add_argument("--request-timeout", type=float, default=None,
+                          help="maximum seconds for one model response (default: 240 or "
+                               "FLUENTVIBE_LM_TIMEOUT_S)")
+    p_author.add_argument("--run-timeout", type=float, default=None,
+                          help="maximum seconds across all model calls in this run")
     p_author.add_argument("--json", dest="as_json", action="store_true",
                           help="emit a JSON summary of the authoring result")
     p_author.add_argument("--model-trace", action="store_true",
@@ -209,6 +214,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--model", default=None,
         help="LM Studio model name (default: DEFAULT_LM_STUDIO_MODEL from lm_client.py)",
     )
+    p_chat.add_argument("--request-timeout", type=float, default=None,
+                        help="maximum seconds for one model response (default: 240 or "
+                             "FLUENTVIBE_LM_TIMEOUT_S)")
     p_chat.add_argument("--model-trace", action="store_true",
                         help="write model request traces under <output-dir>/model_traces")
     p_chat.add_argument("--model-trace-live", action="store_true",
@@ -605,6 +613,8 @@ def _cmd_author(args) -> int:
         service_kwargs["endpoint"] = args.endpoint
     if args.model:
         service_kwargs["model"] = args.model
+    if args.request_timeout is not None:
+        service_kwargs["request_timeout_s"] = args.request_timeout
     service = PromptAuthoringService(**service_kwargs)
     kwargs: dict[str, Any] = dict(
         output_dir=args.output_dir,
@@ -612,6 +622,8 @@ def _cmd_author(args) -> int:
         workspace_name=args.workspace,
         workspace_guid=args.workspace_guid,
     )
+    if args.run_timeout is not None:
+        kwargs["run_timeout_s"] = args.run_timeout
     trace_config = _trace_config_for_cli(args.output_dir, args)
     if trace_config is not None:
         kwargs["trace_config"] = trace_config
@@ -705,6 +717,8 @@ def _cmd_chat(args) -> int:
         )
         if args.model:
             kwargs["model"] = args.model
+        if args.request_timeout is not None:
+            kwargs["request_timeout_s"] = args.request_timeout
         if trace_config is not None:
             kwargs["trace_config"] = trace_config
         if args.lab_scope is not None:

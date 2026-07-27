@@ -63,6 +63,7 @@ class PromptAuthoringSession:
         trace_config: ModelTraceConfig | None = None,
         lab_scope: str | None = None,
         profile_dir: Path | str | None = None,
+        request_timeout_s: float | None = None,
     ) -> None:
         self.output_dir = output_dir
         self.retry_budget = retry_budget
@@ -91,7 +92,12 @@ class PromptAuthoringSession:
         raw_client = (
             client
             if client is not None
-            else LMStudioChatClient(endpoint=endpoint, model=model, trace_recorder=self._trace)
+            else LMStudioChatClient(
+                endpoint=endpoint,
+                model=model,
+                trace_recorder=self._trace,
+                request_timeout_s=request_timeout_s,
+            )
         )
         if hasattr(raw_client, "trace_recorder"):
             raw_client.trace_recorder = self._trace

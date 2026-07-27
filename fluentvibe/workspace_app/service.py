@@ -287,6 +287,13 @@ def _run_job(job_id: str, handler: Any, payload: dict[str, Any]) -> None:
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
+    now = time.time()
+    started_at = job["started_at"]
+    finished_at = job["finished_at"]
+    elapsed_s = None
+    if started_at is not None:
+        elapsed_s = max(0.0, (finished_at or now) - started_at)
+    queue_s = max(0.0, (started_at or now) - job["created_at"])
     return {
         "id": job["id"],
         "kind": job["kind"],
@@ -296,6 +303,8 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "finished_at": job["finished_at"],
         "result": job["result"],
         "error": job["error"],
+        "queue_s": round(queue_s, 3),
+        "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
     }
 
 
@@ -346,6 +355,11 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
     # <output_dir>/model_traces. Pass model_trace=false in the payload to opt out.
     trace_enabled = bool(payload.get("model_trace", True))
     trace_config = ModelTraceConfig.from_env(output_dir=output_dir, enabled=trace_enabled)
+    request_timeout_s = (
+        float(payload["request_timeout_s"])
+        if payload.get("request_timeout_s") is not None
+        else None
+    )
     session = PromptAuthoringSession(
         output_dir=output_dir,
         retry_budget=int(payload.get("retry_budget") or 8),
@@ -355,6 +369,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         lab_scope=str(payload.get("lab_scope") or "skills"),
         profile_dir=profile_dir,
         trace_config=trace_config,
+        request_timeout_s=request_timeout_s,
     )
     session_id = str(uuid.uuid4())
     with _JOB_LOCK:
@@ -365,6 +380,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         "profile_name": profile_name or None,
         "output_dir": str(output_dir),
         "model_traces": str(output_dir / "model_traces") if trace_enabled else None,
+        "request_timeout_s": request_timeout_s,
     }
 
 

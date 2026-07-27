@@ -18,7 +18,6 @@ TESTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(TESTS_DIR))
 
-from fluentvibe.authoring import eval_rubric  # noqa: E402
 from fluentvibe.authoring.eval_rubric import (  # noqa: E402
     RubricResult,
     score_protocol,
@@ -111,8 +110,22 @@ def test_coverage_is_na_without_source_document():
     assert _status(invs, "coverage_complete") == "na"
 
 
-def test_coverage_complete_uses_document_adherence():
+def test_coverage_comment_only_does_not_count_as_automation():
     src = 'wt.add_comment("AMPure bead magnet ethanol elution buffer barcode")'
+    doc = "Use AMPure beads on the magnet, ethanol wash, elution buffer, barcode."
+    invs = score_source(src, source_text=doc)
+    assert _status(invs, "coverage_complete") == "fail"
+    coverage = next(inv for inv in invs if inv.key == "coverage_complete")
+    assert "comments/manual notes" in coverage.evidence
+
+
+def test_coverage_complete_uses_executable_source_evidence():
+    src = '''
+wt.group("AMPure bead magnet cleanup")
+wt.group("Ethanol wash")
+wt.group("Elution buffer")
+wt.group("Barcode")
+'''
     doc = "Use AMPure beads on the magnet, ethanol wash, elution buffer, barcode."
     invs = score_source(src, source_text=doc)
     assert _status(invs, "coverage_complete") == "pass"
@@ -253,6 +266,19 @@ def test_semantic_fails_when_eluate_never_recovered():
     # No second magnetise → no round-trip, and the analyte stays stranded.
     assert invs["magnet_roundtrip"] == "fail"
     assert invs["eluate_recovered"] == "fail"
+
+
+def test_semantic_does_not_credit_unmagnetized_analyte_as_recovered():
+    wt = Worktable(name="truncated cleanup")
+    plate = wt.place(Plate96("Source", catalog="96 Well Flat"), "Nest", 1)
+    analyte = Reagent("Sample DNA", role="analyte")
+    plate.well("A1").layers.append(Layer(reagent=analyte, volume_ul=10.0))
+
+    invs = {item.key: item for item in score_semantic(wt)}
+
+    assert invs["magnet_roundtrip"].status == "fail"
+    assert invs["eluate_recovered"].status == "fail"
+    assert "no cleanup plate was magnetized" in invs["eluate_recovered"].evidence
 
 
 # ── Skill still well-formed after the tightening ──────────────────────────

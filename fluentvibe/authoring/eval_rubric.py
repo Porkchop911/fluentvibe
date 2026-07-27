@@ -23,7 +23,9 @@ recovering the eluate off the beads — is caught by the semantic tier
 from __future__ import annotations
 
 import ast
+import io
 import re
+import tokenize
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -236,15 +238,66 @@ def _check_separate_eluate_destination(source: str) -> Invariant:
     )
 
 
+def _without_comment_only_evidence(source: str) -> str:
+    """Remove comments, docstrings, and ``wt.add_comment(...)`` evidence.
+
+    The general document-adherence report intentionally implements an
+    "automate or justify" policy. The quality rubric is stricter: prose may
+    explain a manual stage, but it must not make that stage count as automated.
+    """
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+        source = tokenize.untokenize(
+            token._replace(string="") if token.type == tokenize.COMMENT else token
+            for token in tokens
+        )
+        tree = ast.parse(source)
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        return source
+
+    lines = source.splitlines(keepends=True)
+    ignored_ranges: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_comment"
+        ):
+            ignored_ranges.append((node.lineno, node.end_lineno or node.lineno))
+        elif (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            ignored_ranges.append((node.lineno, node.end_lineno or node.lineno))
+    for start, end in ignored_ranges:
+        for index in range(start - 1, min(end, len(lines))):
+            lines[index] = "\n" if lines[index].endswith("\n") else ""
+    return "".join(lines)
+
+
 def _check_coverage(source: str, source_text: str | None) -> Invariant:
     if not source_text:
         return Invariant("coverage_complete", _NA, "no source document supplied")
     report = document_adherence_report(source_text=source_text, protocol_source=source)
     gaps = coverage_gaps(report)
-    if not gaps:
-        return Invariant("coverage_complete", _PASS, "no gating coverage gaps")
-    codes = ", ".join(sorted({g.get("code", "?") for g in gaps}))
-    return Invariant("coverage_complete", _FAIL, f"uncovered stages: {codes}")
+    if gaps:
+        codes = ", ".join(sorted({g.get("code", "?") for g in gaps}))
+        return Invariant("coverage_complete", _FAIL, f"uncovered stages: {codes}")
+
+    automated_report = document_adherence_report(
+        source_text=source_text,
+        protocol_source=_without_comment_only_evidence(source),
+    )
+    comment_only_gaps = coverage_gaps(automated_report)
+    if comment_only_gaps:
+        codes = ", ".join(sorted({g.get("code", "?") for g in comment_only_gaps}))
+        return Invariant(
+            "coverage_complete",
+            _FAIL,
+            f"stages represented only by comments/manual notes: {codes}",
+        )
+    return Invariant("coverage_complete", _PASS, "no automated coverage gaps")
 
 
 def score_source(source: str, source_text: str | None = None) -> list[Invariant]:
@@ -349,7 +402,23 @@ def _check_magnet_roundtrip(snapshots, magnet_label: str | None) -> Invariant:
     )
 
 
-def _check_eluate_recovered(final, magnet_label: str | None, has_analyte: bool) -> Invariant:
+def _check_eluate_recovered(
+    final,
+    magnet_label: str | None,
+    has_analyte: bool,
+    *,
+    magnet_roundtrip_ok: bool,
+) -> Invariant:
+    if magnet_label is None:
+        return Invariant(
+            "eluate_recovered", _FAIL,
+            "no cleanup plate was magnetized — recovery cannot be verified",
+        )
+    if not magnet_roundtrip_ok:
+        return Invariant(
+            "eluate_recovered", _FAIL,
+            "magnet bind → off-magnet elution → recovery round-trip did not complete",
+        )
     if not has_analyte:
         return Invariant(
             "eluate_recovered", _FAIL,
@@ -395,9 +464,15 @@ def score_semantic(wt) -> list[Invariant]:
     final = snapshots[-1]
     magnet_label = _magnet_plate_label(snapshots)
     has_analyte = _has_analyte_anywhere(final)
+    magnet_roundtrip = _check_magnet_roundtrip(snapshots, magnet_label)
     return [
-        _check_magnet_roundtrip(snapshots, magnet_label),
-        _check_eluate_recovered(final, magnet_label, has_analyte),
+        magnet_roundtrip,
+        _check_eluate_recovered(
+            final,
+            magnet_label,
+            has_analyte,
+            magnet_roundtrip_ok=magnet_roundtrip.ok,
+        ),
         _check_analyte_not_in_waste(final, has_analyte),
     ]
 

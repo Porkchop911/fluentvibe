@@ -1,7 +1,8 @@
-"""Skills-mode staged drafting: tool surface, header, and stage decision.
+"""Skills-mode drafting: tool surface, header, and stage decision.
 
-Skills mode declares the workflow always (cheap, anti-punt) but only enforces
-per-group checkpoints when the declared plan is multi-stage; enforce stays
+Skills mode declares the workflow always (cheap, anti-punt) and then drafts the
+whole protocol in ONE pass — per-group staging is shelved (it cost ~3x latency
+for no quality gain; see docs/authoring-quality-experiment.md §7). Enforce stays
 one-shot; off/cheatsheet stay always-staged.
 """
 
@@ -10,14 +11,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
 from fluentvibe.authoring.graph import (
     _requires_workflow_declaration,
     _should_stage,
     _workflow_complete,
-    build_authoring_graph,
 )
 from fluentvibe.authoring.lab_scope import LabScope, context_header
 from fluentvibe.authoring.models import AuthoringStatus
@@ -67,15 +66,15 @@ def test_off_and_cheatsheet_have_no_allowlist():
 # ── Header ─────────────────────────────────────────────────────────────────
 
 
-def test_staged_header_instructs_group_by_group():
-    header = context_header(True, staged=True)
+def test_skills_header_declares_then_drafts_one_pass():
+    header = context_header(True, skills=True)
     assert "declare_protocol_workflow" in header
-    assert "ONE group at a time" in header
-    assert "do NOT stage" not in header  # not the enforce one-pass header
+    assert "one pass" in header.lower()
+    assert "ONE group at a time" not in header  # per-group staging is shelved
 
 
-def test_non_staged_header_is_enforce_one_pass():
-    header = context_header(True, staged=False)
+def test_non_skills_header_is_enforce_one_pass():
+    header = context_header(True, skills=False)
     assert "one pass" in header.lower()
 
 
@@ -103,16 +102,18 @@ def test_skills_simple_plan_does_not_stage(tmp_path):
     assert _should_stage(reg) is False
 
 
-def test_skills_many_groups_stage(tmp_path):
+def test_skills_many_groups_do_not_stage(tmp_path):
+    """Skills never stages — even a many-group plan drafts in one pass."""
     reg = _registry(tmp_path, "skills")
     _declare(reg, ["Add Mastermix", "Add Template", "Seal Plate"])  # 3 non-scaffold
-    assert _should_stage(reg) is True
+    assert _should_stage(reg) is False
 
 
-def test_skills_cleanup_named_group_stages_even_if_few(tmp_path):
+def test_skills_cleanup_named_group_does_not_stage(tmp_path):
+    """A bead/cleanup group no longer forces staging (shelved, net-negative)."""
     reg = _registry(tmp_path, "skills")
-    _declare(reg, ["Bead Cleanup"])  # single group but a cleanup → stage
-    assert _should_stage(reg) is True
+    _declare(reg, ["Bead Cleanup", "Elution", "Barcoding"])
+    assert _should_stage(reg) is False
 
 
 def test_non_skills_modes_always_stage(tmp_path):
@@ -136,12 +137,12 @@ def test_skills_simple_is_complete_after_declare(tmp_path):
     assert _workflow_complete(reg, 0) is True  # one-pass allowed
 
 
-def test_skills_multistage_incomplete_until_all_groups(tmp_path):
+def test_skills_multistage_is_complete_after_declare(tmp_path):
+    """Even a multi-stage skills plan one-shots: complete right after declare."""
     reg = _registry(tmp_path, "skills")
     _declare(reg, ["Bead Cleanup", "Elution", "Barcoding"])
-    reg.staged_drafting = _should_stage(reg)  # True
-    assert _workflow_complete(reg, 2) is False   # mid-plan
-    assert _workflow_complete(reg, 5) is True    # all 5 groups done
+    reg.staged_drafting = _should_stage(reg)  # False — skills never stages
+    assert _workflow_complete(reg, 0) is True  # one-pass allowed immediately
 
 
 def test_declaration_required_but_missing_is_incomplete(tmp_path):
@@ -155,8 +156,9 @@ from tests.test_prompt_authoring import _valid_draft  # noqa: E402
 
 
 def _initial_state():
-    from fluentvibe.authoring.graph import GraphState
     from langchain_core.messages import HumanMessage
+
+    from fluentvibe.authoring.graph import GraphState
 
     return GraphState(
         messages=[HumanMessage(content="author a simple transfer")],
@@ -238,29 +240,26 @@ def _simple_plan_call():
     }
 
 
-def test_skills_empty_turn_renudges_instead_of_failing(tmp_path):
-    """A staged turn with no tool call and no fenced draft must re-nudge, not
-    abort the run (the local model sometimes 'thinks out loud' mid-plan)."""
+def test_skills_empty_turn_hard_fails(tmp_path):
+    """Skills one-shots, so a turn with no tool call and no fenced draft aborts —
+    the staging-era empty-turn re-nudge is shelved along with per-group staging."""
     reg = _registry(tmp_path, "skills")
     _grounded(reg)
     from tests.test_authoring_graph import _build
 
-    sim = {"name": "simulate_python_draft", "args": {"source": _valid_draft()}, "id": "call-sim"}
     graph = _build(
         registry=reg,
         responses=[
             AIMessage(content="", tool_calls=[_simple_plan_call()]),       # declare
-            AIMessage(content="Let me reason about the layout first..."),  # empty → re-nudge
-            AIMessage(content="", tool_calls=[sim]),                        # draft → success
+            AIMessage(content="Let me reason about the layout first..."),  # empty → fail
         ],
     )
     final = graph.invoke(_initial_state())
-    assert final["result"].status == AuthoringStatus.SUCCESS, final["result"].failure_message
+    assert final["result"].status == AuthoringStatus.FAILURE
 
 
 def test_enforce_empty_turn_still_hard_fails(tmp_path):
-    """Enforce is one-shot (no workflow declaration), so an empty turn aborts as
-    before — the re-nudge is staging-only."""
+    """Enforce is one-shot (no workflow declaration); an empty turn aborts."""
     reg = _registry(tmp_path, "enforce")
     from tests.test_authoring_graph import _build
 

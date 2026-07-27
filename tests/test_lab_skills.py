@@ -23,7 +23,6 @@ from fluentvibe.authoring.lab_scope import (  # noqa: E402
     load_lab_scope,
     resolve_lab_scope_mode,
 )
-from fluentvibe.authoring.workspace_modules import WorkspaceModule  # noqa: E402
 from fluentvibe.authoring.lab_skills import (  # noqa: E402
     apply_profile_deck,
     assemble_context,
@@ -32,6 +31,7 @@ from fluentvibe.authoring.lab_skills import (  # noqa: E402
     select_deck_for_workspace,
     select_skills,
 )
+from fluentvibe.authoring.workspace_modules import WorkspaceModule  # noqa: E402
 
 _ENV = "FLUENTVIBE_LAB_SCOPE"
 

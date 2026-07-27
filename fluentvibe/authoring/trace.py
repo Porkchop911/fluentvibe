@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -56,6 +57,7 @@ class ModelTraceRecorder:
         self._turn_index = 0
         self._request_id = ""
         self._path: Path | None = None
+        self._last_live_stream_at = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -147,6 +149,15 @@ class ModelTraceRecorder:
             self._print_live(item)
 
     def _print_live(self, item: dict[str, Any]) -> None:
+        if item["event"] == "raw_stream_line":
+            return
+        if item["event"] == "raw_stream_chunk":
+            now = time.monotonic()
+            if now - self._last_live_stream_at < 5.0:
+                return
+            self._last_live_stream_at = now
+            print("[model-trace] stream_active", file=sys.stderr, flush=True)
+            return
         bits = [f"[model-trace] {item['event']}"]
         if item.get("model"):
             bits.append(f"model={item['model']}")
@@ -216,6 +227,8 @@ def _render_readable_event(item: dict[str, Any]) -> str:
             bits.append(f"- endpoint: `{item['endpoint']}`")
         if item.get("iteration") is not None:
             bits.append(f"- iteration: `{item['iteration']}`")
+        if item.get("phase"):
+            bits.append(f"- phase: `{item['phase']}`")
         return "\n".join(bits) + "\n\n"
     if event == "request_payload":
         if "messages" in item:
@@ -273,6 +286,12 @@ def _render_readable_event(item: dict[str, Any]) -> str:
         return (
             "## Request Error\n\n"
             f"- type: `{item.get('error_type', '')}`\n"
+            f"- error: `{item.get('error', '')}`\n\n"
+        )
+    if event == "model_retry":
+        return (
+            "## Model Retry\n\n"
+            f"- iteration: `{item.get('iteration', '')}`\n"
             f"- error: `{item.get('error', '')}`\n\n"
         )
     return ""

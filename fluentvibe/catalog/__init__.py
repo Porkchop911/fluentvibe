@@ -8,6 +8,10 @@ The legacy `database.py` (vendored `tecan.db`) is kept for backward
 compatibility but is not used by v1.1's catalog-driven labware construction.
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
 from .catalog import (
     DEFAULT_INDEX_PATH,
     INDEX_SCHEMA_VERSION,
@@ -85,7 +89,11 @@ __all__ = [
 ]
 
 
-def ensure_index() -> None:
+def ensure_index(
+    *,
+    install_path: Path | str | None = None,
+    db_path: Path | str | None = None,
+) -> None:
     """Build (or rebuild) the catalog index as needed.
 
     Called at the top of `fluentvibe/__init__.py` on first import. Behaviour:
@@ -104,21 +112,21 @@ def ensure_index() -> None:
     import os
     import warnings
 
-    install = install_path_default()
+    install = Path(install_path) if install_path is not None else install_path_default()
     components_dir = install / "SystemSpecific" / "Worktable" / "Components"
     if not components_dir.exists():
         return  # offline-fallback territory; caller deals with empty index
 
-    if not index_exists():
+    if not index_exists(db_path):
         try:
-            build_index(install_path=install)
+            build_index(install_path=install, db_path=db_path)
         except Exception:
             pass
         return
 
     # Index exists — check for drift.
     try:
-        if fingerprint_matches(install):
+        if fingerprint_matches(install, db_path=db_path):
             return
     except Exception:
         return
@@ -133,6 +141,6 @@ def ensure_index() -> None:
         return
 
     try:
-        build_index(install_path=install)
+        build_index(install_path=install, db_path=db_path)
     except Exception:
         pass

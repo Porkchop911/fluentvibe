@@ -23,6 +23,13 @@ from .validator import AuthoringValidator
 
 SYSTEM_PROMPT = """You are authoring executable Python protocols for fluentvibe.
 
+WORKFLOW MODE HAS PRIORITY. A later `LAB SCOPE` system message may narrow the
+available tools and replace the cooperative approval or staged-drafting flow
+described below. Treat that later workflow as authoritative: never call a tool
+it says is unavailable, and ignore incompatible approval, grounding, staging,
+or source-plan tool instructions here. Content-completeness and final
+validation requirements still apply in every mode.
+
 Work cooperatively before drafting executable Python. First resolve
 clarifications. Then ground the workspace, labware, liquid classes, API shapes,
 and applicable rules. Next call present_object_draft to show the user the
@@ -226,8 +233,13 @@ class PromptAuthoringService:
         model: str = DEFAULT_LM_STUDIO_MODEL,
         client: LMStudioChatClient | None = None,
         concurrency: "AuthoringConcurrencyConfig | None" = None,
+        request_timeout_s: float | None = None,
     ) -> None:
-        self._client = client or LMStudioChatClient(endpoint=endpoint, model=model)
+        self._client = client or LMStudioChatClient(
+            endpoint=endpoint,
+            model=model,
+            request_timeout_s=request_timeout_s,
+        )
         self._validator = AuthoringValidator()
         from .graph import AuthoringConcurrencyConfig
         self._concurrency = concurrency or AuthoringConcurrencyConfig()
@@ -242,6 +254,7 @@ class PromptAuthoringService:
         workspace_guid: str | None = None,
         trace_config: ModelTraceConfig | None = None,
         lab_scope: str | None = None,
+        run_timeout_s: float | None = None,
     ) -> AuthoringResult:
         # Delegated to the LangGraph state machine. The graph encodes the same
         # control flow that previously lived inline here: model_call →
@@ -271,25 +284,6 @@ class PromptAuthoringService:
             else load_lab_scope(lab_scope)
         )
         registry.lab_scope = scope
-        initial_messages: list[Any] | None = None
-        # For off/cheatsheet/enforce this is the static cheatsheet; for skills
-        # mode it runs the LM pre-pass to select the relevant skill subset (the
-        # prompt is known here, so selection happens once before run_graph).
-        from .graph import adapt_client
-        from .lab_skills import build_initial_scope_message
-        scope_text = build_initial_scope_message(scope, prompt, adapt_client(self._client))
-        if scope_text is not None:
-            from langchain_core.messages import SystemMessage
-            initial_messages = [SystemMessage(content=scope_text)]
-        # Wire the LM client into the registry so the new
-        # `ground_in_parallel` tool can fan out subagents on demand.
-        # The main agent calls it AFTER clarifications, not before.
-        from .graph import adapt_client
-        registry.configure_subagent_client(
-            adapt_client(self._client),
-            pool_size=self._concurrency.worker_pool_size,
-            timeout_s=240.0,
-        )
         trace = ModelTraceRecorder(
             trace_config
             if trace_config is not None
@@ -298,8 +292,43 @@ class PromptAuthoringService:
         trace.start_turn(1)
         if hasattr(self._client, "trace_recorder"):
             self._client.trace_recorder = trace
-        prefetcher = self._start_prefetch(prompt, registry)
+        if run_timeout_s is not None and hasattr(self._client, "start_run_budget"):
+            self._client.start_run_budget(run_timeout_s)
+        initial_messages: list[Any] | None = None
+        # For off/cheatsheet/enforce this is the static cheatsheet; for skills
+        # mode it runs the LM pre-pass to select the relevant skill subset (the
+        # prompt is known here, so selection happens once before run_graph).
+        from .graph import adapt_client
+        from .lab_skills import build_initial_scope_message
+        if scope.mode == "skills" and scope.skill_catalog:
+            trace.begin_request(
+                model=getattr(self._client, "model", None),
+                endpoint=getattr(self._client, "endpoint", None),
+                phase="skill_selection",
+            )
         try:
+            scope_text = build_initial_scope_message(
+                scope, prompt, adapt_client(self._client)
+            )
+        except BaseException:
+            if run_timeout_s is not None and hasattr(self._client, "clear_run_budget"):
+                self._client.clear_run_budget()
+            raise
+        if scope_text is not None:
+            from langchain_core.messages import SystemMessage
+            initial_messages = [SystemMessage(content=scope_text)]
+        # Wire the LM client into the registry so the new
+        # `ground_in_parallel` tool can fan out subagents on demand.
+        # The main agent calls it AFTER clarifications, not before.
+        from .graph import adapt_client
+        prefetcher = None
+        try:
+            registry.configure_subagent_client(
+                adapt_client(self._client),
+                pool_size=self._concurrency.worker_pool_size,
+                timeout_s=240.0,
+            )
+            prefetcher = self._start_prefetch(prompt, registry)
             return run_graph(
                 prompt=prompt,
                 output_dir=output_dir,
@@ -325,6 +354,8 @@ class PromptAuthoringService:
         finally:
             if prefetcher is not None:
                 prefetcher.shutdown()
+            if run_timeout_s is not None and hasattr(self._client, "clear_run_budget"):
+                self._client.clear_run_budget()
 
     def _start_prefetch(self, prompt: str, registry: AuthoringToolRegistry):
         # Auto-prefetch is intentionally restricted to the deterministic
