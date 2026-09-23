@@ -51,6 +51,7 @@ from .models import (
     ProtocolWorkflowPlan,
     VariableBinding,
 )
+from .offdeck import offdeck_findings
 from .repair_policy import resolve_repair_policy
 from .validator import AuthoringValidator
 from .workspace_modules import WorkspaceModule, copy_workspace_modules
@@ -2861,12 +2862,20 @@ class AuthoringToolRegistry:
             "message": "Draft built and strict simulation passed.",
             "state_summary": _simulation_state_summary(report),
         }
+        concerns: list[str] = []
         hygiene = _tip_hygiene_findings(report)
         if hygiene is not None:
             result["tip_hygiene"] = hygiene
+            concerns.append("tips touch more than one sample (see tip_hygiene)")
+        offdeck = [f.to_dict() for f in offdeck_findings(source)]
+        if offdeck:
+            result["offdeck_steps"] = {"steps": offdeck, "hint": _OFFDECK_HINT}
+            concerns.append("off-deck steps are not paused for the operator (see offdeck_steps)")
+        if concerns:
             result["message"] = (
-                "Draft built and strict simulation passed, but tips touch more than "
-                "one sample (see tip_hygiene). Fix this before compiling."
+                "Draft built and strict simulation passed, but "
+                + "; ".join(concerns)
+                + ". Fix this before compiling."
             )
         if volume_rewrites or class_rewrites:
             # Surface the autogrounded source so the graph carries the
@@ -4146,6 +4155,14 @@ def _simulation_failure(report: Any) -> dict[str, Any] | None:
     for key, value in details.items():
         payload.setdefault(key, value)
     return payload
+
+
+_OFFDECK_HINT = (
+    "A step that happens off the deck (thermal cycler, centrifuge, Qubit, ice) "
+    "must pause the run: call wt.user_prompt('<what the operator does>') in that "
+    "functional group, moving the plate to a hand-off position with the gripper "
+    "if needed. A wt.wait() leaves the plate on the deck and does not model it."
+)
 
 
 _TIP_HYGIENE_HINT = (

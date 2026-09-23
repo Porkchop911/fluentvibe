@@ -143,9 +143,9 @@ def test_score_protocol_semantic_degrades_to_na_when_unrunnable():
 
 def test_rubric_result_score_excludes_na():
     result = RubricResult(tuple(score_source(PASS_SOURCE)))
-    # coverage is NA (no source doc); the other five source checks pass.
+    # coverage is NA (no source doc); the other six source checks pass.
     assert result.na == 1
-    assert result.passed == 5
+    assert result.passed == 6
     assert result.score == 1.0
 
 

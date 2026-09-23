@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from .document_adherence import coverage_gaps, document_adherence_report
+from .offdeck import offdeck_findings
 
 SOURCE_KEYS = (
     "coverage_complete",
@@ -38,6 +39,7 @@ SOURCE_KEYS = (
     "derived_eluate",
     "off_magnet_elution",
     "separate_eluate_destination",
+    "offdeck_steps_prompted",
 )
 SEMANTIC_KEYS = (
     "magnet_roundtrip",
@@ -408,6 +410,18 @@ def _check_coverage(source: str, source_text: str | None) -> Invariant:
     return Invariant("coverage_complete", _PASS, "no automated coverage gaps")
 
 
+def _check_offdeck_prompted(source: str) -> Invariant:
+    findings = offdeck_findings(source)
+    if not findings:
+        return Invariant("offdeck_steps_prompted", _PASS, "no unprompted mid-run off-deck step")
+    first = findings[0]
+    return Invariant(
+        "offdeck_steps_prompted", _FAIL,
+        f"{len(findings)} group(s) describe an off-deck step without wt.user_prompt; "
+        f"first line {first.line} in {first.group!r}: {first.text[:80]}",
+    )
+
+
 def score_source(source: str, source_text: str | None = None) -> list[Invariant]:
     """The cheap source-tier invariants. Never raises."""
     coverage = _check_coverage(source, source_text)
@@ -424,6 +438,7 @@ def score_source(source: str, source_text: str | None = None) -> list[Invariant]
         _check_derived_eluate(vars_),
         _check_off_magnet_elution(source),
         _check_separate_eluate_destination(source),
+        _check_offdeck_prompted(source),
     ]
 
 
