@@ -132,9 +132,11 @@ class LabScope:
     # ``allowed_tools``) and all pre-simulation gates are disabled.
     _ENFORCE_ALLOWED_TOOLS = frozenset({"simulate_python_draft", "compile_and_simulate"})
     # ``skills`` shares enforce's two-tool judging surface but additionally
-    # exposes ``declare_protocol_workflow`` so it can stage a multi-stage
-    # protocol group-by-group (enforce stays strictly one-pass).
-    _SKILLS_ALLOWED_TOOLS = _ENFORCE_ALLOWED_TOOLS | {"declare_protocol_workflow"}
+    # exposes ``declare_protocol_workflow`` (the plan the draft is checked
+    # against) and ``lookup_api``. The API lookup is deterministic (no model
+    # call, no catalog search); without it models spent whole turns probing
+    # the API through ``simulate_python_draft``.
+    _SKILLS_ALLOWED_TOOLS = _ENFORCE_ALLOWED_TOOLS | {"declare_protocol_workflow", "lookup_api"}
 
     def allowed_tools(self) -> frozenset[str] | None:
         """Tool names the LLM may call. ``None`` ⇒ no allow-list (all permitted).
@@ -200,9 +202,11 @@ _CHEATSHEET_HEADER = (
 _SKILLS_HEADER = (
     "LAB SCOPE (authoritative — this IS the catalog for this run). "
     "Grounding and approval tools are intentionally unavailable: the only "
-    "tools you can call are `declare_protocol_workflow`, "
-    "`simulate_python_draft`, and `compile_and_simulate`. Everything the "
-    "removed tools used to look up (the head/object API, valid deck "
+    "tools you can call are `declare_protocol_workflow`, `lookup_api`, "
+    "`simulate_python_draft`, and `compile_and_simulate`. When unsure "
+    "whether a method or argument exists, call `lookup_api` (e.g. "
+    "`wt.liha`, `Plate96`) instead of submitting a probe draft to the "
+    "simulator. Everything else the removed tools used to look up (valid deck "
     "positions, the workspace GUID, liquid classes, and the authoring "
     "rules) is provided below and in the selected skills — do not ask for "
     "it and do not attempt catalog search.\n\n"

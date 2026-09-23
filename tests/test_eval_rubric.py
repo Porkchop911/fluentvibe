@@ -293,3 +293,56 @@ def test_spri_skill_keeps_heading_and_triggers():
     triggers = set(spri.select_when)
     assert {"bead", "magnetic"} <= triggers
     assert "ampure" not in triggers  # brand-neutral
+
+
+# Derivations written through Python constants (the Flash Next attempt-4 shape):
+# the rubric must resolve the names instead of reporting n/a.
+_FOLDED_TWO_CLEANUPS = '''
+def build_worktable():
+    PCR_VOLUME_UL = 20.0
+    PCR_BEAD_VOLUME_UL = round(1.8 * PCR_VOLUME_UL, 1)
+    RETAIN_VOLUME_UL = 5.0
+    PCR_SUPERNATANT_ASPIRATE_UL = round(PCR_VOLUME_UL + PCR_BEAD_VOLUME_UL - RETAIN_VOLUME_UL, 1)
+    ELUTION_VOLUME_UL = 14.0
+    ELUATE_TRANSFER_VOLUME_UL = ELUTION_VOLUME_UL - RETAIN_VOLUME_UL
+    TAGMENTATION_VOLUME_UL = 10.0
+    LIB_BEAD_VOLUME_UL = 10.0
+    LIB_SUPERNATANT_ASPIRATE_UL = TAGMENTATION_VOLUME_UL + LIB_BEAD_VOLUME_UL - RETAIN_VOLUME_UL
+    wt.declare_variable("PCR_VOLUME_UL", PCR_VOLUME_UL)
+    wt.declare_variable("PCR_BEAD_VOLUME_UL", PCR_BEAD_VOLUME_UL)
+    wt.declare_variable("RETAIN_VOLUME_UL", RETAIN_VOLUME_UL)
+    wt.declare_variable("PCR_SUPERNATANT_ASPIRATE_UL", PCR_SUPERNATANT_ASPIRATE_UL)
+    wt.declare_variable("ELUTION_VOLUME_UL", ELUTION_VOLUME_UL)
+    wt.declare_variable("ELUATE_TRANSFER_VOLUME_UL", ELUATE_TRANSFER_VOLUME_UL)
+    wt.declare_variable("TAGMENTATION_VOLUME_UL", TAGMENTATION_VOLUME_UL)
+    wt.declare_variable("LIB_BEAD_VOLUME_UL", LIB_BEAD_VOLUME_UL)
+    wt.declare_variable("LIB_SUPERNATANT_ASPIRATE_UL", LIB_SUPERNATANT_ASPIRATE_UL)
+    wt.declare_variable("LIQUID_CLASS_ELUATE", "Water Free Single")
+'''
+
+
+def test_derivations_resolve_through_python_constants():
+    invs = score_source(_FOLDED_TWO_CLEANUPS)
+    assert _status(invs, "derived_supernatant") == "pass"
+    assert _status(invs, "derived_eluate") == "pass"
+
+
+def test_each_cleanup_supernatant_is_checked_independently():
+    bad = _FOLDED_TWO_CLEANUPS.replace(
+        "LIB_SUPERNATANT_ASPIRATE_UL = TAGMENTATION_VOLUME_UL + LIB_BEAD_VOLUME_UL - RETAIN_VOLUME_UL",
+        "LIB_SUPERNATANT_ASPIRATE_UL = 40.0",
+    )
+    inv = next(i for i in score_source(bad) if i.key == "derived_supernatant")
+    assert inv.status == "fail"
+    assert "LIB_SUPERNATANT_ASPIRATE_UL" in inv.evidence
+
+
+def test_unfoldable_values_are_not_guessed():
+    # A value computed from a call we don't evaluate stays unresolved, so the
+    # supernatant variable is absent rather than wrongly credited.
+    src = '''
+def build_worktable():
+    SUP = compute_supernatant()
+    wt.declare_variable("SUPERNATANT_ASPIRATE_UL", SUP)
+'''
+    assert _status(score_source(src), "derived_supernatant") == "na"

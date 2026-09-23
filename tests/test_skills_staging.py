@@ -269,3 +269,72 @@ def test_enforce_empty_turn_still_hard_fails(tmp_path):
     )
     final = graph.invoke(_initial_state())
     assert final["result"].status == AuthoringStatus.FAILURE
+
+
+# ── First turn: plan only; API lookup available ────────────────────────────
+
+
+def test_skills_exposes_deterministic_api_lookup():
+    allowed = LabScope(mode="skills").allowed_tools()
+    assert "lookup_api" in allowed
+    assert "lookup_api" in context_header(True, skills=True)
+
+
+class _RecordingLegacyClient:
+    """Legacy `.complete()` client that records which tools each call offered."""
+
+    def __init__(self) -> None:
+        self.offered: list[list[str]] = []
+
+    def complete(self, messages, tools):
+        self.offered.append(sorted(t["function"]["name"] for t in tools))
+        return {"role": "assistant", "content": "done", "tool_calls": []}
+
+
+def _skills_nodes(tmp_path, mode="skills"):
+    from fluentvibe.authoring.graph import _Nodes, _plan_only_client, adapt_client
+    from fluentvibe.authoring.lc_tools import make_lc_tools
+    from fluentvibe.authoring.repair_lock import RepairLockState
+    from fluentvibe.authoring.tools import tool_definitions
+    from fluentvibe.authoring.validator import AuthoringValidator
+
+    reg = _registry(tmp_path, mode)
+    allowed = reg.lab_scope.allowed_tools()
+    denied = (
+        frozenset(d["function"]["name"] for d in tool_definitions()) - allowed
+        if allowed is not None
+        else None
+    )
+    legacy = _RecordingLegacyClient()
+    client = adapt_client(legacy)
+    lc_tools = make_lc_tools(reg, denied=denied)
+    nodes = _Nodes(
+        registry=reg,
+        client_with_tools=client.bind_tools(lc_tools),
+        client_plan_only=_plan_only_client(client, lc_tools, reg),
+        validator=AuthoringValidator(),
+        repair_lock=RepairLockState(),
+        output_dir=tmp_path / "out",
+        max_iterations=8,
+        max_tool_calls=12,
+        helpers=None,
+    )
+    return reg, nodes, legacy
+
+
+def test_skills_first_turn_offers_only_the_workflow_declaration(tmp_path):
+    reg, nodes, legacy = _skills_nodes(tmp_path)
+    nodes._client_for_turn().invoke([])
+    assert legacy.offered[-1] == ["declare_protocol_workflow"]
+
+    _declare(reg, ["Transfer"])
+    nodes._client_for_turn().invoke([])
+    assert {"lookup_api", "simulate_python_draft", "compile_and_simulate"} <= set(
+        legacy.offered[-1]
+    )
+
+
+@pytest.mark.parametrize("mode", ["enforce", "cheatsheet"])
+def test_other_modes_keep_their_full_first_turn_surface(tmp_path, mode):
+    _, nodes, _ = _skills_nodes(tmp_path, mode)
+    assert nodes.client_plan_only is None
