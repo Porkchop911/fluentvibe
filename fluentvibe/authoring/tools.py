@@ -2861,6 +2861,13 @@ class AuthoringToolRegistry:
             "message": "Draft built and strict simulation passed.",
             "state_summary": _simulation_state_summary(report),
         }
+        hygiene = _tip_hygiene_findings(report)
+        if hygiene is not None:
+            result["tip_hygiene"] = hygiene
+            result["message"] = (
+                "Draft built and strict simulation passed, but tips touch more than "
+                "one sample (see tip_hygiene). Fix this before compiling."
+            )
         if volume_rewrites or class_rewrites:
             # Surface the autogrounded source so the graph carries the
             # corrected version forward into compile_and_simulate, not the
@@ -4139,6 +4146,32 @@ def _simulation_failure(report: Any) -> dict[str, Any] | None:
     for key, value in details.items():
         payload.setdefault(key, value)
     return payload
+
+
+_TIP_HYGIENE_HINT = (
+    "Use fresh tips for every step that touches samples: inside a per-column "
+    "loop call get_tips at the start and drop_tips at the end of each "
+    "iteration (LiHa), or use a separate tip box per sample-touching stage "
+    "(MCA). Reagent-only dispensing into samples may reuse tips, but never "
+    "aspirate a shared reagent with tips that have touched a sample."
+)
+
+
+def _tip_hygiene_findings(report: Any) -> dict[str, Any] | None:
+    """Cross-contamination findings from the simulator, shaped for the model."""
+    counts = dict(getattr(report, "contamination_counts", {}) or {})
+    if not counts:
+        return None
+    events = list(getattr(report, "contamination_events", []) or [])
+    examples = [
+        {
+            key: event.get(key)
+            for key in ("category", "line", "operation", "labware", "well", "tip_carries")
+            if event.get(key) is not None
+        }
+        for event in events[:5]
+    ]
+    return {"counts": counts, "examples": examples, "hint": _TIP_HYGIENE_HINT}
 
 
 def _simulation_state_summary(report: Any) -> dict[str, Any] | None:

@@ -92,6 +92,9 @@ class Well:
     bead_phase: Optional[BeadPhase] = None
     """Solid-phase bead attribute, or None when the well has never received a
     bead-carrier reagent. Non-volumetric — excluded from `volume_ul`."""
+    sample_origins: frozenset = field(default_factory=frozenset)
+    """Sample wells (``"<labware>:<well>"``) whose liquid has reached this well.
+    Simulator-only lineage for cross-contamination findings."""
 
     @property
     def volume_ul(self) -> float:

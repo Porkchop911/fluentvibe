@@ -251,6 +251,29 @@ These are physics, not domain rules. The simulator never knows what
 "AMPure cleanup should look like" — it only enforces what's physically
 possible.
 
+## Cross-contamination findings
+
+`fluentvibe/simulator/contamination.py`
+
+Every well that starts with an `analyte` reagent is its own sample origin
+(`"<labware>:<well>"`). Origins travel with liquid: a tip that aspirates from or
+mixes in a sample well carries that well's origins, and anything it dispenses
+carries them into the destination (`Well.sample_origins`, `Tip.sample_origins`).
+MCA tips set back into a box remember their origins when picked up again.
+
+| Finding | When |
+|---|---|
+| `cross_sample_tip_reuse` | A tip aspirates from or mixes in a well containing a sample it has not already touched. |
+| `sample_carryover_into_reagent` | A tip that touched a sample aspirates from or mixes in a sample-free well (a shared reagent source). |
+
+Dispense is treated as non-contact, so reusing tips to dispense a reagent into
+every sample from above is clean. Waste labware is ignored. Findings never
+raise: they are recorded on `SimulationReport.contamination_events` (first 50)
+and `contamination_counts`, summarised in `warnings`, surfaced to the authoring
+model as `tip_hygiene` in `simulate_python_draft` results, and scored by the
+rubric's `no_cross_contamination` invariant. Protocols without an `analyte`
+reagent produce no findings.
+
 ## What the simulator does **not** do
 
 - **Liquid-class–driven volume corrections.** The IR carries `liquid_class`

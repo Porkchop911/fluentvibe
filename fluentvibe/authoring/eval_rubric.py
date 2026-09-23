@@ -43,6 +43,7 @@ SEMANTIC_KEYS = (
     "magnet_roundtrip",
     "eluate_recovered",
     "analyte_not_in_waste",
+    "no_cross_contamination",
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
 
@@ -561,6 +562,28 @@ def _check_analyte_not_in_waste(final, has_analyte: bool) -> Invariant:
     return Invariant("analyte_not_in_waste", _PASS, "no analyte in any waste labware")
 
 
+def _check_no_cross_contamination(wt, has_analyte: bool) -> Invariant:
+    """Tip hygiene from the simulator's sample-lineage tracking: no tip may
+    touch two different samples, or carry a sample into a reagent source."""
+    if not has_analyte:
+        return Invariant("no_cross_contamination", _NA, "no analyte reagent to track")
+    report = getattr(wt, "simulation_report", None)
+    counts = dict(getattr(report, "contamination_counts", {}) or {})
+    if not counts:
+        return Invariant("no_cross_contamination", _PASS, "no tip touched two samples")
+    events = list(getattr(report, "contamination_events", []) or [])
+    first = events[0] if events else {}
+    where = ""
+    if first:
+        line = f"line {first['line']}: " if first.get("line") else ""
+        where = (
+            f"; first {line}{first.get('operation')} {first.get('labware')}:{first.get('well')}"
+            f" with a tip carrying {', '.join(first.get('tip_carries', []))}"
+        )
+    summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    return Invariant("no_cross_contamination", _FAIL, f"{summary}{where}")
+
+
 def score_semantic(wt) -> list[Invariant]:
     """Simulate ``wt`` (if needed) and score the bead-model ground truth."""
     if not getattr(wt, "snapshots", None):
@@ -581,6 +604,7 @@ def score_semantic(wt) -> list[Invariant]:
             magnet_roundtrip_ok=magnet_roundtrip.ok,
         ),
         _check_analyte_not_in_waste(final, has_analyte),
+        _check_no_cross_contamination(wt, has_analyte),
     ]
 
 

@@ -33,6 +33,9 @@ class Tip:
 
     capacity_ul: float
     layers: list = field(default_factory=list)  # list[Layer]
+    # Sample origins this tip has touched (simulator lineage tracking; see
+    # ``simulator/contamination.py``). Empty for a fresh tip.
+    sample_origins: frozenset = field(default_factory=frozenset)
 
     @property
     def volume_ul(self) -> float:

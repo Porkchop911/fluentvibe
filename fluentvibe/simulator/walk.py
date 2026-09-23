@@ -56,6 +56,7 @@ from ..ir.schema import (
 )
 from ..labware.base import Labware, Layer
 from ..labware.tipboxes import TipBox
+from .contamination import ContaminationTracker
 from .invariants import (
     CannotAspirateError,
     InsufficientVolumeError,
@@ -103,6 +104,7 @@ class Simulator:
         self._source_requested_ul: dict[str, float] = {}
         self._source_requested_by_well_ul: dict[str, dict[str, float]] = {}
         self._report = SimulationReport()
+        self._contamination = ContaminationTracker()
         # Initial-state reagents declared via fill_all() etc. live on the
         # author-side Labware. We deep-copy them into the twin at place time.
         self._step_index = 0
@@ -317,6 +319,10 @@ class Simulator:
             for i, tip in enumerate(self._liha_tips)
         ]
         self._report.state_summary = self._state_summary()
+        self._report.contamination_events = list(self._contamination.events)
+        self._report.contamination_counts = dict(self._contamination.counts)
+        for message in self._contamination.summary_warnings():
+            self._warn(message)
 
     def _record_failure(self, exc: Exception) -> None:
         if self._report.failure is not None:
@@ -446,6 +452,7 @@ class Simulator:
         # Reset twin-only state — re-apply position/stack from this step.
         twin.slot = slot
         twin.stack_below = []
+        self._contamination.seed_labware(twin)
         self._slot_map[slot] = [twin]
         self._twin[step.label] = twin
 
@@ -521,6 +528,7 @@ class Simulator:
         capacity = tip_box.capacity_ul
         tip_box.remove_columns(picked)
         self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(96)]
+        self._contamination.on_pickup(step.labware_name, self._mca_tips)
         self._mca_tip_box_label = step.labware_name
 
     def _on_return_tips(self, step: SetTipsBackStep) -> None:
@@ -531,6 +539,7 @@ class Simulator:
             tip_box = self._twin.get(target)
             if isinstance(tip_box, TipBox):
                 tip_box.add_columns(self._partial_box_columns(step, tip_box))
+            self._contamination.on_return(target, self._mca_tips)
         self._mca_tips = []
         self._mca_tip_box_label = None
 
@@ -988,6 +997,10 @@ class Simulator:
         )
         well_map = self._source_requested_by_well_ul.setdefault(labware.label, {})
         well_map[well.address] = well_map.get(well.address, 0.0) + volume_ul
+        self._contamination.on_contact(
+            labware, well, tip, operation="Aspirate",
+            step=self._current_step, step_index=self._step_index,
+        )
         free_before = well.volume_ul
         # Walk liquid layers top-down — nothing is skipped for magnetization.
         i = len(well.layers) - 1
@@ -1069,6 +1082,7 @@ class Simulator:
                 attempted_delta_ul=volume_ul,
                 capacity_ul=well.max_volume_ul,
             )
+        self._contamination.on_deliver(labware, well, tip)
         # Tip dispenses FIFO (bottom of tip's layer stack first).
         remaining = volume_ul
         deposited_bead_carrier = False
@@ -1112,6 +1126,10 @@ class Simulator:
     def _validate_mix_one(self, labware: Labware, well, volume_ul: float, tip: Tip) -> None:
         if volume_ul <= 0:
             return
+        self._contamination.on_contact(
+            labware, well, tip, operation="Mix",
+            step=self._current_step, step_index=self._step_index,
+        )
         # A magnet does not withhold liquid — all free liquid is mixable.
         available = sum(layer.volume_ul for layer in well.layers)
         if available + 1e-9 < volume_ul:
