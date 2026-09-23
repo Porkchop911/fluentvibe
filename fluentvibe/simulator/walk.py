@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import copy
 import operator
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, Any, Optional
@@ -78,8 +79,9 @@ class Simulator:
 
     Author method calls update the worktable's slot_map at authoring time
     (so subsequent author calls see consistent state); the simulator
-    rebuilds an independent twin from the IR alone, decoupled from
-    authoring-time mutations.
+    rebuilds an independent twin from the IR, deep-copying each authored
+    labware's initial state when it is added. The authored objects and
+    variable maps are left as they were, so simulation is repeatable.
     """
 
     def __init__(self, worktable: "Worktable") -> None:
@@ -118,6 +120,27 @@ class Simulator:
         self._wt.snapshots.clear()
         self._wt.simulation_report = self._report
         protocol = self._wt.to_protocol()
+        # SetVariable / ImportVariables steps write into the worktable's
+        # variable maps while walking. Restore them afterwards so a later
+        # simulate() starts from the authored values, not the previous run's.
+        authored_variables = dict(self._wt.protocol_variables)
+        authored_sim_values = dict(self._wt.sim_values)
+        try:
+            self._walk(protocol, fail_on_opaque=fail_on_opaque, min_coverage=min_coverage)
+        finally:
+            self._wt.protocol_variables.clear()
+            self._wt.protocol_variables.update(authored_variables)
+            self._wt.sim_values.clear()
+            self._wt.sim_values.update(authored_sim_values)
+
+    def _walk(
+        self,
+        protocol,
+        *,
+        fail_on_opaque: bool,
+        min_coverage: float | None,
+    ) -> None:
+        strict = self._strict
         try:
             if strict:
                 self._preflight_strict()
@@ -282,6 +305,7 @@ class Simulator:
             liha_tips=self._liha_tips,
             opaque_events=self._report.opaque_events,
             warnings=self._report.warnings,
+            variables={**self._wt.protocol_variables, **self._wt.sim_values},
         ))
         self._step_index += 1
 
@@ -407,20 +431,23 @@ class Simulator:
                 labware=step.label,
                 occupied_by=self._slot_map[slot][-1].label,
             )
-        # Find the original author-side labware (by label) and use it as the twin.
-        # The author's `place()` already set its slot/stack_below; copies
-        # propagate via deepcopy when snapshotted.
+        # Find the original author-side labware (by label) and deep-copy it into
+        # the twin. The copy carries the author's initial state (fill_all()
+        # layers, tips) but every simulated aspirate/dispense lands on the copy,
+        # so simulating twice gives the same result and the authored protocol
+        # is never mutated.
         try:
             original = self._wt.labware_by_label(step.label)
         except KeyError as exc:
             raise SimulationError(
                 f"AddLabware({step.label!r}) has no resolved author-side labware instance."
             ) from exc
+        twin = copy.deepcopy(original)
         # Reset twin-only state — re-apply position/stack from this step.
-        original.slot = slot
-        original.stack_below = []
-        self._slot_map[slot] = [original]
-        self._twin[step.label] = original
+        twin.slot = slot
+        twin.stack_below = []
+        self._slot_map[slot] = [twin]
+        self._twin[step.label] = twin
 
     def _on_remove_labware(self, step: RemoveLabwareStep) -> None:
         labware = self._twin.pop(step.labware_name, None)

@@ -219,8 +219,9 @@ def test_sort_tips_into_columns_then_use() -> None:
     assert _vol(report, "Dest", "A2") == pytest.approx(0.0)
     # The empty box ends holding exactly the sorted columns; the full box is
     # drained of the four it gave up.
-    assert empty.columns_present == {1, 4, 7, 10}
-    assert full2.columns_present == {5, 6, 7, 8, 9, 10, 11, 12}
+    final = wt.snapshots[-1]
+    assert final.labware(empty.label).columns_present == {1, 4, 7, 10}
+    assert final.labware(full2.label).columns_present == {5, 6, 7, 8, 9, 10, 11, 12}
 
 
 def test_partial_pickup_rejects_interior_column() -> None:

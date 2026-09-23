@@ -268,4 +268,5 @@ def test_liha_loop_keeps_offset_expression_and_simulates(tmp_path: Path) -> None
     assert xml_text.count("<WellOffset>(col-1)*8</WellOffset>") == 1
 
     wt.simulate()
-    assert all(well.volume_ul == pytest.approx(10.0) for well in dest.wells.values())
+    final_dest = wt.snapshots[-1].labware(dest.label)
+    assert all(well.volume_ul == pytest.approx(10.0) for well in final_dest.wells.values())
