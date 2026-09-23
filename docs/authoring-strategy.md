@@ -67,7 +67,7 @@ Artifact: `build/workbench/authored/20260923-215349/`.
 | # | Defect | Lines | Why no gate caught it |
 |---|---|---|---|
 | D1 | **Pooling faked.** 96 libraries are carried forward per well, with a comment claiming this is the "plate-format equivalent of pooling". The source pools first, then does *one* cleanup; the draft does 96 cleanups. | 507–512 | Coverage accepts a comment as justification; no check compares operation order against the document |
-| D2 | **Cross-sample tip reuse.** One `get_tips`, then supernatant and ethanol removal across all 12 columns with the same tips | 322–349 | The simulator does not track which sample a tip has touched |
+| D2 | **Cross-sample tip reuse.** One set of LiHa tips mixes, removes supernatant and removes ethanol across all 12 sample columns; tips that touched samples also re-enter the reagent troughs | 307–349 | The simulator does not track which sample a tip has touched |
 | D3 | **Off-deck thermal cycler as a wait.** 30 °C/80 °C tagmentation modelled as `wt.wait` with the plate on deck. `wt.user_prompt` exists and was not used. | 402–406 | No notion of "this step happens off-deck" |
 | D4 | **One liquid class for all liquids.** Ethanol, beads and eluate all use `Water Free Single`; the model said so explicitly | turn 1 | Liquid-class checks verify compatibility, not suitability |
 | D5 | *(Rubric defect, not a protocol defect — corrected 24 Sep.)* The supernatant (20 + 36 − 5 = 51 µL) and eluate (14 − 5 = 9 µL) volumes **are** derived, via Python constants. `derived_*` returned n/a because it only reads literal numbers in `declare_variable(...)` | 84–89 | Rubric reads literals only |
@@ -271,6 +271,22 @@ source_refs: {s3: "p.14 'Pool all barcoded samples…'"}
 The roadmap's P2 already covers profile recording (quantization, runtime, template, context). Reuse it rather than duplicating it.
 
 ---
+
+## Implementation status (24 September 2026)
+
+Restore point before any of this: tag `restore/pre-authoring-strategy-2026-09-24` (commit `e9c9b5a`). No live model runs yet; the GPU was unavailable, so everything below is deterministic and covered by the offline suite (726 passed, 1 skipped).
+
+| Commit | Item | Effect on the Flash attempt-4 protocol |
+|---|---|---|
+| `345fdb5` | W3 rubric: derivations resolve through Python constants, each cleanup checked separately | `derived_*` n/a → pass (D5 was a rubric gap) |
+| `345fdb5` | W4: skills mode binds only `declare_protocol_workflow` until a plan exists; `lookup_api` available in skills mode | would have prevented turn 1's rejected draft and turn 3's API probe (not yet measured live) |
+| `4e57bc6` | Roadmap P1: simulation no longer mutates authored labware or variables; per-step variables on `Snapshot.variables` | repeated scoring is now deterministic |
+| `84ed376` | W3: sample-lineage tracking; `cross_sample_tip_reuse` and `sample_carryover_into_reagent` findings; `tip_hygiene` in simulate results; rubric `no_cross_contamination` | fails: 176 cross-sample events (first line 307) and 384 reagent carryovers (**D2**) |
+| `bfef2e6` | W3: mid-run off-deck steps must use `wt.user_prompt`; `offdeck_steps` in simulate results; rubric `offdeck_steps_prompted` | fails: Qubit QC line 386, thermal cycler line 402 (**D3**) |
+
+Rubric on attempt 4 is now **0.818** (was 1.0), with the two failures above. Still open from phases 0–1: per-turn reasoning budget (needs live measurement). D1 (faked pooling) needs the Bench Spec (W2). D4 (liquid classes) needs the catalog map (W5).
+
+New findings from the checks: the shipped `examples/ampure_cleanup.py` reuses MCA tips from sample supernatant into the elution-buffer trough (96 `sample_carryover_into_reagent` warnings). Tip-hygiene and off-deck findings are warnings for the model, not blocking gates. Making them blocking is a decision for after the first live runs.
 
 ## 5. Roadmap
 
