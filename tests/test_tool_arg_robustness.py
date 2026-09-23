@@ -83,3 +83,11 @@ def test_repeated_real_draft_failure_still_gives_up():
 def test_suggest_names_corrects_separator_slip():
     out = suggest_names("FCA_200ul_SBS")
     assert "FCA, 200ul SBS" in out
+
+def test_third_identical_bad_tool_argument_stops():
+    lock = RepairLockState()
+    bad = {"ok": False, "category": "bad_tool_arguments", "message": "missing source"}
+    assert lock.observe_tool_result("simulate_python_draft", {}, bad) is None
+    assert lock.observe_tool_result("simulate_python_draft", {}, bad) is None
+    stop = lock.observe_tool_result("simulate_python_draft", {}, bad)
+    assert stop is not None and stop["category"] == "bad_tool_arguments"

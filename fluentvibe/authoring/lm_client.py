@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -16,11 +17,13 @@ from .trace import ModelTraceRecorder
 # The authoring loop talks to any OpenAI-compatible chat endpoint (LM Studio,
 # Ollama, vLLM, …). Defaults target a local server; override per-machine with
 # FLUENTVIBE_LM_ENDPOINT / FLUENTVIBE_LM_MODEL or the `fluentvibe author` flags.
+# FLUENTVIBE_LM_API_KEY supplies an optional Bearer token for secured endpoints.
 DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get(
-    "FLUENTVIBE_LM_ENDPOINT", "http://localhost:1234/v1/chat/completions"
+    "FLUENTVIBE_LM_ENDPOINT", "http://localhost:18020/v1/chat/completions"
 )
-DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.6-27b")
+DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.8-27b")
 DEFAULT_REQUEST_TIMEOUT_S = 240.0
+_ALLOWED_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 
 
 def _request_timeout_from_env() -> float:
@@ -54,9 +57,23 @@ class LMStudioChatClient:
         model: str = DEFAULT_LM_STUDIO_MODEL,
         trace_recorder: ModelTraceRecorder | None = None,
         request_timeout_s: float | None = None,
+        api_key: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
+        self.api_key = api_key if api_key is not None else os.environ.get("FLUENTVIBE_LM_API_KEY")
+        self.reasoning_effort = (
+            reasoning_effort
+            if reasoning_effort is not None
+            else os.environ.get("FLUENTVIBE_LM_REASONING_EFFORT")
+        )
+        if self.reasoning_effort is not None:
+            self.reasoning_effort = self.reasoning_effort.strip().lower()
+            if self.reasoning_effort not in _ALLOWED_REASONING_EFFORTS:
+                raise ValueError(
+                    "reasoning_effort must be one of low, medium, high, xhigh"
+                )
         self.trace_recorder = trace_recorder
         self.request_timeout_s = (
             _request_timeout_from_env()
@@ -83,15 +100,20 @@ class LMStudioChatClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        request_tools = _strict_workflow_tools(tools) if _truthy(os.environ.get("FLUENTVIBE_LM_STRICT_WORKFLOW")) else tools
         payload = {
             "model": self.model,
             "messages": messages,
-            "tools": tools,
+            "tools": request_tools,
             "tool_choice": "auto",
             "parallel_tool_calls": True,
             "stream": True,
             "temperature": 0.2,
         }
+        # Qwen-compatible servers accept this optional control. Omit it by
+        # default so other OpenAI-compatible providers retain their behavior.
+        if self.reasoning_effort is not None:
+            payload["reasoning_effort"] = self.reasoning_effort
         if self.trace_recorder is not None:
             self.trace_recorder.record(
                 "request_payload",
@@ -99,10 +121,13 @@ class LMStudioChatClient:
                 endpoint=self.endpoint,
                 payload=payload,
             )
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         req = urllib.request.Request(
             self.endpoint,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         started = time.monotonic()
@@ -124,6 +149,22 @@ class LMStudioChatClient:
                 if "text/event-stream" in content_type:
                     return self._read_stream(response, deadline=deadline)
                 data = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                raw_body = exc.read(8192).decode("utf-8", errors="replace")
+            except Exception:
+                raw_body = ""
+            detail = _safe_http_error_detail(raw_body)
+            error = f"HTTP {exc.code} {exc.reason}"
+            if detail:
+                error += f": {detail}"
+            if self.trace_recorder is not None:
+                self.trace_recorder.record(
+                    "request_error", error=error, error_type="HTTPError",
+                    status_code=exc.code,
+                    duration_ms=(time.monotonic() - started) * 1000,
+                )
+            raise LMStudioError(f"LM Studio request failed: {error}") from exc
         except TimeoutError as exc:
             message = f"LM Studio request timed out after {effective_timeout:g}s"
             if self.trace_recorder is not None:
@@ -369,6 +410,39 @@ def _provider_error_message(data: dict[str, Any]) -> str | None:
     return str(message).strip() if message else None
 
 
+def _truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _strict_workflow_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Opt into vLLM structured tool decoding for the workflow declaration only."""
+    cloned = copy.deepcopy(tools)
+    for tool in cloned:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if isinstance(function, dict) and function.get("name") == "declare_protocol_workflow":
+            function["strict"] = True
+    return cloned
+def _safe_http_error_detail(raw_body: str) -> str:
+    """Extract a concise provider message without exposing auth secrets."""
+    text = (raw_body or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError):
+        detail = text
+    else:
+        if isinstance(parsed, dict):
+            error = parsed.get("error")
+            if isinstance(error, dict):
+                detail = error.get("message") or error.get("detail") or error.get("type") or text
+            else:
+                detail = parsed.get("message") or parsed.get("detail") or text
+        else:
+            detail = text
+    detail = str(detail).replace("\r", " ").replace("\n", " ").strip()
+    detail = re.sub(r"(?i)(authorization|api[-_ ]?key|token)\s*[:=]\s*[^,; ]+", r"\1: [redacted]", detail)
+    return detail[:1000]
 def _endpoint_to_base_url(endpoint: str) -> str:
     """Strip the trailing /chat/completions path so ChatOpenAI can append it back."""
     suffix = "/chat/completions"
@@ -381,15 +455,14 @@ def make_chat_client(
     *,
     model: str = DEFAULT_LM_STUDIO_MODEL,
     endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
-    api_key: str = "lm-studio",
+    api_key: str | None = None,
     temperature: float = 0.2,
     streaming: bool = True,
 ) -> Any:
     """Return a `langchain_openai.ChatOpenAI` configured for the LM Studio endpoint.
 
-    LM Studio speaks OpenAI's chat-completions protocol natively, so no custom
-    adapter is needed.  The `api_key` is required by ChatOpenAI but ignored by
-    LM Studio — the placeholder value is fine.
+    The optional `FLUENTVIBE_LM_API_KEY` is passed as a Bearer token for local
+    servers that require authentication; unauthenticated servers use a placeholder.
 
     Lazy-imported so the legacy `LMStudioChatClient` path keeps working when
     `langchain-openai` is not installed yet.
@@ -399,7 +472,7 @@ def make_chat_client(
     return ChatOpenAI(
         model=model,
         base_url=_endpoint_to_base_url(endpoint),
-        api_key=api_key,
+        api_key=api_key or os.environ.get("FLUENTVIBE_LM_API_KEY") or "lm-studio",
         temperature=temperature,
         streaming=streaming,
         model_kwargs={"parallel_tool_calls": True},

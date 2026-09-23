@@ -26,6 +26,8 @@ class RepairLockState:
     category: str | None = None
     last_source_hash: str | None = None
     repeated_no_progress_count: int = 0
+    last_tool_failure_key: str | None = None
+    repeated_tool_failure_count: int = 0
 
     def block_reason(self, tool_name: str) -> str | None:
         if self.category is None:
@@ -51,10 +53,21 @@ class RepairLockState:
         if not category:
             return None
 
-        # A malformed tool call (wrong/missing argument names) is a call-mechanics
-        # slip, not a stalled draft — the model never evaluated a draft. Don't let
-        # it trip the no-progress give-up; the outer retry budget still bounds it.
+        # Malformed calls are recoverable once, but an identical deterministic
+        # call repeated several times is a model/tool-loop failure.
         if category == "bad_tool_arguments":
+            key = tool_name + "|" + repr(sorted(arguments.items())) + "|" + str(result.get("message", ""))
+            if key == self.last_tool_failure_key:
+                self.repeated_tool_failure_count += 1
+            else:
+                self.last_tool_failure_key = key
+                self.repeated_tool_failure_count = 1
+            if self.repeated_tool_failure_count >= 3:
+                return {
+                    "category": category,
+                    "message": "Repeated identical malformed " + tool_name + " calls. Stop retrying this call and emit the required arguments; tool diagnostic: " + str(result.get("message", "")),
+                    "repair_options": ["Provide all required arguments named by the tool diagnostic."],
+                }
             return None
 
         source_hash = _source_hash(arguments.get("source"))

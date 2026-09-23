@@ -151,6 +151,10 @@ variables or per-command flags:
 ```bash
 export FLUENTVIBE_LM_ENDPOINT="http://localhost:1234/v1/chat/completions"
 export FLUENTVIBE_LM_MODEL="your-model-name"
+# If the endpoint requires bearer authentication, set FLUENTVIBE_LM_API_KEY in your shell.
+# Qwen-compatible servers: optionally cap reasoning effort for faster exploratory runs.
+# Omit this to preserve the server default; valid values: low, medium, high, xhigh.
+# export FLUENTVIBE_LM_REASONING_EFFORT=medium
 fluentvibe author "Transfer 20 uL from a source to a dest 96-well plate"
 
 # or override per run:

@@ -68,6 +68,15 @@ roles; mix off-magnet to bind, mix off-magnet with eluent to release) — see th
 `Reagent("Sample DNA", role="analyte")` (distinct from the bulk `plain`
 buffer), `Reagent("Elution buffer", role="eluent")`. Always mix after adding
 beads and after adding elution buffer.
+Never assign the entire sample volume to the analyte reagent. The sample
+well must retain its bulk free liquid (for example `Reagent("PCR matrix")`
+with `fill_all(..., SAMPLE_VOLUME_UL)`) and carry the captured product as a
+small analyte marker layer. Use the approved `spri_cleanup` helper (which
+normalizes this with `_ensure_analyte_marker`) or explicitly add a marker
+layer after filling the bulk matrix. Otherwise binding removes the whole
+sample volume from free liquid and a correct `SAMPLE + BEADS - RETAIN`
+aspirate will fail. For a 20 uL sample and 36 uL beads, the well must have
+56 uL before binding and the 51 uL supernatant aspirate must remain valid.
 
 ## Derived volumes — compute, never guess
 

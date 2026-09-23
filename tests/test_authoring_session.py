@@ -370,6 +370,24 @@ def test_session_surfaces_pending_source_protocol_approval_over_empty_failure() 
     assert result.approval_request.payload == plan
 
 
+def test_provider_message_normalization_coalesces_system_and_keeps_tool_history() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+    from fluentvibe.authoring.graph import _coalesce_system_messages
+
+    history = [
+        SystemMessage(content="base authoring rules"),
+        SystemMessage(content="trusted scope rules"),
+        HumanMessage(content="transfer 20 uL"),
+        AIMessage(content="", tool_calls=[{"name": "lookup_workspace", "args": {}, "id": "c1"}]),
+        ToolMessage(content="workspace found", tool_call_id="c1"),
+        HumanMessage(content="continue"),
+    ]
+    normalized = _coalesce_system_messages(history)
+    assert len([m for m in normalized if isinstance(m, SystemMessage)]) == 1
+    assert normalized[0].content == "base authoring rules\n\ntrusted scope rules"
+    assert normalized[1:] == history[2:]
+
+
 def test_session_resumes_after_clarification_and_compiles() -> None:
     draft = _valid_draft()
     client = FakeClient([
@@ -489,6 +507,15 @@ def test_session_resumes_after_clarification_and_compiles() -> None:
     assert fourth.validation.strict_simulation_ok is True
     assert fourth.tool_calls[-1]["name"] == "compile_and_simulate"
     assert any(message["content"] == "20 uL across all wells." for message in client.seen_messages[-1])
+    # Each model request includes base and scope systems in state, but the
+    # provider-facing payload must contain one leading system while retaining
+    # user/tool chronology across clarification and subsequent tool turns.
+    for sent in client.seen_messages:
+        assert [m["role"] for m in sent].count("system") == 1
+        assert sent[0]["role"] == "system"
+    assert any(m["role"] == "tool" for m in client.seen_messages[-1])
+    roles = [m["role"] for m in client.seen_messages[-1]]
+    assert roles.index("user") < roles.index("assistant") < roles.index("tool")
 
 
 def test_session_pushes_to_draft_after_sufficient_grounding() -> None:

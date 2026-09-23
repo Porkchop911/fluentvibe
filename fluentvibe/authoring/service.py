@@ -403,7 +403,9 @@ class PromptAuthoringService:
             compile_ok=bool(result.get("compile_ok")),
             strict_simulation_ok=bool(result.get("strict_simulation_ok")),
             failure_category=FailureCategory(category) if category else None,
-            failure_message=result.get("failure_message"),
+            # Simulation tools return ``message`` while validator reports use
+            # ``failure_message``; retain either form for terminal diagnostics.
+            failure_message=result.get("failure_message") or result.get("message"),
             python_path=Path(result["python_path"]) if result.get("python_path") else None,
             xscr_path=Path(result["xscr_path"]) if result.get("xscr_path") else None,
             simulation_failure_category=result.get("simulation_failure_category"),

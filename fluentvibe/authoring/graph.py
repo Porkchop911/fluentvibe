@@ -323,8 +323,13 @@ class _Nodes:
             )
         t0 = _time.monotonic()
         model_error: Exception | None = None
+        # Several authoring modes contribute separate system instructions
+        # (base prompt + scope). Some OpenAI-compatible chat templates only
+        # accept one system message. Normalize only system messages; user,
+        # assistant, and tool messages retain their original order and roles.
+        request_messages = _coalesce_system_messages(state["messages"])
         try:
-            response = self.client_with_tools.invoke(state["messages"])
+            response = self.client_with_tools.invoke(request_messages)
         except Exception as exc:
             model_error = exc
             if _is_transient_model_error(exc):
@@ -337,7 +342,7 @@ class _Nodes:
                     )
                 _time.sleep(0.5)
                 try:
-                    response = self.client_with_tools.invoke(state["messages"])
+                    response = self.client_with_tools.invoke(request_messages)
                 except Exception as retry_exc:
                     model_error = retry_exc
                 else:
@@ -547,6 +552,16 @@ class _Nodes:
                         "call simulate_python_draft, then compile_and_simulate once it passes."
                     )))
                 continue
+
+            # Keep the exact submitted source and validation report even when
+            # simulation fails. If the next model turn is truncated/empty, the
+            # terminal result can still show the draft and real diagnostic.
+            if name in {"simulate_python_draft", "compile_and_simulate"}:
+                submitted_source = arguments.get("source")
+                if isinstance(submitted_source, str) and submitted_source.strip():
+                    best_code = submitted_source
+                if result.get("ok") is False:
+                    last_validation = self.helpers._report_from_tool_result(result)
 
             repair_guidance = None
             if name in {"simulate_python_draft", "compile_and_simulate"} and result.get("ok") is False:
@@ -767,15 +782,24 @@ class _Nodes:
             # A turn with neither a tool call nor a fenced draft is a hard failure
             # in every mode (baseline behavior). The skills empty-turn re-nudge
             # was part of the shelved staged-drafting experiment and is removed.
+            failure_message = content or "Model returned no Python draft."
+            prior_validation = state.get("last_validation")
+            if not content and prior_validation is not None:
+                details = getattr(prior_validation, "failure_message", None)
+                if details:
+                    failure_message = (
+                        "Model returned no Python draft after the previous validation failure: "
+                        f"{details}"
+                    )
             return Command(
                 update={
                     "result": _build_failure(
                         registry=self.registry,
                         state=state,
                         category=FailureCategory.MODEL_AUTHORING_FAILURE,
-                        message=content or "Model returned no Python draft.",
+                        message=failure_message,
                         best_code=state.get("best_code"),
-                        last_validation=state.get("last_validation"),
+                        last_validation=prior_validation,
                     ),
                 },
                 goto=END,
@@ -1684,6 +1708,18 @@ def _is_transient_model_error(exc: Exception) -> bool:
     )
 
 
+def _coalesce_system_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Return one leading system message while preserving every other role/order."""
+    systems = [m for m in messages if isinstance(m, SystemMessage)]
+    if len(systems) <= 1 and (not systems or isinstance(messages[0], SystemMessage)):
+        return list(messages)
+    non_system = [m for m in messages if not isinstance(m, SystemMessage)]
+    if not systems:
+        return non_system
+    content = "\n\n".join(str(m.content) for m in systems if m.content)
+    return [SystemMessage(content=content), *non_system]
+
+
 class LegacyClientAdapter:
     """Adapt an old-style `LMStudioChatClient` (`.complete(messages, tools)`)
     so it presents the LangChain `bind_tools` / `invoke` shape the graph needs.
@@ -1740,6 +1776,16 @@ def _lc_to_legacy_dict(message: BaseMessage) -> dict[str, Any]:
         }
     if isinstance(message, AIMessage):
         out: dict[str, Any] = {"role": "assistant", "content": message.content}
+        # Qwen reasoning models can require prior thinking to be replayed on
+        # later tool turns. Preserve provider fields when present, while
+        # omitting them for ordinary providers/messages.
+        reasoning = {
+            key: value
+            for key, value in (getattr(message, "additional_kwargs", {}) or {}).items()
+            if "reasoning" in key.lower() and value not in (None, "")
+        }
+        if reasoning:
+            out.update(reasoning)
         tool_calls = list(message.tool_calls or [])
         if tool_calls:
             out["tool_calls"] = [
@@ -1775,7 +1821,16 @@ def _legacy_dict_to_aimessage(d: dict[str, Any]) -> AIMessage:
             "args": args,
             "id": tc.get("id") or "",
         })
-    return AIMessage(content=d.get("content") or "", tool_calls=lc_tool_calls)
+    reasoning = {
+        key: value
+        for key, value in (d.get("reasoning_fields") or {}).items()
+        if "reasoning" in key.lower() and value not in (None, "")
+    }
+    return AIMessage(
+        content=d.get("content") or "",
+        tool_calls=lc_tool_calls,
+        additional_kwargs=reasoning,
+    )
 
 
 def adapt_client(client: Any) -> Any:

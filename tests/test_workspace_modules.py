@@ -65,3 +65,21 @@ def test_spri_cleanup_handles_analyte_only_seeded_sample() -> None:
     }
     sample_a1 = final.labware("Sample").well("A1")
     assert sample_a1.bead_phase is not None and sample_a1.bead_phase.present
+
+
+def test_spri_marker_keeps_bulk_volume_for_20ul_supernatant() -> None:
+    namespace: dict[str, object] = {}
+    exec(SPRI_MODULE_SOURCE, namespace)  # noqa: S102 - trusted module source fixture
+    ensure_marker = namespace["_ensure_analyte_marker"]
+    wt = Worktable.from_workspace("780_Empty", auto_place=False)
+    plate = wt.place(Plate96("Sample", catalog="96 Well Flat"), "Site", 1)
+    dna = Reagent("Sample DNA", role="analyte")
+    plate.fill_all(dna, 20.0)
+    marker = ensure_marker(plate, dna, 20.0)
+    well = plate.well("A1")
+    assert marker == 2.0
+    assert well.volume_ul == 20.0
+    assert sum(layer.volume_ul for layer in well.layers if layer.reagent.is_analyte) == 2.0
+    # Adding 36 uL beads gives 56 uL before binding; 51 uL removal leaves 5 uL
+    # of free liquid while the 2 uL analyte marker is tracked on beads.
+    assert well.volume_ul + 36.0 - 51.0 == 5.0
