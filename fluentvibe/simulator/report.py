@@ -99,6 +99,10 @@ class SimulationReport:
     final_mca_tips: list[dict[str, Any]] = field(default_factory=list)
     final_liha_tips: list[dict[str, Any] | None] = field(default_factory=list)
     state_summary: dict[str, Any] = field(default_factory=dict)
+    # Cross-contamination findings (warnings, never failures); see
+    # ``simulator/contamination.py``. Events are capped; counts are complete.
+    contamination_events: list[dict[str, Any]] = field(default_factory=list)
+    contamination_counts: dict[str, int] = field(default_factory=dict)
 
     def add_step(self, coverage: StepCoverage) -> None:
         self.steps.append(coverage)
@@ -186,4 +190,6 @@ class SimulationReport:
             "final_mca_tips": self.final_mca_tips,
             "final_liha_tips": self.final_liha_tips,
             "state_summary": self.state_summary,
+            "contamination_events": list(self.contamination_events),
+            "contamination_counts": dict(self.contamination_counts),
         }

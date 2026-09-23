@@ -118,6 +118,7 @@ def _run_once(service, prompt: str, source_text: str, run_dir: Path, ws_name: st
             py_path.read_text(encoding="utf-8"),
             source_text=source_text,
             simulate=simulate,
+            filename=str(py_path),  # real path → findings carry line numbers
         )
     return result, rubric, py_path
 
