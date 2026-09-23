@@ -274,5 +274,5 @@ def test_simulator_set_variable_mix_and_empty_tips() -> None:
 
     wt.simulate()
 
-    assert wt.sim_values["cycles"] == 2
+    assert wt.snapshots[-1].variables["cycles"] == 2
     assert sum(t.volume_ul for t in wt.snapshots[-1].mca_tips) == 0

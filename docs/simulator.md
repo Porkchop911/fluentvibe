@@ -51,13 +51,18 @@ Twin state held during the walk:
 | `_mca_tips` | List of 96 `Tip` instances when tips are picked up; empty otherwise. |
 | `_mca_tip_box_label` | Tip box currently sourced from. |
 
-Note: the twin Labware is the same object as the author-side Labware
-(`_on_add_labware` looks it up by label). Snapshots `deepcopy` the twin so
-historical state stays frozen — but the author-side state is mutated
-in-place during the walk. That means **authoring side state after
-`simulate()` reflects the *last* simulated state**, not the original
-author-time state. Don't rely on author-side `wt.slot_map` after
-`simulate()`; use snapshots instead.
+The twin Labware is a deep copy of the author-side Labware, taken when its
+`AddLabware` step is walked (`_on_add_labware` looks the original up by label
+and copies it, including initial `fill_all()` layers and tips). The walk never
+mutates the authored objects, so **author-side state after `simulate()` is
+still the authored initial state**, and calling `simulate()` twice gives the
+same result. Read simulated results from `wt.snapshots` (for example
+`wt.snapshots[-1].labware("Dest")`) or `wt.simulation_report`.
+
+Variable maps work the same way: `SetVariable` / `ImportVariables` steps write
+into `wt.protocol_variables` / `wt.sim_values` while walking, and both maps are
+restored when the run ends. The values after each step are recorded in
+`Snapshot.variables`.
 
 ## Step dispatch
 
@@ -180,8 +185,7 @@ class Snapshot:
 
 Snapshots are written by `take_snapshot` (`snapshots.py:39`), which
 `copy.deepcopy`s the slot map and the tip list. This is the layer that
-isolates history from later mutations. The slot snapshot is independent
-even when later steps reuse the same author-side Labware object.
+isolates history from later mutations of the twin.
 
 ## Report Contract
 

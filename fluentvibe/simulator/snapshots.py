@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from ..heads.mca96 import Tip
@@ -29,6 +29,10 @@ class Snapshot:
     liha_tips: list["Tip" | None]
     opaque_events: list[dict]
     warnings: list[str]
+    # Protocol variable values (sim values) after this step. The authored
+    # worktable's own variable maps are restored when simulation ends, so this
+    # is where SetVariable / ImportVariables effects are observed.
+    variables: dict[str, Any] = field(default_factory=dict)
 
     def labware(self, label: str) -> "Labware":
         for stack in self.slot_map.values():
@@ -48,6 +52,7 @@ def take_snapshot(
     liha_tips: list,
     opaque_events: list[dict],
     warnings: list[str],
+    variables: Optional[dict[str, Any]] = None,
 ) -> Snapshot:
     return Snapshot(
         step_index=step_index,
@@ -59,4 +64,5 @@ def take_snapshot(
         liha_tips=copy.deepcopy(liha_tips),
         opaque_events=copy.deepcopy(opaque_events),
         warnings=list(warnings),
+        variables=copy.deepcopy(dict(variables or {})),
     )
