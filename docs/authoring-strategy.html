@@ -1,0 +1,448 @@
+<title>Authoring Quality Strategy</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --ground:#f4f6f3; --surface:#ffffff; --sunk:#eaeee9;
+  --ink:#1b2420; --muted:#56625c; --rule:#d8ded7;
+  --accent:#1f5f8b; --accent-soft:#e3edf5;
+  --ok:#2f7d4f; --ok-soft:#e2f1e7;
+  --warn:#9a5f0c; --warn-soft:#f8ecd6;
+  --crit:#b3261e; --crit-soft:#f8e1df;
+  --code-bg:#eef1ed;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#111614; --surface:#181e1b; --sunk:#1f2622;
+    --ink:#e4eae6; --muted:#9aa69f; --rule:#2c3531;
+    --accent:#86b8e0; --accent-soft:#1b2b38;
+    --ok:#7cc79a; --ok-soft:#18291f;
+    --warn:#e0a955; --warn-soft:#2e2414;
+    --crit:#f08a80; --crit-soft:#341b19;
+    --code-bg:#1d2421;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#111614; --surface:#181e1b; --sunk:#1f2622;
+  --ink:#e4eae6; --muted:#9aa69f; --rule:#2c3531;
+  --accent:#86b8e0; --accent-soft:#1b2b38;
+  --ok:#7cc79a; --ok-soft:#18291f;
+  --warn:#e0a955; --warn-soft:#2e2414;
+  --crit:#f08a80; --crit-soft:#341b19;
+  --code-bg:#1d2421;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 var(--sans);padding-inline:16px;padding-block:0 64px}
+.shell{max-width:1160px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:40px}
+@media (min-width:1020px){.shell{grid-template-columns:220px minmax(0,1fr)}}
+nav.toc{display:none}
+@media (min-width:1020px){
+  nav.toc{display:block;position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;padding-top:40px;font-size:13px}
+}
+nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav.toc a{display:block;padding:4px 10px;color:var(--muted);text-decoration:none;border-left:2px solid var(--rule)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--ink);border-left-color:var(--accent);outline:none}
+nav.toc .sub a{padding-left:22px;font-size:12.5px}
+main{min-width:0;padding-top:40px}
+header.doc{padding-bottom:28px;border-bottom:1px solid var(--rule);margin-bottom:8px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(30px,5vw,44px)/1.08 var(--cond);letter-spacing:-.01em;margin:12px 0 14px;text-wrap:balance}
+h2{font:700 26px/1.2 var(--cond);margin:56px 0 14px;text-wrap:balance;scroll-margin-top:24px}
+h3{font:600 19px/1.3 var(--cond);margin:36px 0 10px;text-wrap:balance;scroll-margin-top:24px}
+h4{font:600 14px/1.3 var(--sans);margin:22px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+p,li{max-width:70ch}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin:3px 0}
+a{color:var(--accent)}
+code{font:13px var(--mono);background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre{font:12.5px/1.55 var(--mono);background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;margin:0 0 16px;max-width:100%}
+pre code{background:none;padding:0}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted)}
+.meta b{color:var(--ink);font-weight:600}
+.lede{font-size:17px;line-height:1.55;max-width:66ch}
+.callout{border:1px solid var(--rule);background:var(--surface);border-radius:8px;padding:16px 18px;margin:16px 0}
+.callout.thesis{border-color:var(--accent);background:var(--accent-soft)}
+.callout p:last-child{margin-bottom:0}
+.tw{overflow-x:auto;margin:0 0 18px;border:1px solid var(--rule);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--rule)}
+th{font:600 12px/1.3 var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--sunk)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font:600 11.5px/1 var(--mono);padding:4px 7px;border-radius:999px;white-space:nowrap}
+.p-crit{background:var(--crit-soft);color:var(--crit)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-ok{background:var(--ok-soft);color:var(--ok)}
+.p-acc{background:var(--accent-soft);color:var(--accent)}
+.moves{display:grid;grid-template-columns:1fr;gap:12px;margin:18px 0}
+@media (min-width:720px){.moves{grid-template-columns:repeat(3,1fr)}}
+.move{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.move .k{font:600 12px var(--mono);color:var(--accent)}
+.move h4{margin:0;color:var(--ink);text-transform:none;letter-spacing:0;font:600 16px/1.3 var(--cond)}
+.move p{margin:0;font-size:13.5px;color:var(--muted)}
+/* turn timeline */
+.timeline{margin:12px 0 6px}
+.bar{display:flex;height:34px;border-radius:6px;overflow:hidden;border:1px solid var(--rule)}
+.seg{display:flex;align-items:center;justify-content:center;font:600 12px var(--mono);color:var(--ink);border-right:1px solid var(--surface);min-width:0;overflow:hidden;white-space:nowrap}
+.seg:last-child{border-right:none}
+.seg.waste{background:var(--crit-soft);color:var(--crit)}
+.seg.useful{background:var(--ok-soft);color:var(--ok)}
+.seg.resub{background:var(--warn-soft);color:var(--warn)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.axis{display:flex;justify-content:space-between;font:11.5px var(--mono);color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+/* pipeline */
+.pipe{display:grid;grid-template-columns:1fr;gap:10px;margin:18px 0 8px}
+@media (min-width:760px){.pipe{grid-template-columns:repeat(3,1fr)}}
+.stage{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:12px 14px;position:relative}
+.stage .who{float:right}
+.stage .id{font:700 20px/1 var(--cond);color:var(--accent);margin-right:6px}
+.stage .nm{font:600 15px/1.2 var(--cond)}
+.stage p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+.stage.human{border-color:var(--warn);background:var(--warn-soft)}
+.stage.human .id{color:var(--warn)}
+.flownote{font-size:13px;color:var(--muted)}
+.ws{border-top:1px solid var(--rule);margin-top:48px;padding-top:4px}
+.ws-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px}
+.ws-head h3{margin:30px 0 6px}
+.ws-meta{display:flex;flex-wrap:wrap;gap:6px}
+.defect-id{font:600 12px var(--mono);color:var(--crit);white-space:nowrap}
+.decisions ol{counter-reset:none}
+.decisions li{margin:8px 0}
+footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+html{scroll-behavior:smooth}
+</style>
+
+<div class="shell">
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#summary">1 · Summary</a></li>
+    <li><a href="#evidence">2 · Evidence</a></li>
+    <li class="sub"><a href="#flash">Flash Next run</a></li>
+    <li class="sub"><a href="#lessons">What it says</a></li>
+    <li><a href="#pipeline">3 · Target pipeline</a></li>
+    <li><a href="#workstreams">4 · Workstreams</a></li>
+    <li class="sub"><a href="#w1">W1 Blocks</a></li>
+    <li class="sub"><a href="#w2">W2 Bench Spec</a></li>
+    <li class="sub"><a href="#w3">W3 Semantic checks</a></li>
+    <li class="sub"><a href="#w4">W4 Harness</a></li>
+    <li class="sub"><a href="#w5">W5 Knowledge</a></li>
+    <li class="sub"><a href="#w6">W6 Evaluation</a></li>
+    <li class="sub"><a href="#w7">W7 Models</a></li>
+    <li><a href="#roadmap">5 · Roadmap</a></li>
+    <li><a href="#decisions">6 · Decisions</a></li>
+    <li><a href="#risks">7 · Risks</a></li>
+    <li><a href="#appendix">Appendix</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="eyebrow">fluentvibe · strategy proposal</div>
+  <h1>Authoring quality strategy</h1>
+  <div class="meta">
+    <span><b>Date</b> 23 Sep 2026</span>
+    <span><b>Status</b> proposal, no code changes</span>
+    <span><b>Fixed</b> Tecan Fluent <code>.xscr</code> output · local LLMs</span>
+    <span><b>Companion</b> <code>docs/architecture-roadmap-2026-09.md</code></span>
+  </div>
+</header>
+
+<section id="summary">
+<h2>1 · Summary</h2>
+<p class="lede">Today the local model is asked to do four jobs at once: understand a 40-page lab document, decide what belongs on the deck, write 500–600 lines of low-level head operations, and repair them against a simulator. It fails in two ways. Either it never converges (27B: 0 of 10 correct bead cleanups), or it converges on something that passes every check and is still wrong on the bench (Flash Next, 23 Sep).</p>
+<div class="callout thesis">
+  <p><b>Thesis.</b> Move correctness out of the model and into deterministic layers. The model's job shrinks to what only a language model can do: read the document, state what the protocol is, and choose parameters. Verified building blocks produce correct liquid handling. Deterministic checks guard what the model says. You confirm its understanding at one cheap checkpoint.</p>
+</div>
+<div class="moves">
+  <div class="move"><span class="k">MOVE 1</span><h4>Verified building blocks + semantic checks</h4><p>Fixes tip reuse, faked steps, wrong derived volumes and cleanup chemistry. Output shrinks about 5×.</p></div>
+  <div class="move"><span class="k">MOVE 2</span><h4>Extract → checkpoint → map → compose</h4><p>Fixes understanding errors (pooling order, off-deck steps) that no code repair can fix.</p></div>
+  <div class="move"><span class="k">MOVE 3</span><h4>Harness efficiency</h4><p>Forced first tool, lookup tool, patch-style repair, reasoning budget. About 49 min → an estimated 10–15 min.</p></div>
+</div>
+<p>The architecture roadmap covers the platform: state isolation, a shared build contract and model profiles. This document covers generation quality. It relies on the roadmap's <b>P1</b>: simulation must stop mutating authored labware before repeated scoring can be trusted.</p>
+</section>
+
+<section id="evidence">
+<h2>2 · Evidence</h2>
+<h3>History</h3>
+<div class="tw"><table>
+<thead><tr><th>Date</th><th>Model</th><th>Setup</th><th>Outcome</th></tr></thead>
+<tbody>
+<tr><td class="num">16 Jun</td><td>qwen3.6-27b · q4 KV</td><td>skills, SQK-RBK114 PDF</td><td>Bench-incorrect cleanups, varied run to run</td></tr>
+<tr><td class="num">16 Jun</td><td>qwen3.6-27b · f16 KV</td><td>same</td><td>Near-correct; followed the SPRI skill closely</td></tr>
+<tr><td class="num">18 Jun</td><td>qwen3.6-27b · f16</td><td>monolith, tightened skill, 5 runs</td><td><span class="pill p-crit">0/5</span> correct; 2 replaced by comments, 2 failed simulation</td></tr>
+<tr><td class="num">18 Jun</td><td>qwen3.6-27b · f16</td><td>staged drafting, 5 runs, ~3.3 h</td><td><span class="pill p-crit">0/5</span>; 4 hit the retry budget while thrashing; magnet round trip 0%</td></tr>
+<tr><td class="num">23 Sep</td><td>qwen3.8-flash-next · IQ4_XS · q8 KV</td><td>skills, same PDF</td><td><span class="pill p-warn">rubric 1.0</span> simulates and compiles, but has 5 bench errors</td></tr>
+</tbody></table></div>
+
+<h3 id="flash">The Flash Next run</h3>
+<p>Artifact: <code>build/workbench/authored/20260923-215349/</code>. 49 minutes, 5 model turns. Writing dominates: about 58k tokens at 21–28 tok/s is about 44 of the 49 minutes. Reading the prompt runs at 160–170 tok/s from a cached prefix, so it is not the bottleneck.</p>
+
+<div class="timeline" role="img" aria-label="Turn durations: 19.0, 7.3, 6.9, 9.3 and 6.5 minutes">
+  <div class="bar">
+    <div class="seg waste" style="flex:19.0">T1 · 19.0 min</div>
+    <div class="seg useful" style="flex:7.3">T2 · 7.3</div>
+    <div class="seg waste" style="flex:6.9">T3 · 6.9</div>
+    <div class="seg resub" style="flex:9.3">T4 · 9.3</div>
+    <div class="seg resub" style="flex:6.5">T5 · 6.5</div>
+  </div>
+  <div class="axis"><span>0</span><span>49 min</span></div>
+  <div class="legend">
+    <span><i style="background:var(--crit-soft);border:1px solid var(--crit)"></i>wasted: rejected tool / API probe</span>
+    <span><i style="background:var(--ok-soft);border:1px solid var(--ok)"></i>plan declared</span>
+    <span><i style="background:var(--warn-soft);border:1px solid var(--warn)"></i>full-source drafts (~30 KB each)</span>
+  </div>
+</div>
+
+<div class="tw"><table>
+<thead><tr><th>Turn</th><th class="num">Read (uncached)</th><th class="num">Written</th><th class="num">Min</th><th>What happened</th></tr></thead>
+<tbody>
+<tr><td>1</td><td class="num">40,059</td><td class="num">20,314</td><td class="num">19.0</td><td>Mostly reasoning; then called the simulator before declaring a plan → rejected (<code>workflow_plan_required</code>)</td></tr>
+<tr><td>2</td><td class="num">91</td><td class="num">9,474</td><td class="num">7.3</td><td><code>declare_protocol_workflow</code>, 10 groups</td></tr>
+<tr><td>3</td><td class="num">12,439</td><td class="num">6,913</td><td class="num">6.9</td><td>Probe draft through the simulator to learn whether a <code>Well</code> can be a pipette target; no lookup tool in skills mode</td></tr>
+<tr><td>4</td><td class="num">1,094</td><td class="num">13,163</td><td class="num">9.3</td><td>Full draft; contract error: <code>wt.group</code> before variables</td></tr>
+<tr><td>5</td><td class="num">13,221</td><td class="num">8,539</td><td class="num">6.5</td><td>Full re-submission; passed simulation, compiled</td></tr>
+</tbody></table></div>
+
+<p><b>Rubric</b> (<code>score_protocol</code> with the PDF text): 1.0. The magnet round trip, eluate recovery, off-magnet elution, separate eluate tips and no-analyte-in-waste checks all pass. The two derivation checks return <i>n/a</i>.</p>
+
+<h4>Bench review of <code>lm_authoring_attempt4.py</code></h4>
+<div class="tw"><table>
+<thead><tr><th></th><th>Defect</th><th>Lines</th><th>Why no gate caught it</th></tr></thead>
+<tbody>
+<tr><td class="defect-id">D1</td><td><b>Pooling faked.</b> 96 libraries are carried forward per well, with a comment calling it the "plate-format equivalent of pooling". The source pools first, then does one cleanup; the draft does 96.</td><td class="num">507–512</td><td>Coverage accepts a comment; nothing compares order against the document</td></tr>
+<tr><td class="defect-id">D2</td><td><b>Cross-sample tip reuse.</b> One <code>get_tips</code>, then supernatant and ethanol removal across all 12 columns</td><td class="num">322–349</td><td>Simulator doesn't track which sample a tip has touched</td></tr>
+<tr><td class="defect-id">D3</td><td><b>Off-deck thermal cycler as a wait.</b> 30/80 °C modelled as <code>wt.wait</code> on deck; <code>wt.user_prompt</code> exists and was not used</td><td class="num">402–406</td><td>No notion of "this step happens off-deck"</td></tr>
+<tr><td class="defect-id">D4</td><td><b>One liquid class for all liquids.</b> Ethanol, beads and eluate on <code>Water Free Single</code>; the model said so</td><td class="num">turn 1</td><td>Checks verify compatibility, not suitability</td></tr>
+<tr><td class="defect-id">D5</td><td><b>Constant supernatant volume.</b> Not derived from sample + beads − retain</td><td class="num">325</td><td>Rubric returns n/a instead of fail</td></tr>
+<tr><td class="defect-id">D6</td><td><b>SPRI helper unused.</b> <code>spri_cleanup</code> exists, but this profile ships no modules</td><td class="num">—</td><td>Modules are profile-scoped, not a standard library</td></tr>
+</tbody></table></div>
+
+<h3 id="lessons">What the evidence says</h3>
+<ol>
+  <li><b>Model capability isn't the only bottleneck.</b> A stronger model reached a passing state that is still wrong. Better models turn "doesn't converge" into "converges on the wrong thing", and that looks done.</li>
+  <li><b>The checks are the ceiling.</b> Everything the model got wrong was something no gate measured. Each new deterministic check raises the floor for every model at once.</li>
+  <li><b>Staging by protocol stage failed; staging by kind of reasoning is untried.</b> The June staging still asked for low-level code in each stage.</li>
+  <li><b>Output volume drives both latency and errors.</b> 600 lines of head operations is 600 lines to get wrong and about 8k tokens per resubmission.</li>
+</ol>
+</section>
+
+<section id="pipeline">
+<h2>3 · Target pipeline</h2>
+<div class="pipe">
+  <div class="stage"><span class="pill p-acc who">model</span><span class="id">A</span><span class="nm">Extract</span><p>Document + family skill → <b>Bench Spec</b> (YAML). Schema-constrained; every number must appear in the source.</p></div>
+  <div class="stage human"><span class="pill p-warn who">you</span><span class="id">B</span><span class="nm">Checkpoint</span><p>Spec shown as an editable table with source quotes. Approve, edit or re-extract. Cached for reuse.</p></div>
+  <div class="stage"><span class="pill p-ok who">code</span><span class="id">C</span><span class="nm">Map</span><p>Roles → labware and positions from the profile; liquid classes from the catalog map. The model only fills gaps.</p></div>
+  <div class="stage"><span class="pill p-acc who">model</span><span class="id">D</span><span class="nm">Compose</span><p>Spec + deck plan → a short Python file, mostly building-block calls.</p></div>
+  <div class="stage"><span class="pill p-ok who">code</span><span class="id">E</span><span class="nm">Check</span><p>Simulation + semantic checks against the spec: contamination, order, off-deck honesty, liquid classes.</p></div>
+  <div class="stage"><span class="pill p-acc who">model</span><span class="id">F</span><span class="nm">Repair</span><p>Patches one block call from diagnostics; never resubmits the whole file. Loops to E, then compiles to <code>.xscr</code>.</p></div>
+</div>
+<p class="flownote">The 40–50k-token document is used only in stage A. Stages C–F see the spec, about 2–4k tokens.</p>
+</section>
+
+<section id="workstreams">
+<h2>4 · Workstreams</h2>
+<p>Size: <span class="pill p-acc">S</span> ≈ one focused session, <span class="pill p-acc">M</span> ≈ a few sessions, <span class="pill p-acc">L</span> ≈ a week or more.</p>
+
+<div class="ws" id="w1">
+<div class="ws-head"><h3>W1 — Verified building-block library</h3><div class="ws-meta"><span class="pill p-acc">M</span><span class="pill p-warn">new folder: needs approval</span></div></div>
+<p><b>Goal:</b> the model never writes a bead cleanup, a pool or a column loop by hand again.</p>
+<p>Promote <code>workspace_modules.spri_cleanup</code> into a standard library, <code>fluentvibe.blocks</code>, that every profile gets. Each block:</p>
+<ul>
+  <li>takes <b>roles, not positions</b> (<code>sample_plate</code>, <code>magnet</code>, <code>waste</code>) plus scientific parameters;</li>
+  <li><b>derives</b> dependent volumes itself and exposes them as declared variables in the <code>.xscr</code>;</li>
+  <li>takes a <b>tip policy</b> (<code>fresh_per_column</code> default for anything that touches samples);</li>
+  <li>emits its steps inside a named <code>wt.group</code> carrying an <b>origin ID</b>, so diagnostics point back to the call;</li>
+  <li>has a docstring written for the model: preconditions, what it derives, one example call.</li>
+</ul>
+<div class="tw"><table>
+<thead><tr><th>Block</th><th>Replaces</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>spri_cleanup(...)</code></td><td>~120 lines of LiHa/MCA/gripper code</td><td>exists; harden and promote</td></tr>
+<tr><td><code>pool(src, wells, dest, dest_well, vol)</code></td><td>faked pooling (D1)</td><td>LiHa multi-aspirate or worklist, by volume</td></tr>
+<tr><td><code>offdeck_step(labware, instruction, return_to)</code></td><td><code>wt.wait</code> substitutes (D3)</td><td>gripper to hand-off → <code>user_prompt</code> → back</td></tr>
+<tr><td><code>stamp(src, dst, vol, head=mca)</code></td><td>MCA full-plate transfer</td><td>explicit tip policy</td></tr>
+<tr><td><code>dispense_reagent(trough, plate, vol, cols)</code></td><td>column loops with <code>well_offset</code></td><td>reagent-only; tip reuse allowed</td></tr>
+<tr><td><code>mix_wells(plate, vol, cycles, cols)</code></td><td>per-column mix loops</td><td></td></tr>
+<tr><td><code>normalize_to_target(...)</code></td><td>worklist construction</td><td>wraps the worklist API</td></tr>
+<tr><td><code>thermal_step(plate, program)</code></td><td>ODTC driver calls</td><td>falls back to <code>offdeck_step</code> without an ODTC</td></tr>
+</tbody></table></div>
+<p><b>Changes:</b> new <code>fluentvibe/blocks/</code>; move <code>spri_cleanup</code> there with a re-export; generate the blocks context for skills from the docstrings; family skills say "call <code>spri_cleanup</code>" instead of describing the steps.</p>
+<p><b>Acceptance:</b> unit tests per block (simulation, derived volumes, tip policy). A hand-written ONT protocol using blocks is under 120 lines, passes W3 and compiles. A re-run of the Flash case with blocks shows none of D1–D6.</p>
+<p><b>Risk:</b> blocks can hide head constraints. Keep raw operations first-class, and make blocks fail loud rather than silently adapt.</p>
+</div>
+
+<div class="ws" id="w2">
+<div class="ws-head"><h3>W2 — Bench Spec extraction and checkpoint</h3><div class="ws-meta"><span class="pill p-acc">M–L</span></div></div>
+<p><b>Goal:</b> separate "what is the protocol" from "how to run it on this deck", and let you fix the first cheaply.</p>
+<pre><code>spec_version: 1
+title: ONT SQK-RBK114 amplicon barcoding
+samples: {count: 96, container: plate96, volume_ul: 9, analyte: "amplicon DNA"}
+reagents:
+  - {id: AXP, name: "AMPure XP beads", role: bead_carrier}
+  - {id: EtOH80, name: "80% ethanol", role: wash, liquid_type: ethanol}
+  - {id: RB, name: "Rapid Barcodes", role: per_sample, layout: plate96}
+steps:
+  - {id: s1, op: add, reagent: RB, volume_ul: 1, to: samples, location: deck}
+  - {id: s2, op: incubate, temp_c: [30, 80], minutes: [2, 2], location: off_deck, device: thermal_cycler}
+  - {id: s3, op: pool, from: samples, volume_ul: 10, to: {container: tube, name: pool}, location: deck}
+  - {id: s4, op: bead_cleanup, target: pool, bead: AXP, ratio: 1.0, washes: 2, wash: EtOH80, elute_ul: 15}
+  - {id: s5, op: manual, text: "Prime and load flow cell", location: manual}
+source_refs: {s3: "p.14 'Pool all barcoded samples…'"}</code></pre>
+<ul>
+  <li><b>One schema-constrained call.</b> llama.cpp supports JSON-schema response formats and GBNF grammars, so malformed specs are impossible.</li>
+  <li><b>Input:</b> document + relevant family skill(s) + schema. No deck, API or Python context.</li>
+  <li><b>Number check:</b> every numeric value must appear in the source (units normalized); any that don't are flagged.</li>
+  <li><b>Location defaults</b> come from verbs and devices ("thermal cycler", "Hula mixer", "centrifuge" → <code>off_deck</code>), and you can override them.</li>
+  <li><b>Checkpoint UI:</b> a new panel in the authoring tab (not the setup/deck map) with an editable table and Approve / Edit / Re-extract. Approved specs are saved as <code>bench_spec.yaml</code> and reused.</li>
+</ul>
+<p><b>Acceptance:</b> for the ONT PDF, the spec has pooling before the second cleanup, marks thermal and flow-cell steps as off-deck or manual, and has no unflagged numbers missing from the source. Extraction ≤ 5 min on Flash Next.</p>
+<p><b>Risk:</b> the schema grows into a second DSL. Limit ops to families with blocks, plus <code>manual</code> and <code>custom</code> (which force a user prompt).</p>
+</div>
+
+<div class="ws" id="w3">
+<div class="ws-head"><h3>W3 — Deterministic semantic checks</h3><div class="ws-meta"><span class="pill p-acc">M</span><span class="pill p-warn">depends on roadmap P1</span></div></div>
+<p><b>Goal:</b> a protocol that simulates but is wrong on the bench fails, whichever model wrote it.</p>
+<div class="tw"><table>
+<thead><tr><th>Check</th><th>Mechanism</th><th>Catches</th></tr></thead>
+<tbody>
+<tr><td><b>Cross-contamination</b></td><td>Tag each tip with the sample identities it has contacted (from the simulator's per-well layers); entering a well with a different sample set → violation, unless the tip is reagent-clean and dispensing from above</td><td class="defect-id">D2</td></tr>
+<tr><td><b>Spec conformance</b></td><td>Map operations back to spec steps via block origin IDs; every <code>deck</code> step has operations; order matches; <code>pool</code> reduces N→1</td><td class="defect-id">D1</td></tr>
+<tr><td><b>Off-deck honesty</b></td><td><code>off_deck</code>/<code>manual</code> steps must lower to <code>user_prompt</code> (+ moves), never <code>wait</code> or a comment alone</td><td class="defect-id">D3</td></tr>
+<tr><td><b>Liquid-class suitability</b></td><td>Reagent <code>liquid_type</code> → acceptable class patterns from the install catalog; volatile/viscous mismatch → error</td><td class="defect-id">D4</td></tr>
+<tr><td><b>Derivation presence</b></td><td>Missing derivation on core volumes fails instead of n/a</td><td class="defect-id">D5</td></tr>
+<tr><td><b>Conservation</b></td><td>Analyte proxy at the final destination ≈ 1 − expected losses</td><td>lost or duplicated eluate</td></tr>
+</tbody></table></div>
+<p><b>Rubric fixes (do first):</b> a comment-only stage no longer counts as covered; <code>derived_*</code> fails when the matching stage exists without the derivation; <code>eluate_recovered</code> requires a magnet round trip first.</p>
+<p><b>Acceptance:</b> attempt 4 fails with D1–D5 named, each with a line number. Hand-written <code>examples/</code> stay green.</p>
+</div>
+
+<div class="ws" id="w4">
+<div class="ws-head"><h3>W4 — Harness efficiency</h3><div class="ws-meta"><span class="pill p-acc">S–M</span></div></div>
+<div class="tw"><table>
+<thead><tr><th>Change</th><th>Where</th><th>Expected saving (Flash run)</th></tr></thead>
+<tbody>
+<tr><td>Force <code>declare_protocol_workflow</code> on turn 1</td><td><code>graph.py</code>, <code>lab_scope.py</code></td><td>~19 min wasted turn → gone</td></tr>
+<tr><td>Restore <code>lookup_api</code> in skills mode (deterministic)</td><td><code>lab_scope._SKILLS_ALLOWED_TOOLS</code></td><td>~7 min probe turn → one lookup</td></tr>
+<tr><td>Patch repair: <code>edit_draft(old, new)</code> on the stored draft</td><td><code>tools.py</code>, <code>graph.py</code></td><td>~8k-token resubmits → ~0.5–1k</td></tr>
+<tr><td>Contract errors with exact fix-its before simulation</td><td><code>validator.py</code> + <code>copilot/fixes.py</code></td><td>shorter repair turns</td></tr>
+<tr><td>Reasoning budget per turn type (high / medium / low)</td><td><code>lm_client.py</code> (supported already)</td><td>turn-1 writing ~20k → ~8k tokens</td></tr>
+<tr><td>Keep the document out of stages C–F</td><td>prompt assembly</td><td>no document re-reads</td></tr>
+<tr><td>Live tokens and tok/s per turn in the web UI</td><td><code>trace.py</code>, <code>index.html</code></td><td>makes stalls visible</td></tr>
+</tbody></table></div>
+<p><b>Acceptance:</b> the ONT case on Flash Next takes ≤ 15 min end to end, checkpoint excluded, with no turn spent on a tool the pipeline rejects.</p>
+</div>
+
+<div class="ws" id="w5">
+<div class="ws-head"><h3>W5 — Knowledge base</h3><div class="ws-meta"><span class="pill p-acc">M · ongoing</span></div></div>
+<div class="tw"><table>
+<thead><tr><th>Asset</th><th>Content</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td><b>Gold protocols</b></td><td>1–3 per family, written with blocks, W3-clean</td><td>examples retrieved for stage D</td></tr>
+<tr><td><b>Decompiled corpus</b></td><td>your real FluentControl methods via <code>fluentvibe decompile</code>, curated and de-branded</td><td>examples for rare patterns; ground truth for W6</td></tr>
+<tr><td><b>Liquid-class map</b></td><td>reagent type → recommended class per install</td><td>stage C, W3 suitability</td></tr>
+<tr><td><b>Off-deck verb list</b></td><td>devices and verbs implying off-deck</td><td>stage A defaults</td></tr>
+<tr><td><b>Skill rewrite</b></td><td>when to use, which block, which parameters, common traps</td><td>stage A + D context</td></tr>
+</tbody></table></div>
+<p>Prose skills describe <b>decisions</b>; blocks and checks own <b>mechanics</b>. That ends the pattern where the model echoes an invariant as a comment without implementing it. Anything decompiled from your install passes the de-brand gate before it is committed.</p>
+</div>
+
+<div class="ws" id="w6">
+<div class="ws-head"><h3>W6 — Evaluation</h3><div class="ws-meta"><span class="pill p-acc">M</span></div></div>
+<ul>
+  <li><b>~20 cases in three tiers.</b> T1: simple transfers, stamping, reagent distribution. T2: single-family (cleanup, normalization, dilution). T3: multi-stage documents (ONT, ELISA, PCR setup). Each case has a reviewed spec and a gold protocol.</li>
+  <li><b>Metrics:</b> spec accuracy, first-pass and final W3 pass rate, turns, output tokens, wall time, and <b>incorrectly accepted</b> (passed all gates, failed review). The last is the headline metric.</li>
+  <li><b>Runner:</b> extend <code>scripts/eval_authoring.py</code> to run stages independently (e.g. compose-only from a gold spec).</li>
+  <li>≥ 3 runs per case per model; report the spread.</li>
+</ul>
+</div>
+
+<div class="ws" id="w7">
+<div class="ws-head"><h3>W7 — Model strategy (local only)</h3><div class="ws-meta"><span class="pill p-acc">experiments</span></div></div>
+<div class="tw"><table>
+<thead><tr><th>Question</th><th>Experiment</th><th>Decision rule</th></tr></thead>
+<tbody>
+<tr><td>Which model per stage?</td><td>Flash Next vs 27B on stage A only and stage D only</td><td>pick per stage; it can be the same model</td></tr>
+<tr><td>KV precision</td><td>stage A at q8 vs f16 KV on Flash Next</td><td>f16 won in June; confirm on the new model</td></tr>
+<tr><td>Reasoning budget</td><td>low / medium / high per stage</td><td>smallest budget that keeps the pass rate</td></tr>
+<tr><td>Constrained decoding</td><td>stage A with vs without JSON schema</td><td>expect fewer malformed specs at no quality cost</td></tr>
+<tr><td>Fine-tuning (later)</td><td>LoRA on (spec step → block call) pairs, variants checked by the simulator</td><td>only after W1–W3 and a stable failure pattern in W6</td></tr>
+</tbody></table></div>
+</div>
+</section>
+
+<section id="roadmap">
+<h2>5 · Roadmap</h2>
+<div class="tw"><table>
+<thead><tr><th>Phase</th><th>Content</th><th>Exit criterion</th></tr></thead>
+<tbody>
+<tr><td><b>0 · Quick wins</b></td><td>W3 rubric fixes; W4 forced first tool, <code>lookup_api</code>, reasoning budget</td><td>Flash ONT run re-scored → correctly fails; next live run has no wasted turn 1</td></tr>
+<tr><td><b>1 · Floor</b></td><td>Roadmap P1 (simulation isolation); W3 contamination, off-deck and derivation checks</td><td>Attempt 4 fails with D2, D3, D5 named</td></tr>
+<tr><td><b>2 · Blocks</b></td><td>W1 first block set; skills rewritten around blocks; gold ONT protocol</td><td>Gold protocol &lt; 120 lines, W3-clean; live Flash run uses blocks</td></tr>
+<tr><td><b>3 · Understanding</b></td><td>W2 Bench Spec + checkpoint UI; W3 spec conformance</td><td>Live ONT: approved spec → W3-clean protocol, ≤ 15 min excluding checkpoint</td></tr>
+<tr><td><b>4 · Measure &amp; tune</b></td><td>W6 benchmark; W7 experiments; W4 patch repair</td><td>Incorrectly accepted = 0 on the set; per-stage model choice recorded</td></tr>
+<tr><td><b>5 · Scale knowledge</b></td><td>W5 decompiled corpus, liquid-class map, more blocks</td><td>≥ 3 document-backed T3 protocols</td></tr>
+</tbody></table></div>
+<p>Phases 0–1 need no new folders and no UI changes. Phase 2 needs approval for <code>fluentvibe/blocks/</code>.</p>
+</section>
+
+<section id="decisions" class="decisions">
+<h2>6 · Decisions needed from you</h2>
+<ol>
+  <li><b>Block library location:</b> create <code>fluentvibe/blocks/</code>, or extend <code>workspace_modules.py</code> in place (no new folder)?</li>
+  <li><b>Checkpoint:</b> mandatory spec approval in the web UI, or skippable ("trust extraction")?</li>
+  <li><b>Off-deck default</b> when the profile has no ODTC: <code>user_prompt</code> with a plate hand-off (recommended), or refuse and ask?</li>
+  <li><b>Liquid classes:</b> auto-assign from the catalog map (recommended), or keep them as declared variables for you to fill in?</li>
+  <li><b>Decompiled corpus:</b> which FluentControl methods may be used, and may they be committed after de-branding or only kept local?</li>
+</ol>
+</section>
+
+<section id="risks">
+<h2>7 · Risks</h2>
+<div class="tw"><table>
+<thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td>Blocks become a second DSL</td><td>Blocks lower only to existing head calls; raw operations stay first-class; origin IDs keep diagnostics readable</td></tr>
+<tr><td>Spec schema can't express an unusual protocol</td><td><code>custom</code> op → forces <code>user_prompt</code>; schema grows only when a block exists</td></tr>
+<tr><td>New checks reject valid hand-written protocols</td><td>Run against <code>examples/</code> and decompiled methods first; start as warnings</td></tr>
+<tr><td>Checkpoint adds friction</td><td>Specs cached and reused; re-runs show only changed or low-confidence rows</td></tr>
+<tr><td>Latency stays high</td><td>W4 plus smaller outputs; stage A is the only long-context call, once per document</td></tr>
+<tr><td>Customer identifiers leak</td><td>De-brand gate before commit; raw decompiled methods stay outside git</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="appendix">
+<h2>Appendix</h2>
+<h3>Relevant code today</h3>
+<div class="tw"><table>
+<thead><tr><th>Area</th><th>Location</th></tr></thead>
+<tbody>
+<tr><td>SPRI helper</td><td><code>fluentvibe/authoring/workspace_modules.py:191</code></td></tr>
+<tr><td>User pause step</td><td><code>fluentvibe/worktable.py:283</code> <code>Worktable.user_prompt</code></td></tr>
+<tr><td>Skills-mode tools</td><td><code>fluentvibe/authoring/lab_scope.py:137</code></td></tr>
+<tr><td>Rubric</td><td><code>fluentvibe/authoring/eval_rubric.py</code></td></tr>
+<tr><td>Eval harness</td><td><code>scripts/eval_authoring.py</code></td></tr>
+<tr><td>Simulator walk</td><td><code>fluentvibe/simulator/walk.py</code></td></tr>
+<tr><td>Quick-fixes</td><td><code>fluentvibe/copilot/fixes.py</code></td></tr>
+<tr><td>LM client</td><td><code>fluentvibe/authoring/lm_client.py</code></td></tr>
+<tr><td>Skills</td><td><code>fluentvibe/_assets/config/skills/{api,deck,family}/</code></td></tr>
+</tbody></table></div>
+<h3>Flash Next server used</h3>
+<p>Qwen3.8-Flash-Next UD-IQ4_XS (176.9B total parameters, about 6B active per token), MTP draft Q8_0 (draft max 3), 44 MoE layers on CPU, 120,000-token context, KV cache q8_0/q8_0, llama.cpp at <code>127.0.0.1:8080</code>. Observed: prompt processing 160–172 tok/s, generation 21–28 tok/s.</p>
+</section>
+
+<footer>Source: <code>docs/authoring-strategy.md</code> · 23 September 2026 · proposal only; no implementation changes included.</footer>
+</main>
+</div>

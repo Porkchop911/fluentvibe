@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -150,8 +151,13 @@ def _setup_only_draft() -> str:
 
 def _lm_studio_available() -> bool:
     models_url = DEFAULT_LM_STUDIO_ENDPOINT.rsplit("/", 2)[0] + "/models"
+    headers = {}
+    api_key = os.environ.get("FLUENTVIBE_LM_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    request = urllib.request.Request(models_url, headers=headers)
     try:
-        with urllib.request.urlopen(models_url, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, urllib.error.URLError, json.JSONDecodeError):
         return False

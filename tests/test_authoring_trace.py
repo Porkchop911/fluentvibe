@@ -119,6 +119,37 @@ def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -
     assert "`lookup_workspace`" in rendered
 
 
+def test_reasoning_fields_round_trip_through_langchain_adapter() -> None:
+    from fluentvibe.authoring.graph import _lc_to_legacy_dict, _legacy_dict_to_aimessage
+
+    message = _legacy_dict_to_aimessage({
+        "content": "",
+        "tool_calls": [],
+        "reasoning_fields": {"reasoning_content": "preserve across tool turn"},
+    })
+    assert _lc_to_legacy_dict(message)["reasoning_content"] == "preserve across tool turn"
+
+
+def test_lmstudio_reasoning_effort_is_opt_in(monkeypatch) -> None:
+    seen = {}
+
+    class Response:
+        headers = {"Content-Type": "application/json"}
+        def read(self):
+            return b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+
+    def capture(req, timeout=None):
+        seen.update(json.loads(req.data.decode("utf-8")))
+        return Response()
+
+    monkeypatch.setattr("urllib.request.urlopen", capture)
+    client = LMStudioChatClient(reasoning_effort="medium")
+    client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert seen["reasoning_effort"] == "medium"
+
+
 def test_lmstudio_request_timeout_is_bounded_and_traced(monkeypatch, tmp_path: Path) -> None:
     seen: dict[str, float] = {}
 
@@ -340,3 +371,27 @@ def test_graph_records_normalized_trace_for_injected_client(tmp_path: Path) -> N
     assert turn["model"] == "fake-chat"
     assert turn["assistant"]["content"] == "No code yet"
     assert not any("raw_line" in event for event in events)
+
+def test_lmstudio_strict_workflow_marks_only_declaration(monkeypatch):
+    seen = {}
+    class Response:
+        headers = {"Content-Type": "application/json"}
+        def read(self):
+            return b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    def capture(req, timeout=None):
+        seen.update(json.loads(req.data.decode("utf-8")))
+        return Response()
+    monkeypatch.setattr("urllib.request.urlopen", capture)
+    monkeypatch.setenv("FLUENTVIBE_LM_STRICT_WORKFLOW", "1")
+    tools = [
+        {"type": "function", "function": {"name": "declare_protocol_workflow", "parameters": {"type": "object"}}},
+        {"type": "function", "function": {"name": "ask_user", "parameters": {"type": "object"}}},
+    ]
+    client = LMStudioChatClient(reasoning_effort="xhigh")
+    client.complete(messages=[{"role": "user", "content": "hi"}], tools=tools)
+    assert seen["reasoning_effort"] == "xhigh"
+    assert seen["tools"][0]["function"]["strict"] is True
+    assert "strict" not in seen["tools"][1]["function"]
+    assert "strict" not in tools[0]["function"]
