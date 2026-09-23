@@ -184,7 +184,7 @@ html{scroll-behavior:smooth}
 <tr><td class="num">16 Jun</td><td>qwen3.6-27b · f16 KV</td><td>same</td><td>Near-correct; followed the SPRI skill closely</td></tr>
 <tr><td class="num">18 Jun</td><td>qwen3.6-27b · f16</td><td>monolith, tightened skill, 5 runs</td><td><span class="pill p-crit">0/5</span> correct; 2 replaced by comments, 2 failed simulation</td></tr>
 <tr><td class="num">18 Jun</td><td>qwen3.6-27b · f16</td><td>staged drafting, 5 runs, ~3.3 h</td><td><span class="pill p-crit">0/5</span>; 4 hit the retry budget while thrashing; magnet round trip 0%</td></tr>
-<tr><td class="num">23 Sep</td><td>qwen3.8-flash-next · IQ4_XS · q8 KV</td><td>skills, same PDF</td><td><span class="pill p-warn">rubric 1.0</span> simulates and compiles, but has 5 bench errors</td></tr>
+<tr><td class="num">23 Sep</td><td>qwen3.8-flash-next · IQ4_XS · q8 KV</td><td>skills, same PDF</td><td><span class="pill p-warn">rubric 1.0</span> simulates and compiles, but has 4 bench errors</td></tr>
 </tbody></table></div>
 
 <h3 id="flash">The Flash Next run</h3>
@@ -226,7 +226,7 @@ html{scroll-behavior:smooth}
 <tr><td class="defect-id">D2</td><td><b>Cross-sample tip reuse.</b> One <code>get_tips</code>, then supernatant and ethanol removal across all 12 columns</td><td class="num">322–349</td><td>Simulator doesn't track which sample a tip has touched</td></tr>
 <tr><td class="defect-id">D3</td><td><b>Off-deck thermal cycler as a wait.</b> 30/80 °C modelled as <code>wt.wait</code> on deck; <code>wt.user_prompt</code> exists and was not used</td><td class="num">402–406</td><td>No notion of "this step happens off-deck"</td></tr>
 <tr><td class="defect-id">D4</td><td><b>One liquid class for all liquids.</b> Ethanol, beads and eluate on <code>Water Free Single</code>; the model said so</td><td class="num">turn 1</td><td>Checks verify compatibility, not suitability</td></tr>
-<tr><td class="defect-id">D5</td><td><b>Constant supernatant volume.</b> Not derived from sample + beads − retain</td><td class="num">325</td><td>Rubric returns n/a instead of fail</td></tr>
+<tr><td class="defect-id">D5</td><td><i>Rubric defect, not a protocol defect (corrected 24 Sep).</i> The supernatant (20 + 36 − 5 = 51 µL) and eluate (14 − 5 = 9 µL) volumes <b>are</b> derived, via Python constants; <code>derived_*</code> returned n/a because it only reads literal numbers in <code>declare_variable(...)</code></td><td class="num">84–89</td><td>Rubric reads literals only</td></tr>
 <tr><td class="defect-id">D6</td><td><b>SPRI helper unused.</b> <code>spri_cleanup</code> exists, but this profile ships no modules</td><td class="num">—</td><td>Modules are profile-scoped, not a standard library</td></tr>
 </tbody></table></div>
 
@@ -280,7 +280,7 @@ html{scroll-behavior:smooth}
 <tr><td><code>thermal_step(plate, program)</code></td><td>ODTC driver calls</td><td>falls back to <code>offdeck_step</code> without an ODTC</td></tr>
 </tbody></table></div>
 <p><b>Changes:</b> new <code>fluentvibe/blocks/</code>; move <code>spri_cleanup</code> there with a re-export; generate the blocks context for skills from the docstrings; family skills say "call <code>spri_cleanup</code>" instead of describing the steps.</p>
-<p><b>Acceptance:</b> unit tests per block (simulation, derived volumes, tip policy). A hand-written ONT protocol using blocks is under 120 lines, passes W3 and compiles. A re-run of the Flash case with blocks shows none of D1–D6.</p>
+<p><b>Acceptance:</b> unit tests per block (simulation, derived volumes, tip policy). A hand-written ONT protocol using blocks is under 120 lines, passes W3 and compiles. A re-run of the Flash case with blocks shows none of D1–D4 or D6.</p>
 <p><b>Risk:</b> blocks can hide head constraints. Keep raw operations first-class, and make blocks fail loud rather than silently adapt.</p>
 </div>
 
@@ -322,11 +322,11 @@ source_refs: {s3: "p.14 'Pool all barcoded samples…'"}</code></pre>
 <tr><td><b>Spec conformance</b></td><td>Map operations back to spec steps via block origin IDs; every <code>deck</code> step has operations; order matches; <code>pool</code> reduces N→1</td><td class="defect-id">D1</td></tr>
 <tr><td><b>Off-deck honesty</b></td><td><code>off_deck</code>/<code>manual</code> steps must lower to <code>user_prompt</code> (+ moves), never <code>wait</code> or a comment alone</td><td class="defect-id">D3</td></tr>
 <tr><td><b>Liquid-class suitability</b></td><td>Reagent <code>liquid_type</code> → acceptable class patterns from the install catalog; volatile/viscous mismatch → error</td><td class="defect-id">D4</td></tr>
-<tr><td><b>Derivation presence</b></td><td>Missing derivation on core volumes fails instead of n/a</td><td class="defect-id">D5</td></tr>
+<tr><td><b>Derivation resolution</b></td><td>Resolve values through Python constants and arithmetic before checking; a missing derivation fails instead of n/a when the stage exists</td><td class="defect-id">D5 (rubric)</td></tr>
 <tr><td><b>Conservation</b></td><td>Analyte proxy at the final destination ≈ 1 − expected losses</td><td>lost or duplicated eluate</td></tr>
 </tbody></table></div>
-<p><b>Rubric fixes (do first):</b> a comment-only stage no longer counts as covered; <code>derived_*</code> fails when the matching stage exists without the derivation; <code>eluate_recovered</code> requires a magnet round trip first.</p>
-<p><b>Acceptance:</b> attempt 4 fails with D1–D5 named, each with a line number. Hand-written <code>examples/</code> stay green.</p>
+<p><b>Rubric fixes (do first):</b> <code>derived_*</code> resolves values through Python constants and fails instead of n/a when the stage exists without a derivation. <i>Already in place since <code>7ebd18a</code>:</i> comment-only stages don't count as covered, and <code>eluate_recovered</code> requires a magnet round trip. Coverage still passed the Flash run because stage detection is keyword-based: the group name "…Clean-up and Pooling" satisfied the pooling stage. Only the semantic pooling check fixes that.</p>
+<p><b>Acceptance:</b> attempt 4 fails with D1–D4 named, and the rubric reports D5's derivations as pass, each with a line number. Hand-written <code>examples/</code> stay green.</p>
 </div>
 
 <div class="ws" id="w4">
@@ -389,7 +389,7 @@ source_refs: {s3: "p.14 'Pool all barcoded samples…'"}</code></pre>
 <thead><tr><th>Phase</th><th>Content</th><th>Exit criterion</th></tr></thead>
 <tbody>
 <tr><td><b>0 · Quick wins</b></td><td>W3 rubric fixes; W4 forced first tool, <code>lookup_api</code>, reasoning budget</td><td>Flash ONT run re-scored → correctly fails; next live run has no wasted turn 1</td></tr>
-<tr><td><b>1 · Floor</b></td><td>Roadmap P1 (simulation isolation); W3 contamination, off-deck and derivation checks</td><td>Attempt 4 fails with D2, D3, D5 named</td></tr>
+<tr><td><b>1 · Floor</b></td><td>Roadmap P1 (simulation isolation); W3 contamination, off-deck and derivation checks</td><td>Attempt 4 fails with D2 and D3 named; rubric derivations resolve</td></tr>
 <tr><td><b>2 · Blocks</b></td><td>W1 first block set; skills rewritten around blocks; gold ONT protocol</td><td>Gold protocol &lt; 120 lines, W3-clean; live Flash run uses blocks</td></tr>
 <tr><td><b>3 · Understanding</b></td><td>W2 Bench Spec + checkpoint UI; W3 spec conformance</td><td>Live ONT: approved spec → W3-clean protocol, ≤ 15 min excluding checkpoint</td></tr>
 <tr><td><b>4 · Measure &amp; tune</b></td><td>W6 benchmark; W7 experiments; W4 patch repair</td><td>Incorrectly accepted = 0 on the set; per-stage model choice recorded</td></tr>

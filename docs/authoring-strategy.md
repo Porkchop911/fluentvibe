@@ -41,7 +41,7 @@ Three moves, in priority order:
 | 2026-06-16 | qwen3.6-27b, f16 KV cache | same | Near-correct, followed the SPRI skill closely |
 | 2026-06-18 | qwen3.6-27b, f16 | monolith, tightened SPRI skill, 5 runs | **0/5** correct cleanups; 2 replaced by comments, 2 failed simulation |
 | 2026-06-18 | qwen3.6-27b, f16 | staged drafting, hardened, 5 runs (~3.3 h) | **0/5**; 4 hit the retry budget while thrashing; `magnet_roundtrip` 0% |
-| 2026-09-23 | qwen3.8-flash-next IQ4_XS, q8 KV, 120K ctx | skills mode, same PDF | Simulates, compiles, **rubric 1.0**, but has 5 bench errors (below) |
+| 2026-09-23 | qwen3.8-flash-next IQ4_XS, q8 KV, 120K ctx | skills mode, same PDF | Simulates, compiles, **rubric 1.0**, but has 4 bench errors (below) |
 
 ### 2.2 The Flash Next run in detail
 
@@ -60,7 +60,7 @@ Artifact: `build/workbench/authored/20260923-215349/`.
 - **Writing dominates:** about 58k tokens at 21–28 tok/s is about 44 of the 49 minutes. Reading the prompt runs at 160–170 tok/s, and the server reuses the cached prefix, so it is not the bottleneck.
 - **Wasted time:** turns 1 and 3 (26 min) produced nothing that reached the final protocol, and turns 4 and 5 each re-sent the full ~30 KB source.
 
-**Rubric result (`eval_rubric.score_protocol` with the PDF text):** score 1.0. `magnet_roundtrip`, `eluate_recovered`, `off_magnet_elution`, `separate_eluate_destination` and `analyte_not_in_waste` all pass. `derived_supernatant` and `derived_eluate` come back **n/a**.
+**Rubric result (`eval_rubric.score_protocol` with the PDF text):** score 1.0. `magnet_roundtrip`, `eluate_recovered`, `off_magnet_elution`, `separate_eluate_destination` and `analyte_not_in_waste` all pass. `derived_supernatant` and `derived_eluate` come back **n/a** (a rubric gap; see D5).
 
 **Bench review of `lm_authoring_attempt4.py`:**
 
@@ -70,7 +70,7 @@ Artifact: `build/workbench/authored/20260923-215349/`.
 | D2 | **Cross-sample tip reuse.** One `get_tips`, then supernatant and ethanol removal across all 12 columns with the same tips | 322–349 | The simulator does not track which sample a tip has touched |
 | D3 | **Off-deck thermal cycler as a wait.** 30 °C/80 °C tagmentation modelled as `wt.wait` with the plate on deck. `wt.user_prompt` exists and was not used. | 402–406 | No notion of "this step happens off-deck" |
 | D4 | **One liquid class for all liquids.** Ethanol, beads and eluate all use `Water Free Single`; the model said so explicitly | turn 1 | Liquid-class checks verify compatibility, not suitability |
-| D5 | **Constant supernatant volume.** Not derived from sample + bead − retain | 325 | Rubric returns n/a instead of fail when the derivation is missing |
+| D5 | *(Rubric defect, not a protocol defect — corrected 24 Sep.)* The supernatant (20 + 36 − 5 = 51 µL) and eluate (14 − 5 = 9 µL) volumes **are** derived, via Python constants. `derived_*` returned n/a because it only reads literal numbers in `declare_variable(...)` | 84–89 | Rubric reads literals only |
 | D6 | **Existing SPRI helper unused.** `workspace_modules.spri_cleanup` exists, but this profile (`Ribbon_…-Copy 1`) ships no modules, so the model never saw it | — | Modules are profile-scoped, not a standard library |
 
 ### 2.3 What the evidence says
@@ -141,7 +141,7 @@ Each workstream lists its goal, design, concrete changes, acceptance criteria, r
 
 **Changes.** New package `fluentvibe/blocks/`. Move and adapt `spri_cleanup`, keeping a re-export in `workspace_modules`. Add a `blocks` section to the skills context (generated from the docstrings, so it can't drift). Add an `api-blocks.md` skill. Change family skills to say "call `spri_cleanup`" instead of describing the steps.
 
-**Acceptance.** Each block has unit tests covering simulation, derived volumes and tip policy. A hand-written ONT protocol using blocks is under 120 lines, passes all semantic checks (W3) and compiles. Re-running the Flash case with blocks available produces zero of D1–D6.
+**Acceptance.** Each block has unit tests covering simulation, derived volumes and tip policy. A hand-written ONT protocol using blocks is under 120 lines, passes all semantic checks (W3) and compiles. Re-running the Flash case with blocks available produces none of D1–D4 or D6.
 
 **Size:** M. **Risks:** blocks can hide head constraints. Mitigate by keeping raw head operations available, and by having blocks fail loud (never silently adapt) when the deck can't express the request.
 
@@ -196,14 +196,14 @@ source_refs: {s3: "p.14 'Pool all barcoded samples…'"}
 | **Spec conformance** | Map simulated operations back to spec steps via block origin IDs. Every `location: deck` step must have operations; order must match; `pool` must reduce N sources into 1 destination | D1 |
 | **Off-deck honesty** | Every `off_deck` or `manual` spec step must lower to `user_prompt` (with labware moves if a device is involved), never `wait` or a comment alone | D3 |
 | **Liquid-class suitability** | Map reagent `liquid_type` to acceptable liquid-class name patterns from the install catalog (ethanol → classes containing "Ethanol"/"Alcohol"; beads → "Beads"/"Serum"/"Viscous"). Mismatch → warning; mismatch on a volatile or viscous liquid → error | D4 |
-| **Derivation presence** | Missing derivation on core volumes fails instead of returning n/a | D5 |
+| **Derivation resolution** | Resolve variable values through Python constants and arithmetic (constant folding) before checking derivations; a missing derivation fails instead of n/a when the stage exists | D5 (rubric) |
 | **Conservation** | The analyte mass-balance proxy should be about 1 − (expected losses) at the final destination | eluate lost or duplicated |
 
-**Rubric fixes (small, do first):** `coverage_complete` no longer counts a comment-only stage as covered; `derived_*` treats a missing derivation as a fail when the protocol contains the matching stage; `eluate_recovered` requires a magnet round trip first.
+**Rubric fixes (small, do first):** `derived_*` resolves values through Python constants (constant folding) and fails instead of n/a when the stage exists without a derivation. *Already in place since `7ebd18a`:* comment-only stages don't count as covered, and `eluate_recovered` requires a magnet round trip. Coverage still passed the Flash run because stage detection is keyword-based: the group name "…Clean-up and Pooling" satisfied the pooling stage. Only the semantic pooling check (spec conformance) fixes that.
 
 **Changes.** `simulator/walk.py` (tip contact sets), a new `authoring/semantic_checks.py`, rubric changes in `eval_rubric.py`, and results shown in the web UI next to "simulated / compiled". Depends on the roadmap's **P1** (simulation isolation), otherwise repeated checks see mutated state.
 
-**Acceptance.** Attempt 4 of the Flash run fails with D1–D5 named, each with a line number. Hand-written example protocols in `examples/` stay green.
+**Acceptance.** Attempt 4 of the Flash run fails with D1–D4 named, and the rubric reports D5's derivations as pass, each with a line number. Hand-written example protocols in `examples/` stay green.
 
 **Size:** M. **Risks:** false positives on legitimate reuse (reagent dispensing from above). Mitigate with a reagent-only tip state and "dispense-from-above" as an explicit policy.
 
@@ -277,7 +277,7 @@ The roadmap's P2 already covers profile recording (quantization, runtime, templa
 | Phase | Content | Exit criterion |
 |---|---|---|
 | **0 — Quick wins** | W3 rubric fixes; W4 forced first tool + `lookup_api` + reasoning budget | Flash ONT run re-scored → correctly fails; next live run has no wasted turn 1 |
-| **1 — Floor** | Roadmap P1 (simulation isolation); W3 cross-contamination + off-deck + derivation checks | Attempt 4 fails with D2, D3, D5 named |
+| **1 — Floor** | Roadmap P1 (simulation isolation); W3 cross-contamination + off-deck + derivation checks | Attempt 4 fails with D2 and D3 named; rubric derivations resolve |
 | **2 — Blocks** | W1 first block set; skills rewritten to reference blocks; gold ONT protocol | ONT gold protocol < 120 lines, W3-clean; live Flash run uses blocks |
 | **3 — Understanding** | W2 Bench Spec + checkpoint UI; W3 spec conformance | Live ONT run: approved spec → W3-clean protocol, ≤ 15 min excluding checkpoint |
 | **4 — Measure & tune** | W6 benchmark set; W7 experiments; W4 patch repair | Headline metric (incorrectly accepted) = 0 on the set; per-stage model choice recorded |

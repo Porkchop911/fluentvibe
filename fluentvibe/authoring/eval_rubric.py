@@ -110,36 +110,96 @@ def _parse(source: str) -> ast.AST | None:
         return None
 
 
+_FOLDABLE_CALLS = {"round": round, "float": float, "int": int, "min": min, "max": max, "abs": abs}
+_FOLDABLE_BINOPS = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.Div: lambda a, b: a / b,
+    ast.FloorDiv: lambda a, b: a // b,
+}
+
+
+def _fold(node: ast.AST, env: dict[str, float]) -> float | None:
+    """Evaluate a numeric expression built from literals, known names, basic
+    arithmetic and a few pure builtins (``round``, ``min``, …). ``None`` when
+    the expression is anything else — never executes arbitrary code."""
+    if isinstance(node, ast.Constant):
+        value = node.value
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+    if isinstance(node, ast.Name):
+        return env.get(node.id)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        inner = _fold(node.operand, env)
+        if inner is None:
+            return None
+        return -inner if isinstance(node.op, ast.USub) else inner
+    if isinstance(node, ast.BinOp) and type(node.op) in _FOLDABLE_BINOPS:
+        left, right = _fold(node.left, env), _fold(node.right, env)
+        if left is None or right is None:
+            return None
+        try:
+            return float(_FOLDABLE_BINOPS[type(node.op)](left, right))
+        except ZeroDivisionError:
+            return None
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in _FOLDABLE_CALLS
+        and not node.keywords
+    ):
+        args = [_fold(arg, env) for arg in node.args]
+        if not args or any(a is None for a in args):
+            return None
+        fn = _FOLDABLE_CALLS[node.func.id]
+        try:
+            if node.func.id in ("round", "int"):
+                # round(x, n) needs an int digit count; int() truncates.
+                return float(fn(args[0], *(int(a) for a in args[1:])))  # type: ignore[arg-type]
+            return float(fn(*args))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _declared_numeric_vars(tree: ast.AST) -> dict[str, float]:
-    """``wt.declare_variable("NAME", <number>)`` calls → ``{NAME: value}``."""
+    """``wt.declare_variable("NAME", <value>)`` calls → ``{NAME: value}``.
+
+    Values are resolved through simple Python constants, so both
+    ``declare_variable("SUP", 51.0)`` and ``SUP = SAMPLE + BEAD - RETAIN;
+    declare_variable("SUP", SUP)`` count. Assignments are folded in source
+    order; a name that cannot be folded is left unresolved."""
+    env: dict[str, float] = {}
     out: dict[str, float] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+    nodes = sorted(
+        (n for n in ast.walk(tree) if isinstance(n, (ast.Assign, ast.AnnAssign, ast.Call))),
+        key=lambda n: (getattr(n, "lineno", 0), getattr(n, "col_offset", 0)),
+    )
+    for node in nodes:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            value_node = node.value
+            if value_node is None:
+                continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            folded = _fold(value_node, env)
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    if folded is None:
+                        env.pop(target.id, None)
+                    else:
+                        env[target.id] = folded
             continue
         func = node.func
         if not (isinstance(func, ast.Attribute) and func.attr == "declare_variable"):
             continue
         if len(node.args) < 2 or not isinstance(node.args[0], ast.Constant):
             continue
-        name = str(node.args[0].value).strip().upper()
-        val = node.args[1]
-        if isinstance(val, ast.Constant) and isinstance(val.value, (int, float)):
-            out[name] = float(val.value)
-        elif (
-            isinstance(val, ast.UnaryOp)
-            and isinstance(val.op, ast.USub)
-            and isinstance(val.operand, ast.Constant)
-            and isinstance(val.operand.value, (int, float))
-        ):
-            out[name] = -float(val.operand.value)
+        value = _fold(node.args[1], env)
+        if value is not None:
+            out[str(node.args[0].value).strip().upper()] = value
     return out
-
-
-def _first(vars_: dict[str, float], *needles: str) -> float | None:
-    for name, value in vars_.items():
-        if any(n in name for n in needles):
-            return value
-    return None
 
 
 def _check_analyte_role(source: str) -> Invariant:
@@ -152,45 +212,92 @@ def _check_analyte_role(source: str) -> Invariant:
     )
 
 
+_DERIVE_TOLERANCE_UL = 0.5
+
+
+def _named(vars_: dict[str, float], *needles: str, exclude: tuple[str, ...] = ()) -> dict[str, float]:
+    return {
+        name: value
+        for name, value in vars_.items()
+        if any(n in name for n in needles) and not any(x in name for x in exclude)
+    }
+
+
 def _check_derived_supernatant(vars_: dict[str, float]) -> Invariant:
-    sup = _first(vars_, "SUPERNATANT")
-    sample = _first(vars_, "SAMPLE_VOL", "TARGET_VOL")
-    bead = _first(vars_, "BEAD_VOL")
-    retain = _first(vars_, "RETAIN")
-    if sup is None:
+    """Every supernatant volume must equal sample + bead − retain for some
+    declared sample/bead/retain triple. Protocols with several cleanups declare
+    several triples (``PCR_*``, ``LIB_*``), so each supernatant variable is
+    matched independently rather than against the first name found."""
+    sups = _named(vars_, "SUPERNATANT")
+    if not sups:
         return Invariant("derived_supernatant", _NA, "no supernatant aspirate variable")
-    if None in (sample, bead, retain):
+    beads = _named(vars_, "BEAD_VOL")
+    retains = _named(vars_, "RETAIN")
+    samples = _named(
+        vars_, "VOL",
+        exclude=("BEAD", "RETAIN", "SUPERNATANT", "ELUT", "TRANSFER", "WASH", "MIX", "FILL"),
+    )
+    if not beads or not retains or not samples:
+        first = next(iter(sups.items()))
         return Invariant(
             "derived_supernatant", _FAIL,
-            f"supernatant={sup} but missing primitive(s) to derive it",
+            f"{first[0]}={first[1]} but missing primitive(s) to derive it",
         )
-    expected = sample + bead - retain
-    if abs(sup - expected) <= 0.5:
-        return Invariant("derived_supernatant", _PASS, f"{sup} == {sample}+{bead}-{retain}")
-    return Invariant(
-        "derived_supernatant", _FAIL,
-        f"{sup} != sample+bead-retain ({expected})",
-    )
+    derivations: list[str] = []
+    for sup_name, sup in sups.items():
+        match = next(
+            (
+                (s, b, r)
+                for s in samples.items()
+                for b in beads.items()
+                for r in retains.items()
+                if abs(sup - (s[1] + b[1] - r[1])) <= _DERIVE_TOLERANCE_UL
+            ),
+            None,
+        )
+        if match is None:
+            return Invariant(
+                "derived_supernatant", _FAIL,
+                f"{sup_name}={sup} != any sample+bead-retain",
+            )
+        (s_name, s), (b_name, b), (r_name, r) = match
+        derivations.append(f"{sup_name}={sup} == {s_name}+{b_name}-{r_name} ({s}+{b}-{r})")
+    return Invariant("derived_supernatant", _PASS, "; ".join(derivations))
 
 
 def _check_derived_eluate(vars_: dict[str, float]) -> Invariant:
-    transfer = _first(vars_, "TRANSFER", "ELUATE")
-    elution = _first(vars_, "ELUTION_VOL")
-    retain = _first(vars_, "RETAIN")
-    if transfer is None:
+    transfers = _named(vars_, "TRANSFER", "ELUATE")
+    if not transfers:
         return Invariant(
             "derived_eluate", _NA,
             "no eluate-transfer volume — protocol may never recover the eluate",
         )
-    if None in (elution, retain):
+    elutions = _named(vars_, "ELUTION_VOL")
+    retains = _named(vars_, "RETAIN")
+    if not elutions or not retains:
+        first = next(iter(transfers.items()))
         return Invariant(
             "derived_eluate", _FAIL,
-            f"eluate transfer={transfer} but missing elution/retain to derive it",
+            f"eluate transfer {first[0]}={first[1]} but missing elution/retain to derive it",
         )
-    expected = elution - retain
-    if abs(transfer - expected) <= 0.5:
-        return Invariant("derived_eluate", _PASS, f"{transfer} == {elution}-{retain}")
-    return Invariant("derived_eluate", _FAIL, f"{transfer} != elution-retain ({expected})")
+    derivations: list[str] = []
+    for t_name, transfer in transfers.items():
+        match = next(
+            (
+                (e, r)
+                for e in elutions.items()
+                for r in retains.items()
+                if abs(transfer - (e[1] - r[1])) <= _DERIVE_TOLERANCE_UL
+            ),
+            None,
+        )
+        if match is None:
+            return Invariant(
+                "derived_eluate", _FAIL, f"{t_name}={transfer} != any elution-retain",
+            )
+        (e_name, e), (r_name, r) = match
+        derivations.append(f"{t_name}={transfer} == {e_name}-{r_name} ({e}-{r})")
+    return Invariant("derived_eluate", _PASS, "; ".join(derivations))
 
 
 def _gripper_move_sequence(source: str) -> list[str]:

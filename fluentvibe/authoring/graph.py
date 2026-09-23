@@ -147,6 +147,7 @@ def build_authoring_graph(
         # to the raw client. Test fixtures supply pre-baked AIMessage tool_calls
         # so this is harmless.
         client_with_tools = client
+    client_plan_only = _plan_only_client(client, lc_tools, registry)
 
     max_iterations = max(8, retry_budget + 8)
     max_tool_calls = max(12, retry_budget * 4 + 12)
@@ -154,6 +155,7 @@ def build_authoring_graph(
     nodes = _Nodes(
         registry=registry,
         client_with_tools=client_with_tools,
+        client_plan_only=client_plan_only,
         validator=validator,
         repair_lock=repair_lock,
         output_dir=output_dir,
@@ -265,6 +267,15 @@ class _Nodes:
     helpers: Any
     concurrency: AuthoringConcurrencyConfig = field(default_factory=AuthoringConcurrencyConfig)
     trace_recorder: ModelTraceRecorder | None = None
+    # Skills mode: until a workflow is declared the model is offered ONLY
+    # declare_protocol_workflow, so it cannot spend its first (longest) turn
+    # on a draft the workflow gate would reject anyway.
+    client_plan_only: Any = None
+
+    def _client_for_turn(self) -> Any:
+        if self.client_plan_only is not None and not _workflow_groups(self.registry):
+            return self.client_plan_only
+        return self.client_with_tools
 
     def _effective_max_iterations(self) -> int:
         """Iteration cap, scaled up for staged drafting.
@@ -328,8 +339,9 @@ class _Nodes:
         # accept one system message. Normalize only system messages; user,
         # assistant, and tool messages retain their original order and roles.
         request_messages = _coalesce_system_messages(state["messages"])
+        turn_client = self._client_for_turn()
         try:
-            response = self.client_with_tools.invoke(request_messages)
+            response = turn_client.invoke(request_messages)
         except Exception as exc:
             model_error = exc
             if _is_transient_model_error(exc):
@@ -342,7 +354,7 @@ class _Nodes:
                     )
                 _time.sleep(0.5)
                 try:
-                    response = self.client_with_tools.invoke(request_messages)
+                    response = turn_client.invoke(request_messages)
                 except Exception as retry_exc:
                     model_error = retry_exc
                 else:
@@ -1275,6 +1287,25 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
     if plan is None:
         return []
     return [group.name for group in plan.groups]
+
+
+def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:
+    """A client bound to ``declare_protocol_workflow`` alone, for skills mode.
+
+    Other modes ground through lookup tools before they declare, so they keep
+    the full tool surface from the first turn. ``None`` when not applicable or
+    when the client cannot bind tools (unit-test fakes).
+    """
+    scope = getattr(registry, "lab_scope", None)
+    if scope is None or scope.mode != "skills":
+        return None
+    plan_tools = [t for t in lc_tools or () if getattr(t, "name", None) == "declare_protocol_workflow"]
+    if not plan_tools:
+        return None
+    try:
+        return client.bind_tools(plan_tools)
+    except NotImplementedError:
+        return None
 
 
 def _requires_workflow_declaration(registry: AuthoringToolRegistry) -> bool:

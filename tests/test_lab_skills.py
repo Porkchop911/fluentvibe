@@ -162,10 +162,13 @@ def test_skills_load_shares_enforce_posture():
     # whitelist still populated (shared with enforce)
     assert "96_ABgene_SuperPlate_Thermo_AB2800" in scope.labware
     assert "Water Free Single" in scope.liquid_classes
-    # tool surface mirrors enforce's two judging tools, plus the one extra tool
-    # skills needs to stage a multi-stage protocol group-by-group.
+    # tool surface mirrors enforce's two judging tools, plus the workflow
+    # declaration and the deterministic API lookup.
     enforce = load_lab_scope("enforce")
-    assert scope.allowed_tools() == enforce.allowed_tools() | {"declare_protocol_workflow"}
+    assert scope.allowed_tools() == enforce.allowed_tools() | {
+        "declare_protocol_workflow",
+        "lookup_api",
+    }
     assert scope.denied_tools() == enforce.denied_tools()
 
 
