@@ -194,3 +194,22 @@ def test_intent_check_accepts_block_only_protocols():
     source = "spri_cleanup(wt, sample_plate=samples)\nwt.place(x)"
     assert AuthoringValidator()._check_prompt_intent(source, "transfer the library") is None
     assert AuthoringValidator()._check_prompt_intent("wt.place(x)", "transfer the library")
+
+
+def test_gold_ont_example_is_clean_on_every_check():
+    import importlib.util
+
+    from fluentvibe.authoring.eval_rubric import score_protocol
+
+    _workspace()
+    path = REPO_ROOT / "examples" / "ont_rbk114_blocks.py"
+    spec = importlib.util.spec_from_file_location("ont_rbk114_blocks", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    wt = module.build_worktable()
+    wt.simulate(strict=True)
+    assert wt.simulation_report.contamination_counts == {}
+    assert _final(wt, "RowPools").wells["A1"].volume_ul == pytest.approx(120.0)
+    result = score_protocol(path.read_text(encoding="utf-8"), filename=str(path))
+    assert result.failed == 0, [i for i in result.invariants if i.status == "fail"]
+    assert result.get("derived_supernatant").status == "pass"
