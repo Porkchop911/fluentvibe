@@ -145,6 +145,9 @@ class LabScope:
         "check_in_fluentcontrol",
         # Edits someone made to the compiled script in FluentControl.
         "pull_fluentcontrol_edits",
+        # One question with proposals when the source leaves numbers open
+        # (skill core-clarify-open-parameters); ends the run for the answer.
+        "ask_user",
     }
 
     def allowed_tools(self) -> frozenset[str] | None:
@@ -212,8 +215,9 @@ _SKILLS_HEADER = (
     "LAB SCOPE (authoritative — this IS the catalog for this run). "
     "Grounding and approval tools are intentionally unavailable: the only "
     "tools you can call are `declare_protocol_workflow`, `lookup_api`, "
-    "`simulate_python_draft`, `edit_draft`, `compile_and_simulate`, and "
-    "`check_in_fluentcontrol`. When unsure "
+    "`simulate_python_draft`, `edit_draft`, `compile_and_simulate`, "
+    "`check_in_fluentcontrol`, and `ask_user` (one question with proposals when "
+    "protocol-defining numbers are open). When unsure "
     "whether a method or argument exists, call `lookup_api` (e.g. "
     "`wt.liha`, `Plate96`) instead of submitting a probe draft to the "
     "simulator. Everything else the removed tools used to look up (valid deck "
