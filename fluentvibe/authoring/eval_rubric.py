@@ -52,7 +52,8 @@ SEMANTIC_KEYS = (
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
 CLEANUP_KEYS = frozenset({
-    "derived_supernatant", "derived_eluate", "off_magnet_elution", "separate_eluate_destination",
+    "analyte_role_tagged", "derived_supernatant", "derived_eluate", "off_magnet_elution",
+    "separate_eluate_destination",
     "magnet_roundtrip", "eluate_recovered",
 })
 
