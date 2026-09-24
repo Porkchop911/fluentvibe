@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from .common import BlockError, columns_or_all, require_distinct, require_positive
+from .common import (
+    DEFAULT_MIX_LIQUID_CLASS,
+    BlockError,
+    columns_or_all,
+    require_distinct,
+    require_positive,
+)
 
 
 def stamp(
@@ -17,6 +23,7 @@ def stamp(
     liquid_class: str,
     mix_cycles: int = 0,
     mix_volume_ul: float | None = None,
+    mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
 ) -> None:
     """Copy every well of ``source`` into the same well of ``dest`` (MCA96).
@@ -40,7 +47,7 @@ def stamp(
     head.aspirate(source, volume_ul, liquid_class=liquid_class)
     head.dispense(dest, volume_ul, liquid_class=liquid_class)
     if mix_cycles:
-        head.mix(dest, mix_volume_ul, cycles=mix_cycles, liquid_class=liquid_class)
+        head.mix(dest, mix_volume_ul, cycles=mix_cycles, liquid_class=mix_liquid_class)
     head.return_tips(tips)
     head.drop_adapter()
 
@@ -56,6 +63,7 @@ def add_reagent(
     mix_tips=None,
     mix_cycles: int = 0,
     mix_volume_ul: float | None = None,
+    mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
 ) -> None:
     """Add a reagent from a trough to every well of ``plate`` (MCA96).
@@ -88,7 +96,7 @@ def add_reagent(
             plate,
             mix_volume_ul if mix_volume_ul is not None else 0.8 * float(volume_ul),
             cycles=mix_cycles,
-            liquid_class=liquid_class,
+            liquid_class=mix_liquid_class,
         )
         head.return_tips(mix_tips)
     head.drop_adapter()
