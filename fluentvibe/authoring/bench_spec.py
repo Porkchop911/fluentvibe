@@ -29,6 +29,7 @@ from typing import Any, Iterable
 from .offdeck import OFF_DECK_PATTERN
 
 SPEC_VERSION = 1
+SPEC_MARKER = "APPROVED BENCH SPEC"
 
 OPS = (
     "add",           # reagent from a source into sample wells
@@ -53,6 +54,11 @@ class SpecReagent:
     name: str
     role: str = "reagent"
     liquid_type: str | None = None
+    # What the kit supplies: µl per vial (or per well for plated reagents) and
+    # how many vials/wells. Both as written in the document; None if not stated
+    # (e.g. lab-stock reagents). Used by the reagent-budget check.
+    supply_ul: float | None = None
+    supply_count: int | None = None
 
 
 @dataclass
@@ -124,6 +130,8 @@ def bench_spec_json_schema() -> dict[str, Any]:
                         "name": {"type": "string"},
                         "role": {"type": "string", "enum": list(ROLES)},
                         "liquid_type": {"type": ["string", "null"]},
+                        "supply_ul": {"type": ["number", "null"]},
+                        "supply_count": {"type": ["integer", "null"]},
                     },
                 },
             },
@@ -199,9 +207,12 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
         role = str(item.get("role") or "reagent")
         if role not in ROLES:
             problems.append(SpecProblem("schema", f"reagents[{i}].role", f"unknown role {role!r}"))
+        supply_count = item.get("supply_count")
         reagents.append(SpecReagent(
             id=str(item["id"]), name=str(item["name"]), role=role,
             liquid_type=item.get("liquid_type"),
+            supply_ul=_num(item.get("supply_ul")),
+            supply_count=int(supply_count) if isinstance(supply_count, (int, float)) else None,
         ))
     reagent_ids = {r.id for r in reagents}
 
@@ -287,6 +298,10 @@ def check_numbers(spec: BenchSpec, source_text: str) -> list[SpecProblem]:
             ))
 
     check("sample_volume_ul", spec.sample_volume_ul)
+    for i, reagent in enumerate(spec.reagents):
+        check(f"reagents[{i}].supply_ul", reagent.supply_ul)
+        if reagent.supply_count is not None and reagent.supply_count > 1:
+            check(f"reagents[{i}].supply_count", float(reagent.supply_count))
     for i, step in enumerate(spec.steps):
         for name in _NUMERIC_STEP_FIELDS:
             value = getattr(step, name)
@@ -360,6 +375,13 @@ def spec_to_markdown(spec: BenchSpec, problems: Iterable[SpecProblem] = ()) -> s
             f"| {step.id} | {step.text} | {step.op} | {step.location} | {step.reagent or ''} "
             f"| {_fmt(step.volume_ul, ' µl')} | {conditions} | {check} |"
         )
+    lines += ["", "| Reagent | Name | Role | Kit supply |", "|---|---|---|---|"]
+    for reagent in spec.reagents:
+        supply = ""
+        if reagent.supply_ul is not None:
+            count = reagent.supply_count or 1
+            supply = f"{count} × {reagent.supply_ul:g} µl = {count * reagent.supply_ul:g} µl"
+        lines.append(f"| {reagent.id} | {reagent.name} | {reagent.role} | {supply} |")
     other = [p for p in problems if not p.where.startswith("steps[")]
     if other:
         lines += ["", "Other checks:", *[f"- {p.where}: {p.message}" for p in other]]
@@ -371,8 +393,9 @@ def spec_to_markdown(spec: BenchSpec, problems: Iterable[SpecProblem] = ()) -> s
 def spec_context_block(spec: BenchSpec) -> str:
     """Compact, approved spec text for the authoring prompt (stages C–F)."""
     return (
-        "APPROVED BENCH SPEC (authoritative; implement these steps in this order; "
-        "deck steps on the deck, off_deck/manual steps as operator pauses):\n"
+        f"{SPEC_MARKER} (authoritative; implement these steps in this order; "
+        "deck steps on the deck, off_deck/manual steps as operator pauses; never "
+        "load more of a kit reagent than its supply_ul × supply_count):\n"
         + spec.to_json()
     )
 
@@ -390,6 +413,9 @@ Call submit_bench_spec exactly once with:
 - reagents: every reagent used, with a short id (the document's acronym when it
   has one, e.g. AXP, EB), its name and a role (sample, reagent, bead_carrier,
   wash, eluent, per_sample for per-well reagents such as barcodes, product);
+  for reagents the kit supplies, supply_ul (fill volume per vial, or per well
+  for plated reagents) and supply_count (number of vials or wells) exactly as
+  the kit contents table states them;
 - steps: every step in the document's order. For each: a short plain text,
   the op (add, transfer, mix, pool, bead_cleanup, incubate, measure, manual,
   custom), the location (deck = liquid handling a robot can do on its worktable;

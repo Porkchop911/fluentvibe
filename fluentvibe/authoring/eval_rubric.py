@@ -48,6 +48,7 @@ SEMANTIC_KEYS = (
     "no_cross_contamination",
     "pooling_performed",
     "spec_conformance",
+    "reagent_budget",
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
 
@@ -720,6 +721,20 @@ def _check_spec_conformance(wt, spec) -> Invariant:
     )
 
 
+def _check_reagent_budget(wt, spec) -> Invariant:
+    """No kit reagent is loaded beyond what the kit supplies (Bench Spec)."""
+    if spec is None:
+        return Invariant("reagent_budget", _NA, "no Bench Spec supplied")
+    from .reagent_budget import available_ul, check_reagent_budget
+
+    if not any(available_ul(r) is not None for r in spec.reagents):
+        return Invariant("reagent_budget", _NA, "spec lists no kit supply volumes")
+    findings = check_reagent_budget(wt, spec)
+    if findings:
+        return Invariant("reagent_budget", _FAIL, "; ".join(f.message for f in findings))
+    return Invariant("reagent_budget", _PASS, "every kit reagent fits its supply")
+
+
 def score_semantic(wt, source_text: str | None = None, spec=None) -> list[Invariant]:
     """Simulate ``wt`` (if needed) and score the bead-model ground truth."""
     if not getattr(wt, "snapshots", None):
@@ -743,6 +758,7 @@ def score_semantic(wt, source_text: str | None = None, spec=None) -> list[Invari
         _check_no_cross_contamination(wt, has_analyte),
         _check_pooling_performed(final, has_analyte, source_text),
         _check_spec_conformance(wt, spec),
+        _check_reagent_budget(wt, spec),
     ]
 
 
