@@ -340,15 +340,26 @@ def _navigate_tree_to_shell(fc_win):
         else:
             return None
 
-        for el in fc_win.descendants(title="Under_development"):
-            try:
-                el.expand()
-            except Exception:
-                _safe_double_click(el)
-            time.sleep(0.3)
-            break
-        else:
+        folders = fc_win.descendants(title="Under_development")
+        if not folders:
             return None
+        try:
+            folders[0].expand()
+        except Exception:
+            # The Scripts folder list is a flat list; a long one hides the
+            # folder behind its scroll edge, where clicks miss. Scroll the list
+            # to the end, then click the folder for real.
+            try:
+                from pywinauto import mouse
+
+                rect = folders[0].rectangle()
+                mouse.scroll(coords=(rect.left + 20, rect.top - 60), wheel_dist=-10)
+                time.sleep(0.6)
+                folders = fc_win.descendants(title="Under_development") or folders
+                folders[0].click_input()
+            except Exception:
+                _safe_double_click(folders[0])
+        time.sleep(1.0)
 
         for el in fc_win.descendants(title="shell"):
             try:
