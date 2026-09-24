@@ -310,3 +310,12 @@ def test_block_protocols_compile_for_fluentcontrol(tmp_path, monkeypatch):
     loader.loader.exec_module(module)
     module.build_worktable().compile(tmp_path / "gold.xscr")
     assert (tmp_path / "gold.xscr").stat().st_size > 0
+
+
+def test_missing_role_error_shows_what_the_plate_holds():
+    deck = Deck(analyte=False)
+    with pytest.raises(BlockError) as info:
+        deck.cleanup()
+    message = str(info.value)
+    assert "'Amplicon' (role='plain')" in message
+    assert "fill_all(Reagent('<name>', role='analyte')" in message
