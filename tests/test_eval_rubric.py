@@ -346,3 +346,11 @@ def build_worktable():
     wt.declare_variable("SUPERNATANT_ASPIRATE_UL", SUP)
 '''
     assert _status(score_source(src), "derived_supernatant") == "na"
+
+
+def test_library_transfer_is_not_an_eluate_transfer():
+    src = '''
+def build_worktable():
+    wt.declare_variable("LIBRARY_TRANSFER_VOLUME_UL", 11.0)
+'''
+    assert _status(score_source(src), "derived_eluate") == "na"
