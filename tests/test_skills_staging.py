@@ -338,3 +338,42 @@ def test_skills_first_turn_offers_only_the_workflow_declaration(tmp_path):
 def test_other_modes_keep_their_full_first_turn_surface(tmp_path, mode):
     _, nodes, _ = _skills_nodes(tmp_path, mode)
     assert nodes.client_plan_only is None
+
+
+def test_simulator_findings_get_one_repair_turn_then_the_draft_is_kept(tmp_path, monkeypatch):
+    """A draft that simulates but has tip-hygiene findings is not accepted at
+    once: the model gets one nudge. If the repair also has findings, the run
+    still ends in success with the draft (findings are warnings, not gates)."""
+    from langchain_core.messages import HumanMessage
+
+    from tests.test_authoring_graph import _build
+
+    reg = _registry(tmp_path, "skills")
+    _grounded(reg)
+    draft = _valid_draft()
+    hygiene = {"counts": {"cross_sample_tip_reuse": 8}, "examples": [
+        {"line": 12, "operation": "Mix", "labware": "Samples", "well": "A2"}], "hint": "fresh tips"}
+    real_simulate = reg.simulate_python_draft
+
+    def simulate_with_findings(source, strict=True):
+        result = real_simulate(source, strict=strict)
+        if result.get("ok"):
+            result = dict(result, tip_hygiene=hygiene)
+        return result
+
+    monkeypatch.setattr(reg, "simulate_python_draft", simulate_with_findings)
+    sim = {"name": "simulate_python_draft", "args": {"source": draft}, "id": "call-sim"}
+    sim2 = {"name": "simulate_python_draft", "args": {"source": draft}, "id": "call-sim-2"}
+    graph = _build(
+        registry=reg,
+        responses=[
+            AIMessage(content="", tool_calls=[_simple_plan_call(), sim]),
+            AIMessage(content="", tool_calls=[sim2]),
+        ],
+    )
+    final = graph.invoke(_initial_state())
+    nudges = [m for m in final["messages"]
+              if isinstance(m, HumanMessage) and "bench scientist would reject" in m.content]
+    assert len(nudges) == 1
+    assert "line 12" in nudges[0].content
+    assert final["result"].status == AuthoringStatus.SUCCESS
