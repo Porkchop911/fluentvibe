@@ -30,7 +30,6 @@ from fluentvibe import (
     Plate96,
     Reagent,
     Trough25mL,
-    Trough100mL,
     Worktable,
 )
 from fluentvibe.blocks import offdeck_step, pool_columns, spri_cleanup, stamp
@@ -65,11 +64,13 @@ def build_worktable() -> Worktable:
     pool_plate = wt.place(Plate96("RowPools", catalog=PLATE), NEST, 11)
     fca_tips = wt.place(FCA200Box("FCATips", catalog="FCA, 200ul SBS"), NEST, 12)
     magnet = wt.place(MagnetRack("Magnet", catalog="LV_Alpaqua_A000350"), NEST, 13)
-    # MCA96 reagents sit in SBS reservoirs on plate nests (slim troughs do not
-    # fit the 96-tip head).
-    axp = wt.place(Trough100mL("AXP", catalog="60ml SBS MCA96"), NEST, 9)
+    # Reagents (beads, elution buffer) come from slim troughs via the FCA;
+    # ethanol, a cheap bulk wash, via the MCA96 from an SBS reservoir (slim
+    # troughs do not fit the 96-tip head).
+    fca_reagent_tips = wt.place(FCA200Box("FCAReagentTips", catalog="FCA, 200ul SBS"), NEST, 9)
+    axp = wt.place(Trough25mL("AXP", catalog="25ml_short"), "WS_100ml_1", 2)
     ethanol = wt.place(Trough25mL("Ethanol80", catalog="300ml SBS"), "Nest7mm_Pos", 5)
-    eb = wt.place(Trough100mL("EB", catalog="60ml SBS MCA96"), NEST, 14)
+    eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
     waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
 
     amplicons.fill_all(Reagent("Amplicon DNA", role="analyte"), 20.0)
@@ -85,7 +86,7 @@ def build_worktable() -> Worktable:
         reagent_tips=reagent_tips, sample_tips=sample_tips, eluate_tips=eluate_tips,
         sample_volume_ul=20.0, bead_ratio=1.8, elution_volume_ul=15.0,
         wash_volume_ul=150.0, wash_count=2, liquid_class=LC,
-        name="PCR clean-up",
+        fca_tips=fca_reagent_tips, name="PCR clean-up",
     )
     # Same samples, same well positions: the eluate tips may be reused.
     stamp(wt, source=clean, dest=barcoding, volume_ul=9.0, tips=eluate_tips,

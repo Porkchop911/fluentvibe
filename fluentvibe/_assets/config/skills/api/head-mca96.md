@@ -35,6 +35,12 @@ head.drop_adapter()
 
 ## Partial-column pipetting (fewer than the full plate)
 
+**Sources for the MCA96:** plates (stamping, supernatant, eluate) and SBS
+reservoirs (`60ml SBS MCA96`, `300ml SBS`) holding cheap bulk liquid (ethanol,
+water, wash). Never a slim trough (`25ml_short`, `100ml`): the 96 tips do not
+fit it (FluentControl "out of range"). Costly reagents are added by the FCA
+(`distribute_reagent`).
+
 When the user wants only some columns of the plate, pass `columns=` (1-based
 plate columns) to `aspirate`/`dispense`. The head still fires in parallel — it
 just addresses the selected columns. This is one native command, NOT a loop.

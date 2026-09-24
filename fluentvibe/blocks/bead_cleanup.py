@@ -16,6 +16,7 @@ from .common import (
     require_role,
     variable_prefix,
 )
+from .transfers import liha_distribute
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ def spri_cleanup(
     empty_liquid_class: str = DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     name: str = "Bead cleanup",
     variables: bool = True,
+    fca_tips=None,
 ) -> CleanupVolumes:
     """Full-plate magnetic bead cleanup: bind, wash, elute off-magnet, recover.
 
@@ -71,6 +73,14 @@ def spri_cleanup(
     the cleared eluate to ``eluate_plate`` → plate back to its home slot.
 
     Give either ``bead_ratio`` (e.g. 1.8 for 1.8×) or ``bead_volume_ul``.
+
+    Reagents: with ``fca_tips`` (an FCA tip box) the beads and the elution
+    buffer are added by the FCA from slim troughs (``25ml_short`` / ``100ml``)
+    or tubes — the recommended setup, since beads and buffers are costly and
+    slim troughs have little dead volume. The ethanol washes stay on the MCA96
+    from an SBS reservoir (cheap bulk liquid). Without ``fca_tips`` every
+    addition uses the MCA96 and ``reagent_tips`` (all sources must then be SBS
+    reservoirs).
     Mixing uses ``mix_liquid_class`` (a class with a Mix section, default
     ``"Water Mix"``); FluentControl rejects mixing with a transfer-only class.
     Emptying tips into ``waste`` uses ``empty_liquid_class`` (``"Empty Tip"``).
@@ -162,6 +172,15 @@ def spri_cleanup(
                     round(volumes.elution_ul / elution_trips, 2))
     eluate = v.ref("ELUATE_TRANSFER_UL" if eluate_trips == 1 else "ELUATE_TRIP_UL",
                    round(volumes.eluate_transfer_ul / eluate_trips, 2))
+    fca_bead = fca_elution = None
+    if fca_tips is not None:
+        fca_capacity = float(getattr(fca_tips, "capacity_ul", 0.0) or 200.0)
+        fca_bead_trips = max(1, math.ceil(volumes.bead_ul / fca_capacity))
+        fca_elution_trips = max(1, math.ceil(volumes.elution_ul / fca_capacity))
+        fca_bead = bead if fca_bead_trips == bead_trips else v.ref(
+            "BEAD_FCA_TRIP_UL", round(volumes.bead_ul / fca_bead_trips, 2))
+        fca_elution = elution if fca_elution_trips == elution_trips else v.ref(
+            "ELUTION_FCA_TRIP_UL", round(volumes.elution_ul / fca_elution_trips, 2))
     bind_mix = v.ref("BIND_MIX_UL", bind_mix_ul)
     elution_mix = v.ref("ELUTION_MIX_UL", elution_mix_ul)
     lc = v.ref("LIQUID_CLASS", liquid_class)
@@ -174,12 +193,17 @@ def spri_cleanup(
     elute_time = v.ref("ELUTE_SECONDS", elute_seconds)
 
     wt.group(f"{name} - bind")
-    head.mount_adapter()
-    head.pick_up(reagent_tips)
-    for _ in range(bead_trips):
-        head.aspirate(bead_source, bead, liquid_class=lc)
-        head.dispense(sample_plate, bead, liquid_class=lc)
-    head.return_tips(reagent_tips)
+    if fca_tips is not None:
+        liha_distribute(wt, source=bead_source, plate=sample_plate, volume=fca_bead, volume_ul=volumes.bead_ul,
+                        tips=fca_tips, liquid_class=lc, columns=range(1, 13))
+        head.mount_adapter()
+    else:
+        head.mount_adapter()
+        head.pick_up(reagent_tips)
+        for _ in range(bead_trips):
+            head.aspirate(bead_source, bead, liquid_class=lc)
+            head.dispense(sample_plate, bead, liquid_class=lc)
+        head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
     head.mix(sample_plate, bind_mix, cycles=bind_mix_cycles, liquid_class=mix_lc)
     head.return_tips(sample_tips)
@@ -212,11 +236,15 @@ def spri_cleanup(
 
     wt.group(f"{name} - elute off magnet")
     wt.gripper.move(sample_plate, to=home)
-    head.pick_up(reagent_tips)
-    for _ in range(elution_trips):
-        head.aspirate(elution_source, elution, liquid_class=lc)
-        head.dispense(sample_plate, elution, liquid_class=lc)
-    head.return_tips(reagent_tips)
+    if fca_tips is not None:
+        liha_distribute(wt, source=elution_source, plate=sample_plate, volume=fca_elution,
+                        volume_ul=volumes.elution_ul, tips=fca_tips, liquid_class=lc, columns=range(1, 13))
+    else:
+        head.pick_up(reagent_tips)
+        for _ in range(elution_trips):
+            head.aspirate(elution_source, elution, liquid_class=lc)
+            head.dispense(sample_plate, elution, liquid_class=lc)
+        head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
     head.mix(sample_plate, elution_mix, cycles=elution_mix_cycles, liquid_class=mix_lc)
     head.return_tips(sample_tips)

@@ -11,9 +11,11 @@ always_on: true
 | 96-well sample/elution plate | `Plate96` | `96_ABgene_SuperPlate_Thermo_AB2800` | Default 96-well plate for all sample/elution work |
 | 384-well plate | `Plate96` (384 layout) | `384 Well LowVol LoBase` | Only when a 384 request is explicit |
 | 96-well magnet rack | `MagnetRack` | `LV_Alpaqua_A000350` | Bead separation. Magnetization is implied by gripper-moving a plate **onto** this — never an explicit step |
-| Liquid-waste sink | `Trough` | `300ml SBS` | High-capacity waste. Never use a shallow 96-well plate as waste |
-| Standard reagent reservoir | `Trough` | `25ml_short` | Small aqueous reagents (beads, elution buffer/water) when total < ~20 mL |
-| Ethanol / high-volume reservoir | `Trough` | `100ml` | Ethanol and any reagent whose total fill exceeds ~20 mL (e.g. 96-well ethanol washes). A trough is a trough — `100ml` handles ethanol the same as the old `25ml_short_EtOH`, just with the capacity 96×2 washes actually need |
+| Liquid-waste sink | `Trough25mL` | `300ml SBS` | High-capacity waste on a 7 mm nest (`Nest7mm_Pos`). Never use a shallow 96-well plate as waste |
+| Reagent trough (FCA) | `Trough25mL` | `25ml_short` | **Default for reagents** (beads, elution buffer, master mix, buffers) dispensed by the FCA; total < ~20 mL |
+| Large reagent trough (FCA) | `Trough100mL` | `100ml` | FCA reagents whose total exceeds ~20 mL |
+| Bulk reservoir for the MCA96 | `Trough100mL` | `60ml SBS MCA96` | Cheap bulk liquids the MCA96 adds to a whole plate (ethanol, water, wash buffer), on a 61 mm nest; up to ~55 mL |
+| Large bulk reservoir for the MCA96 | `Trough25mL` | `300ml SBS` | Ethanol/wash beyond ~55 mL, on a `Nest7mm_Pos` the MCA reaches (the deck's reach data; not positions 1-3 on the 1080 deck) |
 | MCA96 tips, small | `MCA100Box` | `MCA96, 100ul, Box` | Only when every MCA aspirate is ≤100 µL |
 | MCA96 tips, medium | `MCA200Box` | `MCA96, 200ul, Box` | **Default** — ≤200 µL MCA work, covers ethanol-wash aspirates |
 | MCA96 tips, large | `MCA500Box` | `MCA96, 500ul, Box` | Large-volume MCA |
@@ -27,6 +29,22 @@ always_on: true
 - Labware types may be declared as String variables and referenced by name,
   the same way volumes are — this keeps protocols easy to re-target.
 
+**Which head adds reagents (lab practice):**
+- **Reagents come from the FCA (LiHa)**: kit reagents, beads, buffers, master
+  mixes, enzymes — anything costly — are dispensed column by column with FCA
+  tips from tubes or a slim trough (`25ml_short`, or `100ml` for larger
+  totals). Slim troughs and tubes have little dead volume; use
+  `distribute_reagent` (or `spri_cleanup(..., fca_tips=...)` for beads and
+  elution buffer).
+- **The MCA96 takes only cheap bulk liquids** (80% ethanol, water, wash buffer)
+  from an SBS reservoir (`60ml SBS MCA96` on a 61 mm nest, `300ml SBS` on a
+  reachable 7 mm nest), plus plate-to-plate work (`stamp`, supernatant removal,
+  eluate transfer). The MCA96 can never pipette in a slim trough (FC: "out of
+  range"); compile refuses it.
+- Choose by volume and number of wells: a few wells or small volumes → FCA
+  from tubes; a full plate of an expensive reagent → FCA from a slim trough; a
+  full plate of ethanol/water → MCA96 from an SBS reservoir.
+
 **Deck placement — trough rules (avoid FC "out of range" / "cannot reach
 Z-Max" / "No connector for this rotation" errors):**
 - Place labware on the locations/sites the **deck skill** lists (its "Valid
@@ -38,9 +56,10 @@ Z-Max" / "No connector for this rotation" errors):**
   `Tip N cannot reach Z-Max of labware …`). Use `25ml_short` for anything under
   ~20 mL fill; only use `100ml` when ethanol washes need the capacity (96 ×
   200 µL × 2 ≈ 42 mL).
-- Use `300ml SBS` exclusively as the waste sink (never for liquid reagents).
-  It has a plate (SBS) footprint and sits on a plate nest (e.g. `Nest7mm_Pos`),
-  not on the trough carrier sites that other troughs need.
+- `300ml SBS` is the waste sink, or a bulk ethanol/wash reservoir for the MCA96
+  — never for costly reagents. It has a plate (SBS) footprint and sits on a
+  7 mm nest (`Nest7mm_Pos`), not on the trough carrier sites that slim troughs
+  need. `MCA96 200ml` does not fit a 61 mm nest ("No connector").
 - Different trough catalogs on the same trough site need different rotation
   connectors. If a slot/catalog combo fails with `No connector for this
   rotation at this site available`, swap to `25ml_short` on the deck's trough

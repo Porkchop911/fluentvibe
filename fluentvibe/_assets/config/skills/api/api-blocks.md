@@ -13,8 +13,14 @@ reused across samples, eluate never recovered, thermal-cycler steps written as
 waits). Import at the top of the file:
 
 ```python
-from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step, thermal_step
+from fluentvibe.blocks import spri_cleanup, stamp, distribute_reagent, add_reagent, pool_columns, offdeck_step, thermal_step
 ```
+
+**Reagents go through the FCA, bulk liquids through the MCA96.** Beads,
+buffers, master mixes and kit reagents come from slim troughs (`25ml_short` /
+`100ml`) or tubes via the FCA (`distribute_reagent`, `spri_cleanup(...,
+fca_tips=...)`); the MCA96 adds only cheap bulk liquids (ethanol, water, wash)
+from SBS reservoirs and does plate-to-plate work.
 
 Blocks take plain numbers for volumes (not variable names) and declare them as
 FluentControl variables themselves, named after the call's `name`
@@ -26,14 +32,18 @@ which has the Mix section FluentControl requires). They raise
 `BlockError` with a fix-oriented message if a precondition is missing — read it
 and fix the setup, do not work around it.
 
-### `spri_cleanup` — magnetic bead cleanup (MCA96, full plate)
+### `spri_cleanup` — magnetic bead cleanup (full plate)
 
 ```python
+beads = wt.place(Trough25mL("Beads", catalog="25ml_short"), "WS_100ml_1", 2)         # FCA
+eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)               # FCA
+ethanol = wt.place(Trough100mL("Ethanol", catalog="60ml SBS MCA96"), "Nest61mm_Pos", 10)  # MCA96
 vols = spri_cleanup(
     wt,
     sample_plate=samples, magnet=magnet, bead_source=beads, wash_source=ethanol,
     elution_source=eb, waste=waste, eluate_plate=clean_plate,
     reagent_tips=mca_reagent_tips, sample_tips=mca_sample_tips, eluate_tips=mca_eluate_tips,
+    fca_tips=fca_reagent_tips,
     sample_volume_ul=20.0, bead_ratio=1.8, elution_volume_ul=15.0,
     wash_volume_ul=150.0, wash_count=2, liquid_class="Water Free Single",
     name="PCR clean-up",
@@ -42,10 +52,19 @@ vols = spri_cleanup(
 
 Does bind → magnet → remove supernatant → ethanol washes → dry → elute **off**
 the magnet → back **onto** the magnet → move the eluate to `eluate_plate`.
-Needs: samples tagged `Reagent(..., role="analyte")`, beads
+With `fca_tips` (an FCA tip box) the FCA adds beads and elution buffer from
+their slim troughs; the MCA96 does the ethanol (`reagent_tips`) and all
+sample work. Needs: samples tagged `Reagent(..., role="analyte")`, beads
 `role="bead_carrier"`, elution buffer `role="eluent"`; **three different MCA96
 tip boxes** (reagent, sample, eluate); the MCA adapter not mounted. The product
 continues from `eluate_plate`, never from `sample_plate`.
+
+### `distribute_reagent` — reagent into every well (FCA)
+
+`distribute_reagent(wt, source=mastermix_trough, plate=samples, volume_ul=10.0, tips=fca_tips, liquid_class=LC, name="Add master mix")`
+— the FCA dispenses column by column from a slim trough; one set of 8 tips
+(reagent contact only, dispensed from above), trips above tip capacity. The
+default way to add any reagent.
 
 ### `stamp` — well-to-well plate copy (MCA96)
 
@@ -53,10 +72,12 @@ continues from `eluate_plate`, never from `sample_plate`.
 — A1→A1 … H12→H12, optional mix. Use a tip box per stamp (or reuse it only for
 the same samples).
 
-### `add_reagent` — trough to every well (MCA96)
+### `add_reagent` — bulk liquid to every well (MCA96)
 
-`add_reagent(wt, reagent_source=trough, plate=samples, volume_ul=5.0, reagent_tips=box, liquid_class=LC, mix_tips=other_box, mix_cycles=5)`
-— reagent tips dispense from above and stay clean; mixing needs a separate
+`add_reagent(wt, reagent_source=sbs_reservoir, plate=samples, volume_ul=50.0, reagent_tips=box, liquid_class=LC, mix_tips=other_box, mix_cycles=5)`
+— only for cheap bulk liquids (water, ethanol, wash buffer) from an SBS
+reservoir (`60ml SBS MCA96` / `300ml SBS`); reagents use `distribute_reagent`.
+Reagent tips dispense from above and stay clean; mixing needs a separate
 `mix_tips` box.
 
 ### `pool_columns` — pool plate columns (LiHa, 8 channels)

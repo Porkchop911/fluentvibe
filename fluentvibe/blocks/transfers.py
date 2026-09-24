@@ -68,6 +68,59 @@ def stamp(
     head.drop_adapter()
 
 
+def liha_distribute(wt, *, source, plate, volume, volume_ul: float, tips, liquid_class, columns) -> None:
+    """FCA (LiHa, 8 channels) dispenses ``volume`` into every well of ``columns``.
+
+    One set of 8 tips serves all columns: the tips only aspirate the reagent
+    and dispense from above, so they never touch sample. Volumes above the
+    tip capacity go in equal trips (``volume`` is then the per-trip amount).
+    """
+    capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
+    trips = max(1, math.ceil(float(volume_ul) / capacity))
+    head = wt.liha
+    head.get_tips(tips)
+    for column in columns:
+        for _ in range(trips):
+            head.aspirate(source, volume, liquid_class=liquid_class)
+            head.dispense(plate, volume, liquid_class=liquid_class, well_offset=(column - 1) * 8)
+    head.drop_tips()
+
+
+def distribute_reagent(
+    wt,
+    *,
+    source,
+    plate,
+    volume_ul: float,
+    tips,
+    liquid_class: str,
+    columns: Iterable[int] | None = None,
+    name: str | None = None,
+    variables: bool = True,
+) -> None:
+    """Add a reagent to every well of ``plate`` with the FCA (LiHa), column by column.
+
+    The standard way to add kit reagents, master mixes and buffers: the FCA
+    pipettes from a slim trough (``25ml_short``, ``100ml`` catalogs) or tubes
+    with little dead volume. Keep the MCA96 for cheap bulk liquids (water,
+    ethanol, wash buffer) and for plate-to-plate work (:func:`stamp`).
+
+    ``tips`` is an FCA tip box; one set of 8 tips is used for all columns
+    (reagent-only contact, dispensed from above) and dropped at the end.
+    """
+    require_positive("distribute_reagent", volume_ul=volume_ul)
+    cols = columns_or_all(columns)
+    capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
+    trips = max(1, math.ceil(float(volume_ul) / capacity))
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block="distribute_reagent")
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
+    lc = v.ref("LIQUID_CLASS", liquid_class)
+    if name:
+        wt.group(name)
+    liha_distribute(wt, source=source, plate=plate, volume=volume, volume_ul=volume_ul, tips=tips,
+                    liquid_class=lc, columns=cols)
+
+
 def add_reagent(
     wt,
     *,
