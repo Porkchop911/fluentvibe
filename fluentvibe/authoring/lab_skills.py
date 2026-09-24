@@ -267,6 +267,15 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
 
     optional_names = {s.name for s in optional}
     chosen: set[str] | None = None
+
+    # An approved Bench Spec says exactly which stages the protocol has, so the
+    # skills follow from it deterministically — no model pre-pass.
+    from_spec = _skills_from_spec(prompt, optional_names)
+    if from_spec is not None:
+        selected = _expand_cross_references(
+            always | from_spec | _select_when_hits(optional, prompt), catalog
+        )
+        return _order_names(selected, catalog)
     # Selection wants a plain JSON answer. With the authoring tools attached,
     # models answered with a tool call instead and selection fell back to
     # loading every skill.
@@ -309,6 +318,46 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
     chosen |= _select_when_hits(optional, prompt)
     selected = _expand_cross_references(always | chosen, catalog)
     return _order_names(selected, catalog)
+
+
+_OP_SKILLS: dict[str, tuple[str, ...]] = {
+    "bead_cleanup": ("family-bead-cleanup-spri", "api-magnetization-model", "head-mca96", "head-gripper"),
+    "pool": ("family-pooling", "head-liha"),
+    "add": ("head-mca96", "head-liha"),
+    "transfer": ("head-mca96", "head-liha"),
+    "mix": ("head-mca96", "head-liha"),
+}
+_FAMILY_WORDS: tuple[tuple[str, str], ...] = (
+    (r"librar|barcod|sequenc|tagment|adapter|ngs", "family-ngs-library-prep"),
+    (r"\bpcr\b|master ?mix|qpcr|amplif", "family-pcr-setup"),
+    (r"elisa|immunoassay", "family-elisa"),
+    (r"normali[sz]", "family-normalize-to-target"),
+    (r"serial dilution|dilution series", "family-serial-dilution"),
+    (r"cherry|pick ?list", "family-cherrypicking"),
+    (r"bca|bradford|protein assay", "family-protein-assay"),
+    (r"reformat|consolidat|384", "family-plate-reformatting"),
+    (r"thermal|thermocycl|odtc|°c|\bc for\b", "device-odtc"),
+)
+
+
+def _skills_from_spec(prompt: str, optional_names: set[str]) -> set[str] | None:
+    """Optional skills implied by an approved Bench Spec in ``prompt``, or None."""
+    from .reagent_budget import spec_from_prompt
+
+    spec = spec_from_prompt(prompt)
+    if spec is None:
+        return None
+    names: set[str] = set()
+    for step in spec.steps:
+        if step.location == "deck":
+            names.update(_OP_SKILLS.get(step.op, ()))
+    text = " ".join([spec.title, *(step.text for step in spec.steps)]).lower()
+    for pattern, skill in _FAMILY_WORDS:
+        if re.search(pattern, text):
+            names.add(skill)
+    if any(len(step.temp_c) for step in spec.steps):
+        names.add("device-odtc")
+    return names & optional_names
 
 
 def assemble_context(scope: LabScope, names: list[str]) -> str | None:
