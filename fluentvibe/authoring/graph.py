@@ -1365,7 +1365,7 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
 
 
 def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:
-    """A client bound to ``declare_protocol_workflow`` alone, for skills mode.
+    """A client bound to ``declare_protocol_workflow`` (plus ``lookup_api``), for skills mode.
 
     Other modes ground through lookup tools before they declare, so they keep
     the full tool surface from the first turn. ``None`` when not applicable or
@@ -1374,8 +1374,13 @@ def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistr
     scope = getattr(registry, "lab_scope", None)
     if scope is None or scope.mode != "skills":
         return None
-    plan_tools = [t for t in lc_tools or () if getattr(t, "name", None) == "declare_protocol_workflow"]
-    if not plan_tools:
+    # The deterministic API lookup stays available: models asked for API facts
+    # before planning even when it was withheld (and the skills header lists it).
+    plan_tools = [
+        t for t in lc_tools or ()
+        if getattr(t, "name", None) in {"declare_protocol_workflow", "lookup_api"}
+    ]
+    if not any(getattr(t, "name", None) == "declare_protocol_workflow" for t in plan_tools):
         return None
     try:
         return client.bind_tools(plan_tools)
