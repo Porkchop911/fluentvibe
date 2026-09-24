@@ -1387,13 +1387,39 @@ def _declare_workflow_from_spec(registry: AuthoringToolRegistry, prompt: str | N
     if not result.get("ok"):
         return {}
     groups = [g["name"] for g in result["workflow"]["groups"]]
-    return {"messages": [HumanMessage(content=(
+    declared = (
         "The protocol workflow has already been declared from the approved Bench Spec "
-        "(do not call declare_protocol_workflow). Groups, in order: "
-        + "; ".join(groups)
-        + ". Write the complete build_worktable() with one wt.group per step (blocks "
-        "create their own groups), then call simulate_python_draft with the full source."
+        "(do not call declare_protocol_workflow). Groups, in order: " + "; ".join(groups) + ". "
+    )
+    skeleton = _skeleton_for(spec)
+    if skeleton is None:
+        return {"messages": [HumanMessage(content=declared + (
+            "Write the complete build_worktable() with one wt.group per step (blocks "
+            "create their own groups), then call simulate_python_draft with the full source."
+        ))]}
+    registry.last_draft_source = skeleton
+    return {"messages": [HumanMessage(content=declared + (
+        "A starting draft was generated from the spec and this deck; it is already the "
+        "current draft for edit_draft. Review it against the spec and the document: "
+        "change `# ASSUMED` values the document states differently, and fix anything "
+        "wrong, each with edit_draft. To run it unchanged, call edit_draft with old and "
+        "new both set to the first line `# BENCH SPEC SKELETON`.\n\n```python\n"
+        + skeleton + "```"
     ))]}
+
+
+def _skeleton_for(spec) -> str | None:
+    """Skeleton draft for ``spec`` on the active profile's deck, if one is set."""
+    try:
+        from .profile import profile_from_env
+        from .skeleton import build_skeleton, load_deck
+
+        profile = profile_from_env()
+        if profile is None:
+            return None
+        return build_skeleton(spec, load_deck(profile.root))
+    except Exception:
+        return None
 
 
 def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:
