@@ -325,7 +325,7 @@ def _skills_nodes(tmp_path, mode="skills"):
 def test_skills_first_turn_offers_only_the_workflow_declaration(tmp_path):
     reg, nodes, legacy = _skills_nodes(tmp_path)
     nodes._client_for_turn().invoke([])
-    assert legacy.offered[-1] == ["declare_protocol_workflow"]
+    assert legacy.offered[-1] == ["declare_protocol_workflow", "lookup_api"]
 
     _declare(reg, ["Transfer"])
     nodes._client_for_turn().invoke([])
