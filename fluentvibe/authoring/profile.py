@@ -72,6 +72,9 @@ def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
     deck_rules = raw_deck_rules.get(name, {}) if isinstance(raw_deck_rules, dict) else {}
     if not isinstance(deck_rules, dict):
         deck_rules = {}
+    reach = _read_reach(root, guid)
+    if reach:
+        deck_rules = {**deck_rules, "reach": reach}
     decks = sorted(root.glob("deck-*.md"))
 
     return ResolvedProfile(
@@ -102,6 +105,20 @@ def profile_from_env() -> ResolvedProfile | None:
         return resolve_profile(Path(raw))
     except ValueError:
         return None
+
+
+def _read_reach(root: Path, guid: str) -> dict[str, Any]:
+    """Arm reach measured in FluentControl (``reach.json``), if it is for this workspace."""
+    path = root / "reach.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if str((data.get("workspace") or {}).get("guid") or "") != guid:
+        return {}  # measured on another workspace: stale
+    return data
 
 
 def _read_generation_profile(

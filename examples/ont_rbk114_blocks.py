@@ -65,15 +65,17 @@ def build_worktable() -> Worktable:
     pool_plate = wt.place(Plate96("RowPools", catalog=PLATE), NEST, 11)
     fca_tips = wt.place(FCA200Box("FCATips", catalog="FCA, 200ul SBS"), NEST, 12)
     magnet = wt.place(MagnetRack("Magnet", catalog="LV_Alpaqua_A000350"), NEST, 13)
-    axp = wt.place(Trough25mL("AXP", catalog="25ml_short"), "WS_100ml_1", 1)
-    ethanol = wt.place(Trough100mL("Ethanol80", catalog="100ml"), "WS_100ml_1", 2)
-    eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
+    # MCA96 reagents sit in SBS reservoirs on plate nests (slim troughs do not
+    # fit the 96-tip head).
+    axp = wt.place(Trough100mL("AXP", catalog="60ml SBS MCA96"), NEST, 9)
+    ethanol = wt.place(Trough25mL("Ethanol80", catalog="300ml SBS"), "Nest7mm_Pos", 5)
+    eb = wt.place(Trough100mL("EB", catalog="60ml SBS MCA96"), NEST, 14)
     waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
 
     amplicons.fill_all(Reagent("Amplicon DNA", role="analyte"), 20.0)
     barcodes.fill_all(Reagent("Rapid Barcode"), 5.0)
     axp.fill_all(Reagent("AMPure XP beads, lab stock", role="bead_carrier"), 5000.0)
-    ethanol.fill_all(Reagent("80% ethanol"), 50000.0)
+    ethanol.fill_all(Reagent("80% ethanol"), 55000.0)
     eb.fill_all(Reagent("Elution buffer, lab stock (10 mM Tris)", role="eluent"), 3000.0)
 
     spri_cleanup(
