@@ -110,6 +110,7 @@ def test_spri_cleanup_simulates_strictly_and_passes_every_semantic_check():
         "eluate_recovered": "pass",
         "analyte_not_in_waste": "pass",
         "no_cross_contamination": "pass",
+        "pooling_performed": "na",  # no source document supplied
     }
     eluate_a1 = _final(deck.wt, "Eluate").wells["A1"]
     assert eluate_a1.volume_ul == pytest.approx(13.0)
@@ -213,3 +214,22 @@ def test_gold_ont_example_is_clean_on_every_check():
     result = score_protocol(path.read_text(encoding="utf-8"), filename=str(path))
     assert result.failed == 0, [i for i in result.invariants if i.status == "fail"]
     assert result.get("derived_supernatant").status == "pass"
+
+
+def test_pooling_invariant_needs_a_real_many_to_one_transfer():
+    deck = Deck()
+    doc = "Pool all the barcoded samples into a clean tube."
+    stamp(deck.wt, source=deck.samples, dest=deck.pool, volume_ul=10.0,
+          tips=deck.reagent_tips, liquid_class=LC)
+    deck.wt.simulate(strict=True)
+    inv = next(i for i in score_semantic(deck.wt, doc) if i.key == "pooling_performed")
+    assert inv.status == "fail"  # a 1:1 copy is not pooling
+
+    deck = Deck()
+    pool_columns(deck.wt, source=deck.samples, dest=deck.pool, volume_ul=10.0,
+                 tips=deck.fca_tips, liquid_class=LC)
+    deck.wt.simulate(strict=True)
+    inv = next(i for i in score_semantic(deck.wt, doc) if i.key == "pooling_performed")
+    assert inv.status == "pass"
+    assert inv.evidence.startswith("12 samples pooled")
+    assert next(i for i in score_semantic(deck.wt) if i.key == "pooling_performed").status == "na"

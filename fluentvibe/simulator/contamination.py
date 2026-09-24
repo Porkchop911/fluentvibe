@@ -67,7 +67,9 @@ class ContaminationTracker:
         """Give every well that starts with an analyte its own sample origin."""
         for address, well in getattr(labware, "wells", {}).items():
             if any(getattr(layer.reagent, "role", None) == "analyte" for layer in well.layers):
-                well.sample_origins = well.sample_origins | {f"{labware.label}:{address}"}
+                origin = frozenset({f"{labware.label}:{address}"})
+                well.sample_origins = well.sample_origins | origin
+                well.liquid_origins = well.liquid_origins | origin
 
     # ── liquid contact ───────────────────────────────────────────────
 
@@ -94,12 +96,23 @@ class ContaminationTracker:
                 self._record(CROSS_SAMPLE, labware, well, carried, present,
                              operation=operation, step=step, step_index=step_index)
         tip.sample_origins = carried | present
+        if operation == "Aspirate":
+            tip.load_origins = tip.load_origins | well.liquid_origins
 
     def on_deliver(self, labware: "Labware", well: "Well", tip: "Tip") -> None:
         """Dispense / empty into a well: the tip's sample origins move with it."""
-        if _is_waste(labware) or not tip.sample_origins:
+        if _is_waste(labware):
             return
-        well.sample_origins = well.sample_origins | tip.sample_origins
+        if tip.sample_origins:
+            well.sample_origins = well.sample_origins | tip.sample_origins
+        if tip.load_origins:
+            well.liquid_origins = well.liquid_origins | tip.load_origins
+
+    @staticmethod
+    def after_release(tip: "Tip") -> None:
+        """Once a tip has released all its liquid it carries no sample liquid."""
+        if tip.volume_ul <= 1e-9:
+            tip.load_origins = frozenset()
 
     # ── MCA tip set-back / re-pickup ─────────────────────────────────
 

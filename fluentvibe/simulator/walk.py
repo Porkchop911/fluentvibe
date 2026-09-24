@@ -1096,6 +1096,7 @@ class Simulator:
                 deposited_bead_carrier = True
             if layer.volume_ul <= 1e-9:
                 del tip.layers[0]
+        self._contamination.after_release(tip)
         # A bead-carrier reagent landing in a well establishes (or refreshes)
         # the well's bead phase. Suspended unless the plate is magnetized.
         if deposited_bead_carrier:
@@ -1122,6 +1123,7 @@ class Simulator:
                 well.add_layer(layer.reagent, take)
             if layer.volume_ul <= 1e-9:
                 del tip.layers[0]
+        self._contamination.after_release(tip)
 
     def _validate_mix_one(self, labware: Labware, well, volume_ul: float, tip: Tip) -> None:
         if volume_ul <= 0:
