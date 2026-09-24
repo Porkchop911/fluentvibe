@@ -423,3 +423,15 @@ def test_thermal_step_uses_the_odtc_or_hands_off():
 
     with pytest.raises(BlockError, match="method_name"):
         thermal_step(manual.wt, manual.samples, "x", odtc_position=(NEST, 10))
+
+
+def test_user_prompt_without_auto_close_renders_a_valid_timeout():
+    """FC's InfoPad rejects Timeout 0 ('Close prompt after' range 1-7200)."""
+    import re
+
+    from fluentvibe.compiler import render_protocol
+
+    deck = Deck()
+    deck.wt.user_prompt("Swap the tip racks.")
+    xml = render_protocol(deck.wt.to_protocol())
+    assert re.search(r"<AutoClose>False</AutoClose>\s*<Timeout>1</Timeout>", xml)
