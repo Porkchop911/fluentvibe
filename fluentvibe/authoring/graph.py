@@ -1409,7 +1409,12 @@ def _declare_workflow_from_spec(registry: AuthoringToolRegistry, prompt: str | N
 
 
 def _skeleton_for(spec) -> str | None:
-    """Skeleton draft for ``spec`` on the active profile's deck, if one is set."""
+    """Skeleton draft for ``spec`` on the active profile's deck, if one is set.
+
+    ``FLUENTVIBE_SKELETON=0`` turns it off (benchmarks: the model alone).
+    """
+    if os.environ.get("FLUENTVIBE_SKELETON", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return None
     try:
         from .profile import profile_from_env
         from .skeleton import build_skeleton, load_deck
