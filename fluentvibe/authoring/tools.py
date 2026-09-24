@@ -2424,6 +2424,8 @@ class AuthoringToolRegistry:
 
     def lookup_api(self, object_or_class: str) -> dict[str, Any]:
         key = _normalize_api_lookup(object_or_class)
+        if key == "blocks":
+            return {"ok": True, "api": _blocks_api_entry()}
         entry = _API_LOOKUPS.get(key)
         if entry is None:
             return {
@@ -4050,8 +4052,43 @@ def _normalize_api_lookup(value: str) -> str:
         "plate96": "plate96",
         "trough100ml": "trough100ml",
         "fca1000box": "fca1000box",
+        "blocks": "blocks",
+        "fluentvibe.blocks": "blocks",
+        "spri_cleanup": "blocks",
+        "stamp": "blocks",
+        "add_reagent": "blocks",
+        "pool_columns": "blocks",
+        "offdeck_step": "blocks",
     }
     return aliases.get(cleaned, cleaned)
+
+
+def _blocks_api_entry() -> dict[str, Any]:
+    """lookup_api entry for fluentvibe.blocks, generated from the code so the
+    signatures and descriptions never drift from the implementation."""
+    import inspect
+
+    from .. import blocks
+
+    methods = []
+    for name in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step"):
+        fn = getattr(blocks, name)
+        doc = inspect.getdoc(fn) or ""
+        methods.append({
+            "name": name,
+            "signature": f"{name}{inspect.signature(fn)}",
+            "description": " ".join(doc.split("\n\n")[0].split()),
+        })
+    return {
+        "object": "fluentvibe.blocks",
+        "note": (
+            "Verified building blocks: one call emits a whole tested stage with safe "
+            "tip handling and derived volumes. Import with "
+            "`from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step`. "
+            "Volumes are plain numbers. A BlockError message says how to fix the setup."
+        ),
+        "methods": methods,
+    }
 
 
 def _rule(row: dict[str, Any]) -> dict[str, Any]:

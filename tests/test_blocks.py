@@ -233,3 +233,14 @@ def test_pooling_invariant_needs_a_real_many_to_one_transfer():
     assert inv.status == "pass"
     assert inv.evidence.startswith("12 samples pooled")
     assert next(i for i in score_semantic(deck.wt) if i.key == "pooling_performed").status == "na"
+
+
+def test_lookup_api_describes_blocks_from_their_signatures(tmp_path):
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    result = AuthoringToolRegistry(output_dir=tmp_path).lookup_api("fluentvibe.blocks")
+    assert result["ok"] is True
+    methods = {m["name"]: m for m in result["api"]["methods"]}
+    assert set(methods) == {"spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step"}
+    assert "eluate_tips" in methods["spri_cleanup"]["signature"]
+    assert AuthoringToolRegistry(output_dir=tmp_path).lookup_api("pool_columns")["ok"] is True
