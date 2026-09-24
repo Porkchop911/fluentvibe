@@ -72,7 +72,7 @@ class Deck:
         self.beads = wt.place(Trough25mL("Beads", catalog="25ml_short"), "WS_100ml_1", 1)
         self.ethanol = wt.place(Trough100mL("Ethanol", catalog="100ml"), "WS_100ml_1", 2)
         self.eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
-        self.waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
+        self.waste = wt.place(Trough100mL("Waste", catalog="100ml"), "WS_100ml_1", 4)
         self.samples.fill_all(Reagent("Amplicon", role="analyte" if analyte else "plain"), 20.0)
         self.barcodes.fill_all(Reagent("Barcode"), 5.0)
         self.beads.fill_all(Reagent("AMPure XP", role="bead_carrier"), 15000.0)
@@ -278,3 +278,35 @@ def test_spec_conformance_against_the_gold_spec():
     inv = next(i for i in score_semantic(deck.wt, spec=spec) if i.key == "spec_conformance")
     assert inv.status == "fail"
     assert "operator pause" in inv.evidence
+
+
+def test_block_protocols_compile_for_fluentcontrol(tmp_path, monkeypatch):
+    # Simulation alone missed that mixing needs a Mix-capable liquid class;
+    # compile runs FluentControl-side checks such as that one. The check is a
+    # deck rule, so activate the profile the way a real run does.
+    import importlib.util
+
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+
+    _workspace()
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    deck = Deck()
+    deck.cleanup()
+    add_reagent(deck.wt, reagent_source=deck.eb, plate=deck.eluate, volume_ul=2.0,
+                reagent_tips=deck.reagent_tips, mix_tips=deck.eluate_tips,
+                liquid_class=LC, mix_cycles=3)
+    deck.wt.compile(tmp_path / "blocks.xscr")
+
+    # Mixing with the transfer class is what FluentControl rejects.
+    bad = Deck()
+    stamp(bad.wt, source=bad.barcodes, dest=bad.samples, volume_ul=1.0, tips=bad.reagent_tips,
+          liquid_class=LC, mix_cycles=3, mix_liquid_class=LC)
+    with pytest.raises(Exception, match="Mix"):
+        bad.wt.compile(tmp_path / "bad.xscr")
+
+    path = REPO_ROOT / "examples" / "ont_rbk114_blocks.py"
+    loader = importlib.util.spec_from_file_location("ont_rbk114_blocks_compile", path)
+    module = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    module.build_worktable().compile(tmp_path / "gold.xscr")
+    assert (tmp_path / "gold.xscr").stat().st_size > 0

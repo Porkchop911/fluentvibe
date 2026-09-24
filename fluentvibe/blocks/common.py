@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Iterable
 
 
+# Mix steps need a liquid class with a Mix micro-script section; FluentControl
+# rejects e.g. "Water Free Single" for mixing.
+DEFAULT_MIX_LIQUID_CLASS = "Water Mix"
+
+
 class BlockError(ValueError):
     """A block's preconditions do not hold. The message says how to fix it."""
 
