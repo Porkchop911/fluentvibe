@@ -272,7 +272,12 @@ def _check_derived_supernatant(vars_: dict[str, float]) -> Invariant:
 
 
 def _check_derived_eluate(vars_: dict[str, float]) -> Invariant:
-    transfers = _named(vars_, "TRANSFER", "ELUATE")
+    # Eluate transfers: names with ELUATE, or a generic *TRANSFER* volume that
+    # is not clearly some other transfer (library, sample, pool, barcode …).
+    transfers = {
+        **_named(vars_, "TRANSFER", exclude=("LIBRARY", "SAMPLE", "POOL", "BARCODE", "INPUT", "ADAPTER")),
+        **_named(vars_, "ELUATE"),
+    }
     if not transfers:
         return Invariant(
             "derived_eluate", _NA,
