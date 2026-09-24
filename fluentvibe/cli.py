@@ -167,6 +167,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                                "LM-selected subset of granular skill files "
                                "(skills); default off = baseline "
                                "(env FLUENTVIBE_LAB_SCOPE)")
+    p_author.add_argument("--spec", type=Path, default=None,
+                          help="approved Bench Spec JSON (from `fluentvibe spec`) to author against")
     p_author.set_defaults(func=_cmd_author)
 
     p_lookup_eval = sub.add_parser(
@@ -618,6 +620,17 @@ def _cmd_author(args) -> int:
 
     _activate_profile(args)
     prompt = " ".join(args.prompt).strip()
+    if getattr(args, "spec", None) is not None:
+        import json as _json
+
+        from .authoring.bench_spec import spec_context_block, validate_bench_spec
+
+        spec, problems = validate_bench_spec(_json.loads(args.spec.read_text(encoding="utf-8")))
+        if spec is None:
+            for problem in problems:
+                print(f"error: {args.spec}: {problem.where}: {problem.message}", file=sys.stderr)
+            return 1
+        prompt = f"{prompt}\n\n{spec_context_block(spec)}"
     # Only forward overrides when given; the service constructor already falls
     # back to the env-driven FLUENTVIBE_LM_ENDPOINT / FLUENTVIBE_LM_MODEL defaults.
     service_kwargs: dict[str, Any] = {}
