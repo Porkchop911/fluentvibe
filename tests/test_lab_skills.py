@@ -459,3 +459,19 @@ def test_skill_selection_is_sent_without_tools():
     names = select_skills("pool the samples", catalog, adapt_client(legacy))
     assert legacy.tools == []
     assert "family-pooling" in names
+
+
+def test_skills_come_from_an_approved_spec_without_a_model_call():
+    import json as _json
+
+    from fluentvibe.authoring.bench_spec import spec_context_block, validate_bench_spec
+
+    raw = _json.loads((REPO_ROOT / "examples" / "ont_rbk114_spec.json").read_text(encoding="utf-8"))
+    spec, _ = validate_bench_spec(raw)
+    prompt = "Automate it.\n\n" + spec_context_block(spec)
+    names = select_skills(prompt, _catalog(), _BoomClient())  # would raise if called
+    assert "family-pooling" in names          # deck pool step
+    assert "family-ngs-library-prep" in names  # barcoding / library wording
+    assert "device-odtc" in names             # 30 C / 80 C step
+    assert "family-elisa" not in names
+    assert "family-cell-seeding" not in names

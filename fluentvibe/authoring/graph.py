@@ -305,9 +305,10 @@ class _Nodes:
     # Intent-axis nudge — runs once at the start of each `invoke`. Kept as a
     # node (not in run_graph) so multi-turn callers re-evaluate per send().
     def intent_nudge(self, state: GraphState) -> dict[str, Any]:
-        # Already prepended by run_graph for the first turn; this node exists
-        # so the graph has a canonical entry seam. No-op when invoked.
-        return {}
+        # Intent messages are prepended by run_graph for the first turn. In
+        # skills mode with an approved Bench Spec in the prompt, the workflow
+        # is declared here from the spec so the model skips the planning turn.
+        return _declare_workflow_from_spec(self.registry, state.get("prompt"))
 
     def model_call(self, state: GraphState) -> dict[str, Any]:
         iterations = state.get("iterations", 0) + 1
@@ -1369,6 +1370,30 @@ def _workflow_groups(registry: AuthoringToolRegistry) -> list[str]:
     if plan is None:
         return []
     return [group.name for group in plan.groups]
+
+
+def _declare_workflow_from_spec(registry: AuthoringToolRegistry, prompt: str | None) -> dict[str, Any]:
+    """Declare the workflow from an approved Bench Spec (skills mode only)."""
+    scope = getattr(registry, "lab_scope", None)
+    if scope is None or scope.mode != "skills" or registry.workflow_plan is not None:
+        return {}
+    from .bench_spec import workflow_from_spec
+    from .reagent_budget import spec_from_prompt
+
+    spec = spec_from_prompt(prompt or getattr(registry, "current_prompt", None))
+    if spec is None:
+        return {}
+    result = registry.declare_protocol_workflow(**workflow_from_spec(spec))
+    if not result.get("ok"):
+        return {}
+    groups = [g["name"] for g in result["workflow"]["groups"]]
+    return {"messages": [HumanMessage(content=(
+        "The protocol workflow has already been declared from the approved Bench Spec "
+        "(do not call declare_protocol_workflow). Groups, in order: "
+        + "; ".join(groups)
+        + ". Write the complete build_worktable() with one wt.group per step (blocks "
+        "create their own groups), then call simulate_python_draft with the full source."
+    ))]}
 
 
 def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:

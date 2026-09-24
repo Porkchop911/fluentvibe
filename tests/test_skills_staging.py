@@ -414,3 +414,56 @@ def test_graph_treats_edit_draft_like_a_full_simulation(tmp_path):
     final = graph.invoke(_initial_state())
     assert final["result"].status == AuthoringStatus.SUCCESS
     assert "def build_worktable()" in (final["best_code"] or "")
+
+
+def _spec_prompt():
+    import json as _json
+
+    from fluentvibe.authoring.bench_spec import spec_context_block, validate_bench_spec
+
+    raw = _json.loads((Path(__file__).resolve().parent.parent / "examples" / "ont_rbk114_spec.json")
+                      .read_text(encoding="utf-8"))
+    spec, _ = validate_bench_spec(raw)
+    return "Automate the library prep.\n\n" + spec_context_block(spec), spec
+
+
+def test_approved_spec_declares_the_workflow_before_the_first_model_turn(tmp_path):
+    from fluentvibe.authoring.graph import _declare_workflow_from_spec
+
+    reg = _registry(tmp_path, "skills")
+    prompt, spec = _spec_prompt()
+    update = _declare_workflow_from_spec(reg, prompt)
+    assert reg.workflow_plan is not None
+    names = [g.name for g in reg.workflow_plan.groups]
+    assert names[:2] == ["Variables", "Labware Placement"]
+    assert len(names) == 2 + len(spec.steps)
+    assert names[2].startswith("s1: ")
+    assert any("[off-deck]" in n for n in names)
+    assert "already been declared" in update["messages"][0].content
+    # Not twice, and not outside skills mode.
+    assert _declare_workflow_from_spec(reg, prompt) == {}
+    other = _registry(tmp_path / "e", "enforce")
+    assert _declare_workflow_from_spec(other, prompt) == {}
+    assert _declare_workflow_from_spec(_registry(tmp_path / "n", "skills"), "no spec") == {}
+
+
+def test_spec_run_drafts_without_a_planning_turn(tmp_path):
+    from langchain_core.messages import HumanMessage
+
+    from fluentvibe.authoring.graph import GraphState
+    from tests.test_authoring_graph import _build
+
+    reg = _registry(tmp_path, "skills")
+    _grounded(reg)
+    prompt, _ = _spec_prompt()
+    sim = {"name": "simulate_python_draft", "args": {"source": _valid_draft()}, "id": "call-sim"}
+    graph = _build(registry=reg, responses=[AIMessage(content="", tool_calls=[sim])])
+    state = GraphState(
+        messages=[HumanMessage(content=prompt)], iterations=0, tool_call_count=0,
+        best_code=None, last_validation=None, current_group_index=0,
+        last_accepted_source_hash=None, result=None, prompt=prompt,
+        adherence_nudges=0, fallback_result=None,
+    )
+    final = graph.invoke(state)
+    assert final["result"].status == AuthoringStatus.SUCCESS
+    assert final["iterations"] == 1  # the first model turn already drafted

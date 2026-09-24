@@ -473,3 +473,43 @@ def extract_bench_spec(client: Any, source_text: str, *, extra_context: str | No
         return None, [SpecProblem("schema", "$", "the model did not call submit_bench_spec")], None
     spec, problems = validate_bench_spec(raw, source_text)
     return spec, problems, raw
+
+
+# ── Deterministic plan from an approved spec ─────────────────────────────
+
+
+def _group_name(step: SpecStep) -> str:
+    text = " ".join((step.text or step.op).split())
+    if len(text) > 60:
+        text = text[:57].rstrip() + "…"
+    where = "" if step.location == "deck" else f" [{step.location.replace('_', '-')}]"
+    return f"{step.id}: {text}{where}"
+
+
+def workflow_from_spec(spec: BenchSpec) -> dict[str, Any]:
+    """``declare_protocol_workflow`` arguments built from an approved spec.
+
+    The functional groups are the spec's steps in order (after the mandatory
+    ``Variables`` / ``Labware Placement`` scaffold), so a model does not have to
+    re-derive the plan from the source document.
+    """
+    slug = "".join(ch if ch.isalnum() else "_" for ch in spec.title.lower()).strip("_")[:40]
+    groups: list[dict[str, Any]] = [{"name": "Variables"}, {"name": "Labware Placement"}]
+    seen: set[str] = {"Variables", "Labware Placement"}
+    for step in spec.steps:
+        name = _group_name(step)
+        if name in seen:
+            name = f"{name} ({step.id})"
+        seen.add(name)
+        groups.append({
+            "name": name,
+            "objective": step.text,
+            "expected_steps": [f"op={step.op}", f"location={step.location}"],
+        })
+    return {
+        "protocol_name": spec.title,
+        "summary": f"{len(spec.steps)} steps from the approved Bench Spec for {spec.sample_count} samples.",
+        "variables": [{"name": "RunId", "default": slug or "run", "sim_value": slug or "run"}],
+        "labware": [],
+        "groups": groups,
+    }
