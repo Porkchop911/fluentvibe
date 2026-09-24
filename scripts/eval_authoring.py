@@ -201,6 +201,10 @@ def main() -> int:
         help="maximum seconds across all model calls in one run (default: 600)",
     )
     ap.add_argument("--no-simulate", action="store_true", help="source tier only")
+    ap.add_argument("--spec", default=None,
+                    help="approved Bench Spec JSON to give the model (stages C-F of the strategy)")
+    ap.add_argument("--spec-only", action="store_true",
+                    help="with --spec: send the spec instead of the document text")
     args = ap.parse_args()
 
     profile_dir = Path(args.profile)
@@ -212,6 +216,20 @@ def main() -> int:
 
     ws_name, ws_guid = _activate_profile(profile_dir)
     prompt, source_text = _build_prompt(args.prompt, pdf)
+    if args.spec:
+        from fluentvibe.authoring.bench_spec import spec_context_block, validate_bench_spec
+
+        spec, problems = validate_bench_spec(
+            json.loads(Path(args.spec).read_text(encoding="utf-8")), source_text
+        )
+        if spec is None:
+            raise SystemExit(f"invalid spec {args.spec}: {[p.message for p in problems]}")
+        block = spec_context_block(spec)
+        prompt = (
+            f"{args.prompt.strip()}\n\n{block}" if args.spec_only
+            else f"{args.prompt.strip()}\n\n{block}\n\n{prompt}"
+        )
+        print(f"[eval] spec={args.spec} spec_only={args.spec_only} problems={len(problems)}")
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     out = Path(args.out) if args.out else REPO / "build" / "eval" / stamp
