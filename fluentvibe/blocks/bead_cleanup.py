@@ -153,9 +153,15 @@ def spri_cleanup(
     bead = v.ref("BEAD_VOLUME_UL" if bead_trips == 1 else "BEAD_TRIP_UL", round(volumes.bead_ul / bead_trips, 2))
     supernatant = v.ref("SUPERNATANT_UL" if supernatant_trips == 1 else "SUPERNATANT_TRIP_UL",
                         round(volumes.supernatant_ul / supernatant_trips, 2))
-    wash = v.ref("WASH_VOLUME_UL", volumes.wash_ul)
-    elution = v.ref("ELUTION_VOLUME_UL", volumes.elution_ul)
-    eluate = v.ref("ELUATE_TRANSFER_UL", volumes.eluate_transfer_ul)
+    wash_trips = math.ceil(volumes.wash_ul / min(reagent_capacity, tip_capacity))
+    elution_trips = math.ceil(volumes.elution_ul / reagent_capacity)
+    eluate_capacity = float(getattr(eluate_tips, "capacity_ul", 0.0) or 200.0)
+    eluate_trips = math.ceil(volumes.eluate_transfer_ul / eluate_capacity)
+    wash = v.ref("WASH_VOLUME_UL" if wash_trips == 1 else "WASH_TRIP_UL", round(volumes.wash_ul / wash_trips, 2))
+    elution = v.ref("ELUTION_VOLUME_UL" if elution_trips == 1 else "ELUTION_TRIP_UL",
+                    round(volumes.elution_ul / elution_trips, 2))
+    eluate = v.ref("ELUATE_TRANSFER_UL" if eluate_trips == 1 else "ELUATE_TRIP_UL",
+                   round(volumes.eluate_transfer_ul / eluate_trips, 2))
     bind_mix = v.ref("BIND_MIX_UL", bind_mix_ul)
     elution_mix = v.ref("ELUTION_MIX_UL", elution_mix_ul)
     lc = v.ref("LIQUID_CLASS", liquid_class)
@@ -191,13 +197,15 @@ def spri_cleanup(
     for index in range(1, wash_count + 1):
         wt.group(f"{name} - wash {index}")
         head.pick_up(reagent_tips)
-        head.aspirate(wash_source, wash, liquid_class=wash_lc)
-        head.dispense(sample_plate, wash, liquid_class=wash_lc)
+        for _ in range(wash_trips):
+            head.aspirate(wash_source, wash, liquid_class=wash_lc)
+            head.dispense(sample_plate, wash, liquid_class=wash_lc)
         head.return_tips(reagent_tips)
         wt.wait(duration_seconds=30)
         head.pick_up(sample_tips)
-        head.aspirate(sample_plate, wash, liquid_class=wash_lc)
-        head.empty_tips(waste, wash, liquid_class=empty_lc)
+        for _ in range(wash_trips):
+            head.aspirate(sample_plate, wash, liquid_class=wash_lc)
+            head.empty_tips(waste, wash, liquid_class=empty_lc)
         head.return_tips(sample_tips)
     if wash_count:
         wt.wait(duration_seconds=dry_time)
@@ -205,8 +213,9 @@ def spri_cleanup(
     wt.group(f"{name} - elute off magnet")
     wt.gripper.move(sample_plate, to=home)
     head.pick_up(reagent_tips)
-    head.aspirate(elution_source, elution, liquid_class=lc)
-    head.dispense(sample_plate, elution, liquid_class=lc)
+    for _ in range(elution_trips):
+        head.aspirate(elution_source, elution, liquid_class=lc)
+        head.dispense(sample_plate, elution, liquid_class=lc)
     head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
     head.mix(sample_plate, elution_mix, cycles=elution_mix_cycles, liquid_class=mix_lc)
@@ -217,8 +226,9 @@ def spri_cleanup(
     wt.gripper.move(sample_plate, onto=magnet)
     wt.wait(duration_seconds=settle_time)
     head.pick_up(eluate_tips)
-    head.aspirate(sample_plate, eluate, liquid_class=lc)
-    head.dispense(eluate_plate, eluate, liquid_class=lc)
+    for _ in range(eluate_trips):
+        head.aspirate(sample_plate, eluate, liquid_class=lc)
+        head.dispense(eluate_plate, eluate, liquid_class=lc)
     head.return_tips(eluate_tips)
     head.drop_adapter()
     wt.gripper.move(sample_plate, to=home)

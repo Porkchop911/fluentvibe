@@ -314,8 +314,14 @@ class Labware:
         return (rows, cols)
 
     def fill_all(self, reagent: "Reagent", volume_ul: float) -> None:
+        """Set every well to ``volume_ul`` of ``reagent`` (replaces what was there)."""
         for w in self.wells.values():
             w.layers = [Layer(reagent=reagent, volume_ul=volume_ul)]
+
+    def layer_all(self, reagent: "Reagent", volume_ul: float) -> None:
+        """Add ``volume_ul`` of ``reagent`` on top of what every well holds."""
+        for w in self.wells.values():
+            w.add_layer(reagent, volume_ul)
 
     # ── Stacking / state ──────────────────────────────────────────
 

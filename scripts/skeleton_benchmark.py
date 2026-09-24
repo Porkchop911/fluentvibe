@@ -35,6 +35,7 @@ def main() -> int:
     ap.add_argument("--work", type=Path, required=True, help="existing directory for skeletons and gate output")
     ap.add_argument("--out", type=Path, default=None, help="Markdown report")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--only", default="", help="comma-separated spec names")
     args = ap.parse_args()
 
     from fluentvibe.authoring.profile import PROFILE_DIR_ENV
@@ -53,6 +54,9 @@ def main() -> int:
     deck = load_deck(args.profile)
     rows = []
     paths = [p for p in sorted(args.specs.glob("*.json")) if p.name != "summary.json"]
+    if args.only:
+        wanted = set(args.only.split(","))
+        paths = [p for p in paths if p.stem in wanted]
     if args.limit:
         paths = paths[: args.limit]
     for path in paths:
@@ -68,7 +72,9 @@ def main() -> int:
         try:
             source = build_skeleton(spec, copy.deepcopy(deck))
         except Exception as exc:  # noqa: BLE001 - report every failure kind
-            row["error"] = f"build: {type(exc).__name__}: {str(exc)[:120]}"
+            kind = "deck mismatch" if type(exc).__name__ == "DeckMismatch" else "build"
+            row["error"] = f"{kind}: {type(exc).__name__}: {str(exc)[:120]}"
+            print(f"FAIL {path.stem} [{row['family']}] {row['error']}", flush=True)
             continue
         row["built"] = True
         target = args.work / f"{path.stem}.py"
@@ -97,12 +103,14 @@ def main() -> int:
         c["clean"] += row["gate"] and not row["fails"]
     fail_keys = Counter(k for r in rows for k in r["fails"])
     errors = Counter(r["error"].split(":")[0] + ": " + r["error"].split(":", 2)[-1][:70] for r in rows if r["error"])
+    mismatch = sum(1 for r in rows if r["error"].startswith("deck mismatch"))
     total = Counter()
     for c in per.values():
         total.update(c)
     lines = ["# Skeleton benchmark (corpus specs)", "",
              f"{total['specs']} specs: {total['built']} built, {total['gate']} pass the compile gate, "
-             f"{total['clean']} also pass every rubric check.", "",
+             f"{total['clean']} also pass every rubric check. {mismatch} do not fit this deck "
+             f"(deep-well volumes); {total['clean']} of {total['specs'] - mismatch} that fit pass.", "",
              "| Family | Specs | Built | Gate | All checks |", "|---|---|---|---|---|"]
     for family in sorted(per, key=lambda f: -per[f]["specs"]):
         c = per[family]

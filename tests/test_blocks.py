@@ -144,7 +144,7 @@ def test_spri_cleanup_requires_tagged_roles():
 
 def test_second_cleanup_runs_on_the_eluate_of_the_first():
     deck = Deck()
-    deck.eb.fill_all(Reagent("EB", role="eluent"), 15000.0)  # two elutions
+    deck.eb.fill_all(Reagent("EB", role="eluent"), 15000.0)  # two elutions (fill_all replaces)
     deck.cleanup(sample_volume_ul=20.0, elution_volume_ul=40.0, name="Cleanup 1")
     # The eluate plate was filled by the protocol, not authored: still accepted.
     deck.cleanup(sample_plate=deck.eluate, eluate_plate=deck.pool, sample_tips=deck.eluate_tips,

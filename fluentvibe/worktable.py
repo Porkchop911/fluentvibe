@@ -69,6 +69,9 @@ class Worktable:
         # Tracked at authoring time so `gripper.move(onto=...)` and
         # `place(...)`'s occupied-slot check have something to work with.
         self.slot_map: dict[tuple[str, int], list[Labware]] = {}
+        # Every labware ever placed, by label -- still resolvable after
+        # remove() so the simulator can replay the run from the start.
+        self._placed: dict[str, Labware] = {}
 
         # Optional valid-slot whitelist set by `from_workspace`. When non-empty,
         # `place()` raises `InvalidSlotError` for slots outside the set.
@@ -734,6 +737,7 @@ class Worktable:
         stack.append(labware)
         labware.slot = slot
         labware.stack_below = list(stack[:-1])
+        self._placed[labware.label] = labware
         self._register_child_valid_slots(labware)
         self._emit(AddLabwareStep(
             labware_type=labware.catalog_name,
@@ -1074,6 +1078,8 @@ class Worktable:
             for lw in stack:
                 if lw.label == label:
                     return lw
+        if label in getattr(self, "_placed", {}):
+            return self._placed[label]
         raise KeyError(f"No labware with label {label!r} on the worktable")
 
     def _require_bound_workspace(self) -> None:
