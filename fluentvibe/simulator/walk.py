@@ -1091,6 +1091,11 @@ class Simulator:
         if tip.volume_ul + 1e-9 < volume_ul:
             raise OverdrawError(
                 f"Dispense: tip holds {tip.volume_ul:.2f} µL but {volume_ul:.2f} µL requested"
+                + (" - the tips are empty: every aspirate must be followed by at most the same total "
+                   "dispensed, and a mix does not load the tips. Aspirate before this dispense (or "
+                   "remove it if the liquid was already delivered)."
+                   if tip.volume_ul <= 1e-6 else
+                   f" - dispense at most what the tips hold ({tip.volume_ul:.2f} µL), or aspirate more first.")
             )
         if well.volume_ul + volume_ul > well.max_volume_ul + 1e-6:
             raise _with_sim_details(
