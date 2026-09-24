@@ -44,6 +44,18 @@ SECONDS_RE = re.compile(r"(\d+) minutes? and (\d+(?:\.\d+)?) seconds")
 BEAD_WORDS = re.compile(r"bead|ampure|axp|spri|magnet", re.IGNORECASE)
 ETHANOL_WORDS = re.compile(r"ethanol|etoh", re.IGNORECASE)
 RESERVOIR_WORDS = re.compile(r"reservoir|trough|tube|rack|block|reagent", re.IGNORECASE)
+MULTI_CHANNEL = re.compile(r"_multi|8channel|8_channel|96channel|96_channel|multi_flex", re.IGNORECASE)
+REAGENT_WORDS = re.compile(
+    r"wash|ethanol|etoh|buffer|bead|ampure|mix|reagent|reservoir|enzyme|primer|adapter|water|elut",
+    re.IGNORECASE,
+)
+SAMPLE_WORDS = re.compile(r"sample|librar|amplicon|pcr product|index", re.IGNORECASE)
+# Set per protocol (one protocol per process). Multi-channel run logs name
+# only row A, so column-wise additions into one sample column look like
+# pooling into one well; labware that received liquid earlier in the run
+# (a real pool's source) is tracked across sections.
+_MULTI_CHANNEL = False
+_RECEIVED: set[str] = set()
 # Module commands (not liquid handling that merely happens on a module).
 DEVICE_START = re.compile(
     r"(Setting (Temperature Module|Thermocycler|Heater-Shaker|block|lid)|Thermocycler|Heater-Shaker|"
@@ -208,6 +220,9 @@ def _simulate(protocol: Path, hardware_dir: Path | None = None):
     from opentrons import simulate
 
     source = protocol.read_text(encoding="utf-8")
+    global _MULTI_CHANNEL
+    _MULTI_CHANNEL = bool(MULTI_CHANNEL.search(source))
+    _RECEIVED.clear()
     if "get_values(" in source and "def get_values" not in source:
         stub = _GET_VALUES_STUB.format(defaults={**_usage_defaults(source), **_commented_defaults(source)})
         # Keep `from __future__` imports first.
@@ -450,7 +465,12 @@ def _classify(section, step_id: str) -> dict | None:
     src_wells = {p[1] for p in route}
     volumes = [p[4] for p in route if p[4]]
     per_well = round(statistics.median(volumes), 2) if volumes else None
-    if len(dst_wells) == 1 and len(src_wells) > 1:
+    earlier = set(_RECEIVED)
+    _RECEIVED.update(p[2] for p in moves)
+    reagent_like = bool(REAGENT_WORDS.search(src) or REAGENT_WORDS.search(title) or RESERVOIR_WORDS.search(src))
+    sample_source = bool(SAMPLE_WORDS.search(src)) or src in earlier
+    if (len(dst_wells) == 1 and len(src_wells) > 1 and not reagent_like
+            and (sample_source or not _MULTI_CHANNEL)):
         op = "pool"
     elif RESERVOIR_WORDS.search(src) and not RESERVOIR_WORDS.search(dst):
         op = "add"
