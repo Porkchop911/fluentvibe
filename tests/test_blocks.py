@@ -243,7 +243,8 @@ def test_lookup_api_describes_blocks_from_their_signatures(tmp_path):
     result = AuthoringToolRegistry(output_dir=tmp_path).lookup_api("fluentvibe.blocks")
     assert result["ok"] is True
     methods = {m["name"]: m for m in result["api"]["methods"]}
-    assert set(methods) == {"spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step"}
+    assert set(methods) == {"spri_cleanup", "stamp", "add_reagent", "pool_columns",
+                            "offdeck_step", "thermal_step"}
     assert "eluate_tips" in methods["spri_cleanup"]["signature"]
     assert AuthoringToolRegistry(output_dir=tmp_path).lookup_api("pool_columns")["ok"] is True
 
@@ -376,3 +377,24 @@ def test_blocks_declare_fluentcontrol_variables_named_after_the_call():
     literal = Deck()
     literal.cleanup(variables=False)
     assert not any(k.startswith("BEAD_CLEANUP") for k in literal.wt.protocol_variables)
+
+
+def test_thermal_step_uses_the_odtc_or_hands_off():
+    from fluentvibe.blocks import thermal_step
+
+    deck = Deck()
+    thermal_step(deck.wt, deck.samples, "30 C 2 min, 80 C 2 min",
+                 odtc_position=(NEST, 10), method_name="TAG", name="Tagmentation")
+    deck.wt.simulate(strict=True)
+    kinds = [type(s.step).__name__ for s in deck.wt.snapshots]
+    assert kinds.count("LegacyDriverMacroStep") >= 4  # open, close, execute, open, close
+    assert _final(deck.wt, "Samples").slot == (NEST, 1)
+
+    manual = Deck()
+    thermal_step(manual.wt, manual.samples, "30 C 2 min, 80 C 2 min",
+                 handoff=(NEST, 10), name="Tagmentation")
+    manual.wt.simulate(strict=True)
+    assert "UserPromptStep" in [type(s.step).__name__ for s in manual.wt.snapshots]
+
+    with pytest.raises(BlockError, match="method_name"):
+        thermal_step(manual.wt, manual.samples, "x", odtc_position=(NEST, 10))

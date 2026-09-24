@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from .bead_cleanup import CleanupVolumes, spri_cleanup
 from .common import BlockError
-from .operator import offdeck_step
+from .operator import offdeck_step, thermal_step
 from .transfers import add_reagent, pool_columns, stamp
 
 __all__ = [
@@ -42,4 +42,5 @@ __all__ = [
     "pool_columns",
     "spri_cleanup",
     "stamp",
+    "thermal_step",
 ]

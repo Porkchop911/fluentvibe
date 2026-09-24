@@ -33,7 +33,7 @@ _LIQUID_METHODS = frozenset({
     "spri_cleanup", "stamp", "add_reagent", "pool_columns",
 })
 # Calls that pause for the operator or hand the step to an on-deck device.
-_HANDLED_CALLS = frozenset({"user_prompt", "offdeck_step"})
+_HANDLED_CALLS = frozenset({"user_prompt", "offdeck_step", "thermal_step"})
 
 
 @dataclass(frozen=True)
