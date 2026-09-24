@@ -43,7 +43,7 @@ def _raise_if_truncated(message: dict[str, Any]) -> dict[str, Any]:
     """A response cut off by the output-token limit before any tool call is a
     configuration problem, not an empty model turn: say so explicitly."""
     if message.get("finish_reason") == "length" and not message.get("tool_calls"):
-        raise LMStudioError(
+        raise LMOutputLimitError(
             "Model response hit the output-token limit (finish_reason=length) before "
             "calling a tool. Raise FLUENTVIBE_LM_MAX_TOKENS / --max-tokens or lower "
             "the reasoning effort."
@@ -70,6 +70,61 @@ class LMStudioError(Exception):
 
     def __str__(self) -> str:
         return self.message
+
+
+class LMOutputLimitError(LMStudioError):
+    """The reply hit the output-token limit before any tool call."""
+
+
+class LMRepetitionError(LMStudioError):
+    """The reply kept repeating one line; the stream was stopped."""
+
+    def __init__(self, line: str) -> None:
+        super().__init__(f"Model reply is looping on one line: {line[:160]!r}")
+        self.line = line
+
+
+def _loop_guard_enabled() -> bool:
+    return os.environ.get("FLUENTVIBE_LM_LOOP_GUARD", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+class _RepetitionWatch:
+    """Spots a streamed reply that keeps repeating one line or phrase."""
+
+    CHECK_EVERY = 1500   # characters between checks
+    TAIL = 6000          # characters examined
+    MIN_REPEATS = 8
+
+    def __init__(self) -> None:
+        self._text: list[str] = []
+        self._size = 0
+        self._checked_at = 0
+
+    def feed(self, piece: str) -> None:
+        self._text.append(piece)
+        self._size += len(piece)
+
+    def looping_line(self) -> str | None:
+        if self._size - self._checked_at < self.CHECK_EVERY:
+            return None
+        self._checked_at = self._size
+        tail = "".join(self._text)[-self.TAIL:]
+        lines = [line.strip() for line in tail.splitlines() if len(line.strip()) >= 12]
+        if lines:
+            from collections import Counter
+
+            line, count = Counter(lines).most_common(1)[0]
+            if count >= self.MIN_REPEATS and count * len(line) >= 0.4 * len(tail):
+                return line
+        # The same phrase over and over without line breaks.
+        for size in (20, 40, 80, 160, 320):
+            if len(tail) < size * self.MIN_REPEATS:
+                break
+            phrase = tail[-size:]
+            if phrase.strip() and tail.count(phrase) >= self.MIN_REPEATS and \
+                    tail.count(phrase) * size >= 0.5 * len(tail):
+                return phrase.strip()
+        return None
 
 
 class LMStudioChatClient:
@@ -125,6 +180,36 @@ class LMStudioChatClient:
         self._run_deadline = None
 
     def complete(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """One model turn. A reply that loops on one line, or runs out of
+        output tokens before any tool call, is retried once with a short
+        instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
+        try:
+            return self._complete_once(messages=messages, tools=tools)
+        except (LMRepetitionError, LMOutputLimitError) as exc:
+            if not _loop_guard_enabled():
+                raise
+            if self.trace_recorder is not None:
+                self.trace_recorder.record("turn_retry", reason=type(exc).__name__, error=str(exc))
+            print(f"[lm] {exc} -- retrying the turn once", flush=True)
+            if isinstance(exc, LMRepetitionError):
+                nudge = (
+                    f"Your previous reply got stuck repeating the same line ({exc.line[:120]!r}) and was "
+                    "stopped. Do not re-derive it. Decide now and make the tool call: the smallest fix "
+                    "with edit_draft, or the next simulate_python_draft."
+                )
+            else:
+                nudge = (
+                    "Your previous reply ran out of output tokens before any tool call. Keep the "
+                    "reasoning short and make the tool call now."
+                )
+            return self._complete_once(messages=[*messages, {"role": "user", "content": nudge}], tools=tools)
+
+    def _complete_once(
         self,
         *,
         messages: list[dict[str, Any]],
@@ -247,6 +332,7 @@ class LMStudioChatClient:
         tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason: str | None = None
         reasoning_parts: dict[str, list[str]] = {}
+        watch = _RepetitionWatch() if _loop_guard_enabled() else None
 
         for raw_line in response:
             if deadline is not None and time.monotonic() > deadline:
@@ -284,11 +370,21 @@ class LMStudioChatClient:
             delta = choice.get("delta") or {}
             if delta.get("content"):
                 content_parts.append(delta["content"])
+                if watch is not None:
+                    watch.feed(delta["content"])
             for key, value in _reasoning_fields(delta).items():
                 if isinstance(value, str):
                     reasoning_parts.setdefault(key, []).append(value)
+                    if watch is not None:
+                        watch.feed(value)
                 else:
                     reasoning_parts.setdefault(key, []).append(json.dumps(value, default=str))
+            if watch is not None and not tool_calls:
+                looping = watch.looping_line()
+                if looping is not None:
+                    if self.trace_recorder is not None:
+                        self.trace_recorder.record("request_error", error_type="repetition", line=looping)
+                    raise LMRepetitionError(looping)
             for call in delta.get("tool_calls") or []:
                 index = int(call.get("index", 0))
                 existing = tool_calls.setdefault(
