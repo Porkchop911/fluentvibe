@@ -116,6 +116,7 @@ def test_shipped_catalog_is_well_formed():
     always = {s.name for s in catalog if s.always_on}
     assert always == {
         "api-blocks",
+        "core-clarify-open-parameters",
         "core-worktable-api",
         "labware-and-liquid-classes",
     }
@@ -172,6 +173,7 @@ def test_skills_load_shares_enforce_posture():
         "edit_draft",
         "check_in_fluentcontrol",
         "pull_fluentcontrol_edits",
+        "ask_user",
     }
     assert scope.denied_tools() == enforce.denied_tools()
 
