@@ -82,7 +82,10 @@ def _fv_guess(name):
 
 
 def get_values(*names):
-    return [_FV_DEFAULTS[n] if n in _FV_DEFAULTS else _fv_guess(n) for n in names]
+    # A value the protocol already assigned (its in-file default) wins.
+    import inspect
+    local = inspect.currentframe().f_back.f_locals
+    return [local[n] if n in local else _FV_DEFAULTS[n] if n in _FV_DEFAULTS else _fv_guess(n) for n in names]
 """
 
 
@@ -329,41 +332,81 @@ def _sections(events):
     return sections
 
 
+_ADD_BEADS = re.compile(r"bead|ampure|axp|spri|mag|bind", re.I)
+_ADD_WASH = re.compile(r"wash|ethanol|etoh|alcohol", re.I)
+_ADD_ELUTE = re.compile(r"elut|\beb\b|\bte\b|water|nfw|h2o", re.I)
+_ADD_OTHER = re.compile(r"lysis|proteinase|\bpk\b|sample|master ?mix|enzyme|primer", re.I)
+
+
 def _cleanup_parameters(liquid) -> dict:
     """Bead volume, washes, wash and elution volume from a clean-up section.
 
-    Reads the moves into the plate that receives the most liquid (the clean-up
-    plate): the first reservoir addition is the beads, a volume added again and
-    again is the wash, the last addition is the elution buffer.
+    Follows one well of the plate that receives the most liquid (the clean-up
+    plate). Each reagent addition is named by its source labware (beads,
+    wash / ethanol, elution buffer; lysis and sample additions are ignored);
+    unnamed additions fall back to position: first = beads, repeated middle
+    source = wash, last = elution. Repeated trips from one source with no
+    removal in between are one addition (665 ul moved as 3 x 221.7 ul).
     """
     pairs, last = [], None
     for e in liquid:
         if e["kind"] == "aspirate":
-            last = e.get("labware")
-        elif e["kind"] == "dispense" and last and e.get("labware") and last != e["labware"]:
-            pairs.append((last, e["labware"], e.get("well"), e.get("volume")))
+            last = (e.get("labware"), e.get("well"))
+        elif e["kind"] == "dispense" and last and last[0] and e.get("labware") and last[0] != e["labware"]:
+            pairs.append((last[0], last[1], e["labware"], e.get("well"), e.get("volume")))
     if not pairs:
         return {}
     # The clean-up plate: the most-dispensed destination that is not a
     # reservoir or waste (supernatant often goes back into a reservoir well).
-    candidates = [p[1] for p in pairs if not re.search(r"reservoir|trough|waste|trash", p[1], re.I)]
-    plate = Counter(candidates or [p[1] for p in pairs]).most_common(1)[0][0]
-    additions = [p for p in pairs if p[1] == plate and p[3]]
+    candidates = [p[2] for p in pairs if not re.search(r"reservoir|trough|waste|trash", p[2], re.I)]
+    plate = Counter(candidates or [p[2] for p in pairs]).most_common(1)[0][0]
+    additions = [p for p in pairs if p[2] == plate and p[4]]
     if not additions:
         return {}
-    first_well = additions[0][2]
-    per_well = [p[3] for p in additions if p[2] == first_well]
-    if not per_well:
+    well = Counter(p[3] for p in additions).most_common(1)[0][0]
+    events: list[list] = []  # [source labware, source well, volume]
+    removed = False
+    for src, src_well, dest, dest_well, volume in pairs:
+        if src == plate and (src_well == well or not src_well):
+            removed = True
+            continue
+        if dest != plate or dest_well != well or not volume:
+            continue
+        if events and not removed and events[-1][:2] == [src, src_well]:
+            events[-1][2] += volume
+        else:
+            events.append([src, src_well, volume])
+        removed = False
+    if not events:
         return {}
-    out: dict = {"volume_ul": round(per_well[0], 2)}
-    counts = Counter(round(v, 1) for v in per_well[1:-1])
-    if counts:
-        wash, times = counts.most_common(1)[0]
-        if times >= 1 and wash > 0:
-            out["wash_ul"] = wash
-            out["washes"] = times
-    if len(per_well) > 1:
-        out["elute_ul"] = round(per_well[-1], 2)
+
+    def kind(event):
+        name = event[0]
+        for label, pattern in (("wash", _ADD_WASH), ("elute", _ADD_ELUTE), ("beads", _ADD_BEADS), ("other", _ADD_OTHER)):
+            if pattern.search(name):
+                return label
+        return None
+
+    kinds = [kind(e) for e in events]
+    beads = [e for e, k in zip(events, kinds) if k == "beads"]
+    washes = [e for e, k in zip(events, kinds) if k == "wash"]
+    elutes = [e for e, k in zip(events, kinds) if k == "elute"]
+    unnamed = [e for e, k in zip(events, kinds) if k is None]
+    if not beads and unnamed:
+        beads = [unnamed.pop(0)]
+    if not elutes and len(unnamed) > 1 and unnamed[-1] is events[-1]:
+        elutes = [unnamed.pop()]
+    if not washes and unnamed:
+        source = Counter((e[0], e[1]) for e in unnamed).most_common(1)[0][0]
+        washes = [e for e in unnamed if (e[0], e[1]) == source]
+    out: dict = {}
+    if beads:
+        out["volume_ul"] = round(beads[0][2], 2)
+    if washes:
+        out["wash_ul"] = round(statistics.median(e[2] for e in washes), 1)
+        out["washes"] = len(washes)
+    if elutes:
+        out["elute_ul"] = round(elutes[-1][2], 2)
     return out
 
 

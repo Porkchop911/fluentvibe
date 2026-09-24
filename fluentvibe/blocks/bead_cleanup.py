@@ -76,7 +76,12 @@ def spri_cleanup(
     Emptying tips into ``waste`` uses ``empty_liquid_class`` (``"Empty Tip"``).
     Derived per well: supernatant = sample + beads − retain; eluate transfer =
     elution − retain (``retain_volume_ul`` stays behind so the pellet is not
-    disturbed).
+    disturbed). Volumes above what the tips hold go in equal trips.
+
+    Defaults (2 washes of 150 µl) are the medians of the Opentrons corpus
+    bead-cleanup family (n=51; beads 120 µl, elution 60 µl there), see
+    ``scripts/corpus_spec_stats.py``. The ``sample_plate`` may also be a plate
+    an earlier step filled, e.g. the eluate plate of a previous clean-up.
 
     Preconditions (a :class:`BlockError` says what is missing):
 
