@@ -153,6 +153,31 @@ When *not* to use it:
 - You're publishing a versioned protocol → use drop-in with a
   meaningful `<ObjectName>`.
 
+## Path C — the authoring model checks its own drafts
+
+`fluentvibe.authoring.fc_feedback` turns the shell validator into feedback a
+local model can act on:
+
+- the `check_in_fluentcontrol` tool (skills mode) compiles the current draft,
+  opens it through the shell, reads the InfoPad, and returns findings with the
+  **Python line** and group that produced each error (via `Step.source_pos`),
+  a class (`out_of_reach`, `no_connector`, `duplicate_labware_name`, …) and a
+  fix hint; follow-on errors are folded in;
+- with `FLUENTVIBE_FC_CHECK=1` the authoring graph runs the check itself on
+  every draft that passes compile + simulate and, if the InfoPad is not clean,
+  sends the findings back for up to two repair turns before accepting;
+- each verdict is written to `fluentcontrol_check.json` in the run folder
+  (`scripts/eval_authoring.py` and `scripts/corpus_model_benchmark.py` report
+  it as the `fluentcontrol` column);
+- checks are serialised with a lock file and the shell script is restored after
+  each one. When FluentControl is not running the check says "unavailable"
+  and never fails a draft.
+
+Deck facts found this way are enforced at compile time so models do not need
+FluentControl to avoid them: MCA96 never in slim troughs, positions the arm
+cannot reach (`scripts/probe_deck_reach.py` → `<profile>/reach.json`), unique
+labware names, prompt timeout ≥ 1.
+
 ## Limitations
 
 - **No semantic validation in the deploy step.** Drop-in only proves

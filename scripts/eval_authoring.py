@@ -69,6 +69,22 @@ def _git_commit() -> str | None:
     return out.stdout.strip() or None
 
 
+def _fc_verdict(run_dir: Path) -> str:
+    """FluentControl InfoPad verdict of the run's last check, if one ran."""
+    path = run_dir / "fluentcontrol_check.json"
+    if not path.exists():
+        return ""
+    try:
+        check = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if check.get("ok") is True:
+        return "clean"
+    if check.get("ok") is None:
+        return "unavailable"
+    return f"{len(check.get('findings') or [])} finding(s)"
+
+
 def _build_prompt(user_text: str, pdf: Path) -> tuple[str, str]:
     """Return ``(prompt_with_attachment, extracted_source_text)``.
 
@@ -292,6 +308,7 @@ def main() -> int:
                 row["python"] = dest.name
             if rubric is not None:
                 row["score"] = f"{rubric.score:.3f}"
+                row["fluentcontrol"] = _fc_verdict(run_dir)
                 row.update({inv.key: inv.status for inv in rubric.invariants})
                 print(f"        status={row['status']} score={row['score']}")
             else:
