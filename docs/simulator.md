@@ -266,6 +266,11 @@ MCA tips set back into a box remember their origins when picked up again.
 | `cross_sample_tip_reuse` | A tip aspirates from or mixes in a well containing a sample it has not already touched. |
 | `sample_carryover_into_reagent` | A tip that touched a sample aspirates from or mixes in a sample-free well (a shared reagent source). |
 
+A second lineage, `Well.liquid_origins` (fed by `Tip.load_origins`), follows
+only liquid that was actually aspirated and dispensed, not residue on a reused
+tip. The rubric's `pooling_performed` uses it: when the source document pools
+samples, some well must end up with liquid from two or more samples.
+
 Dispense is treated as non-contact, so reusing tips to dispense a reagent into
 every sample from above is clean. Waste labware is ignored. Findings never
 raise: they are recorded on `SimulationReport.contamination_events` (first 50)

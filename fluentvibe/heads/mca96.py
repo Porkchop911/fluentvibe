@@ -36,6 +36,8 @@ class Tip:
     # Sample origins this tip has touched (simulator lineage tracking; see
     # ``simulator/contamination.py``). Empty for a fresh tip.
     sample_origins: frozenset = field(default_factory=frozenset)
+    # Samples whose liquid is in the tip right now (reset when it empties).
+    load_origins: frozenset = field(default_factory=frozenset)
 
     @property
     def volume_ul(self) -> float:

@@ -46,6 +46,7 @@ SEMANTIC_KEYS = (
     "eluate_recovered",
     "analyte_not_in_waste",
     "no_cross_contamination",
+    "pooling_performed",
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
 
@@ -618,7 +619,34 @@ def _check_no_cross_contamination(wt, has_analyte: bool) -> Invariant:
     return Invariant("no_cross_contamination", _FAIL, f"{summary}{where}")
 
 
-def score_semantic(wt) -> list[Invariant]:
+_POOL_MENTION = re.compile(r"\bpool(?:s|ed|ing)?\b", re.IGNORECASE)
+
+
+def _check_pooling_performed(final, has_analyte: bool, source_text: str | None) -> Invariant:
+    """If the document pools samples, some well must actually receive liquid
+    from two or more samples (simulator sample lineage), not just carry each
+    sample forward under a "pooling" label."""
+    if not source_text or not _POOL_MENTION.search(source_text):
+        return Invariant("pooling_performed", _NA, "source document does not pool samples")
+    if not has_analyte:
+        return Invariant("pooling_performed", _NA, "no analyte reagent to track")
+    best: tuple[int, str] = (0, "")
+    for lw in _iter_labware(final):
+        if _is_waste(lw):
+            continue
+        for address, well in getattr(lw, "wells", {}).items():
+            count = len(getattr(well, "liquid_origins", ()) or ())
+            if count > best[0]:
+                best = (count, f"{lw.label}:{address}")
+    if best[0] >= 2:
+        return Invariant("pooling_performed", _PASS, f"{best[0]} samples pooled in {best[1]}")
+    return Invariant(
+        "pooling_performed", _FAIL,
+        "document pools samples, but no well ever receives liquid from two samples",
+    )
+
+
+def score_semantic(wt, source_text: str | None = None) -> list[Invariant]:
     """Simulate ``wt`` (if needed) and score the bead-model ground truth."""
     if not getattr(wt, "snapshots", None):
         wt.simulate()
@@ -639,6 +667,7 @@ def score_semantic(wt) -> list[Invariant]:
         ),
         _check_analyte_not_in_waste(final, has_analyte),
         _check_no_cross_contamination(wt, has_analyte),
+        _check_pooling_performed(final, has_analyte, source_text),
     ]
 
 
@@ -661,7 +690,7 @@ def score_protocol(
     if simulate:
         try:
             wt = build_worktable_from_source(source, filename)
-            invariants.extend(score_semantic(wt))
+            invariants.extend(score_semantic(wt, source_text))
         except Exception as exc:  # noqa: BLE001 - any failure → semantic NA
             invariants.extend(
                 Invariant(k, _NA, f"did not simulate: {exc}") for k in SEMANTIC_KEYS

@@ -95,6 +95,9 @@ class Well:
     sample_origins: frozenset = field(default_factory=frozenset)
     """Sample wells (``"<labware>:<well>"``) whose liquid has reached this well.
     Simulator-only lineage for cross-contamination findings."""
+    liquid_origins: frozenset = field(default_factory=frozenset)
+    """Sample wells whose liquid was actually transferred into this well (not
+    just residue on a reused tip). Simulator-only; used to recognise pooling."""
 
     @property
     def volume_ul(self) -> float:
