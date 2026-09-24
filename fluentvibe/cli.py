@@ -200,6 +200,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_spec.add_argument("--endpoint", default=None)
     p_spec.add_argument("--model", default=None)
     p_spec.add_argument("--request-timeout", type=float, default=None)
+    p_spec.add_argument("--no-examples", dest="examples", action="store_false",
+                        help="do not show the model outlines of similar corpus protocols")
     p_spec.set_defaults(func=_cmd_spec)
 
     p_skeleton = sub.add_parser(
@@ -755,7 +757,12 @@ def _cmd_spec(args) -> int:
         kwargs["model"] = args.model
     if args.request_timeout is not None:
         kwargs["request_timeout_s"] = args.request_timeout
-    spec, problems, raw = extract_bench_spec(LMStudioChatClient(**kwargs), text)
+    context = None
+    if args.examples:
+        from .authoring.spec_retrieval import retrieval_context
+
+        context = retrieval_context(text)
+    spec, problems, raw = extract_bench_spec(LMStudioChatClient(**kwargs), text, extra_context=context)
     if spec is None:
         for problem in problems:
             print(f"error: {problem.where}: {problem.message}", file=sys.stderr)

@@ -1,0 +1,7620 @@
+[
+ {
+  "name": "0000025894-2",
+  "family": "protein-assay",
+  "title": "Variables Cell Lysis and BCA protocol - Part 2",
+  "description": "",
+  "sample_count": 5,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Adding Acetone (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Move tubes to -20 for 60 minutes. Centrifuge for 20 -30 minutes after this at 13000 rpm. Dry pellet.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Adding Buffer (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Sonicate sample for 15 minutes. Centrifuge sample. Heat Temperature Module to 37°C. Thaw LysC stock.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Adding Buffer To D3 (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 29.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Move samples in slot A4-A6 in Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap to A4-A6 of Temperature Mod",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Overnight digestion with LysC.",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "transfer",
+    "text": "Adding Buffer To D3 (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 29.0
+   },
+   {
+    "id": "s9",
+    "op": "transfer",
+    "text": "Adding LysC To Sample Wells (Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap -> Opentrons 24 Well Aluminum Block with NEST 2 mL Snapcap)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Digestion with LysC.",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 40.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     40.0
+    ]
+   },
+   {
+    "id": "s12",
+    "op": "transfer",
+    "text": "Adding Buffer To D5 (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 29.0
+   },
+   {
+    "id": "s13",
+    "op": "transfer",
+    "text": "Adding Trypsin To Sample Wells (Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap -> Opentrons 24 Well Aluminum Block with NEST 2 mL Snapcap)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Overnight digestion with Trypsin.",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "transfer",
+    "text": "Adding Buffer To D5 (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 29.0
+   },
+   {
+    "id": "s16",
+    "op": "transfer",
+    "text": "Adding Trypsin To Sample Wells (Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap -> Opentrons 24 Well Aluminum Block with NEST 2 mL Snapcap)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s17",
+    "op": "manual",
+    "text": "Digestion with Trypsin. Protein purification via stage tips / columns in wetlab.",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "0000025894",
+  "family": "protein-assay",
+  "title": "Variables Cell Lysis and BCA protocol - Part 1",
+  "description": "",
+  "sample_count": 18,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Adding Buffer To D6 (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 250.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Sonicate sample for 15 minutes. Put sample in A1 on temperature module.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Sample has heated for 10 minutes. Prepare BCA standards and reagent. Select \"resume\" to continue.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Adding SDS To Sample (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 30.0
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "Transferring Sample (Opentrons 24 Well Aluminum Block with NEST 2 mL Snapcap -> Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "Transferring Standards to Greiner Plate (Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap -> Greiner 96 Well Plate 382 µL)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s8",
+    "op": "add",
+    "text": "Adding BCA To Greiner Plate (Opentrons 10 Tube Rack with Falcon 4x50 mL, 6x15 mL Conical -> Greiner 96 Well Plate 382 µL)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Turn on SpectraMax. Take BCA plate to SpectraMax after 30 – 45 minutes. Put lid on BCA plate. Add ice cold acetone to de",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "0000030070",
+  "family": "new-family-candidate",
+  "title": "Modified Sera-Xtracta HMW DNA Kit Protocol",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "ADDING Lysis BUFFER (NEST 12 Well Reservoir 15 mL -> Opentrons 96 Deep Well Heater-Shaker Adapter with NEST Deep Well Plate 2 mL)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "TRANSFERRING SAMPLE",
+    "location": "deck",
+    "volume_ul": 665.0,
+    "washes": 1,
+    "wash_ul": 700.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Replace tipracks on slots 1, 4, 5, 7 and 8.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Add wash",
+    "location": "deck",
+    "volume_ul": 2100.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Remove tiprack on slots 4 and 8. Place Eppendorf plate on slot 4 (this will get 10ul) Place Eppendorf plate on slot 8 (t",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "add",
+    "text": "After pause (NEST 12 Well Reservoir 15 mL -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Vortex elution for 15s off roboto",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "006uv00000bemutyat_p1",
+  "family": "ngs-library-prep",
+  "title": "NEBNext UltraExpress® RNA Library Prep Kit_NEB #E3330S/L_Part1_V1",
+  "description": "Part 1: mRNA Isolation, Fragmentation and Priming Starting with Total RNA",
+  "sample_count": 17,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Temperature Module temperature to 4.0 °C (rounded off to nearest intege)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Protocol starts",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 1,
+    "wash_ul": 50.0,
+    "elute_ul": 50.0
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Washing Buffer wash starts (Reagent Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "washing_buffer_1 Removal starts",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Replace empty 200ul filter tips",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "Washing Buffer wash starts (Reagent Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s8",
+    "op": "bead_cleanup",
+    "text": "washing_buffer_2 Removal starts",
+    "location": "deck",
+    "volume_ul": 6.5
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "---The Part 1 protocol has been completed. Press 'Resume' button to finish the protocol--- Prepare the reagents for Part",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "006uv00000bemutyat_p2",
+  "family": "ngs-library-prep",
+  "title": "NEBNext UltraExpress® RNA Library Prep Kit_NEB #E3330S/L_Part2_V1",
+  "description": "Part 2: First Strand cDNA Synthesis, Second Strand cDNA Synthesis, and Purification of Double-stranded cDNA",
+  "sample_count": 17,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Thermocycler well block temperature to 4.0 °C; Opening Thermocycler lid; Setting Temperature Module temperature to 4.0 °C (rounded off to nearest intege)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Protocol starts (Reagent Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 17.5
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Please replace the empty and partial 50ul filter tips before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "The Part 2 protocol has been completed. Press 'Resume' button to get the final_plate_2. samples can be stored overnight ",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "incubate",
+    "text": "After pause (Opening Thermocycler lid; Closing Thermocycler lid; Deactivating Thermocycler lid heating; Deactivating Thermocycler well block heating; Deactivating Temperatur)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "006uv00000bemutyat_p3",
+  "family": "ngs-library-prep",
+  "title": "NEBNext UltraExpress® RNA Library Prep Kit_NEB #E3330S/L_Part3_V1",
+  "description": "Part 3: End Prep of cDNA Library, Adaptor Ligation, and PCR Enrichment of Adaptor Ligated DNA",
+  "sample_count": 24,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Thermocycler well block temperature to 4.0 °C; Opening Thermocycler lid; Setting Temperature Module temperature to 4.0 °C (rounded off to nearest intege)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Protocol starts (Reagent Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Freshly make 66 µL = 55 µL NEBnext MSTC High Yield MM + 11 µL Index Primer in each well of the index plate After resumin",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "After pause (index plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 60.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "The protocol has been completed. Please remove the reagent plate on the Temperature module. Temperature module will be d",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "incubate",
+    "text": "After pause (Opening Thermocycler lid; Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "006uv00000bemutyat_p4",
+  "family": "ngs-library-prep",
+  "title": "NEBNext UltraExpress® RNA Library Prep Kit_NEB #E3330S/L_Part4_V1",
+  "description": "Part 4:Phased Bead Cleanup of PCR Reaction",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Closing Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Protocol starts",
+    "location": "deck",
+    "volume_ul": 70.0,
+    "washes": 1,
+    "wash_ul": 50.0,
+    "elute_ul": 23.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "The protocol is complete. Please remove the final plate.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Opening Thermocycler lid; Closing Thermocycler lid; Deactivating Thermocycler lid heating; Deactivating Thermocycler well block heating; Deactivating Temperatur)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "020194-part1",
+  "family": "simple-transfer",
+  "title": "Protocol v0.1",
+  "description": "Antibody Protocol Part 1",
+  "sample_count": 17,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Target Temperature reached! Please place the Samples and reagents on the Deck",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Transferring FACS from Reservoir to Single Stain and FMO (Facs, Brilliant & ABCs -> Single Stains)",
+    "location": "deck",
+    "volume_ul": 150.0
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Transferring Antibodies 1 or Antibodies 2 to Single Stain (Antibodies 1 -> Single Stains)",
+    "location": "deck",
+    "volume_ul": 119.1
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Transferring Antibodies 1 or Antibodies 2 to Single Stain (Antibodies 1 -> FMO)",
+    "location": "deck",
+    "volume_ul": 49.4
+   },
+   {
+    "id": "s6",
+    "op": "pool",
+    "text": "Transferring Q from slot 7 to Slot 1 tube rack (Antibodies 1 -> Brilliant & ABCs)",
+    "location": "deck",
+    "volume_ul": 58.5
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Change the pipette! This protocol will halt here! You may proceed to Part 2",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "0451f3",
+  "family": "bead-cleanup",
+  "title": "Zymo Zyppy™-96 Plasmid MagBead Miniprep",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 100.0,
+    "washes": 3,
+    "wash_ul": 150.0,
+    "elute_ul": 50.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Centrifuge the extraction plate. Replace on magnetic module when finished.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 750.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Discard plate on magnetic module. Move collection plate (slot 2) to the magnetic module (slot 1)",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 3,
+    "wash_ul": 200.0,
+    "elute_ul": 200.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Move the collection plate (slot 1) to a heating block for 30mins 65C to remove the residual ethanol. Replace the plate o",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 40.0
+   }
+  ]
+ },
+ {
+  "name": "4e4c0c-airgap-full-volume",
+  "family": "reagent-distribution",
+  "title": "KingFisher Flex Plate Set Up",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (12-Well Reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "wash buffer (80 Percent EtOH -> Wash Plate 2)",
+    "location": "deck",
+    "volume_ul": 186.67
+   }
+  ]
+ },
+ {
+  "name": "6d901d-1-2",
+  "family": "normalization",
+  "title": "Cherrypicking with multi-channel pipette substituting for a single channel pipette",
+  "description": "",
+  "sample_count": 87,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "One or more minimum volume warnings were detected Do you wish to continue?",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "After pause (USA Scientific 12 Well Reservoir 22 mL -> NEST 96 Well Plate 200 µL Flat)",
+    "location": "deck",
+    "volume_ul": 23.0
+   }
+  ]
+ },
+ {
+  "name": "ampure-xp-48x",
+  "family": "ngs-library-prep",
+  "title": "AMPure XP 48x v8",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Adding tiprack_50_1 (Sample Plate 1 -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_1",
+    "location": "deck",
+    "volume_ul": 40.0,
+    "washes": 2,
+    "wash_ul": 200.0,
+    "elute_ul": 22.0
+   }
+  ]
+ },
+ {
+  "name": "bca_peptide_assay",
+  "family": "protein-assay",
+  "title": "Pierce BCA Peptide Assay",
+  "description": "",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (SAMPLES -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Measure absorbance at 480 nm on a plate reader",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "bca_protein_assay",
+  "family": "protein-assay",
+  "title": "Pierce BCA Protein Assay",
+  "description": "",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (SAMPLES -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 55.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Measure absorbance at 562 nm on a plate reader",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "blood",
+  "family": "plate-reformatting",
+  "title": "Blood Punch Distribution",
+  "description": "",
+  "sample_count": 24,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (sample sources -> storage plate)",
+    "location": "deck",
+    "volume_ul": 15.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Check for QC",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "bradford_protein_assay",
+  "family": "protein-assay",
+  "title": "Pierce Bradford Protein Assay",
+  "description": "",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (SAMPLES -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Measure absorbance at 595 nm on a plate reader",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "dna_extraction_buffer_a",
+  "family": "reagent-distribution",
+  "title": "Sun World Procedure 1",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Agilent 1 Well Reservoir 290 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 70.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Change Buffer A to dH2O",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "dna_extraction_buffer_b",
+  "family": "reagent-distribution",
+  "title": "Sun World Procedure 2",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Agilent 1 Well Reservoir 290 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 60.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Change Buffer A to dH2O",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "easypep_cleanup",
+  "family": "new-family-candidate",
+  "title": "Sample Prep for MS (EasyPep Cleanup) - Flex w/ Thermal Cycler",
+  "description": "",
+  "sample_count": 15,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Load Working Plate on Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "washes": 2,
+    "wash_ul": 570.0,
+    "elute_ul": 85.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Load Wash and Elution Buffers",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "washes": 2,
+    "wash_ul": 260.0,
+    "elute_ul": 160.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Eluted Peptides Ready for LC-MS",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "easypep_digest_tmt",
+  "family": "protein-assay",
+  "title": "Sample Prep for MS (EasyPep Digestion and TMT Labeling) - Flex w/ Thermal Cycler",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler lid temperature to 60.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     60.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Load Reagents for Protein Digestion on Deck",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "After pause (REAGENTs FOR DIGESTION -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 15.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Digestion Complate",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Load Reagents for TMT Labeling on Deck",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "After pause (WORKING PLATE -> LABELED PROTEIN DIGESTs, COMBINED)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Peptide Labeling Complete",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "evercode-whole-transcriptomewt-kit-parse-biosciences-protocol2",
+  "family": "ngs-library-prep",
+  "title": "cDNA capture and Amplification using PBMC cells",
+  "description": "cDNA Capture and Amplification protocol using the Flex with Evercode WT v3 kit",
+  "sample_count": 13,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "After pause (Tubes -> Reservoir)",
+    "location": "deck",
+    "volume_ul": 22.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 1000 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "ready",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 125.0,
+    "washes": 1,
+    "wash_ul": 125.0,
+    "elute_ul": 100.0
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 125.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "transfer",
+    "text": "After pause (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Reservoir)",
+    "location": "deck",
+    "volume_ul": 75.0
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 110.0,
+    "washes": 1,
+    "wash_ul": 72.0,
+    "elute_ul": 100.0
+   },
+   {
+    "id": "s18",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s19",
+    "op": "add",
+    "text": "After pause (Tubes -> Sample_plate_2)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s20",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s21",
+    "op": "incubate",
+    "text": "After pause (Opening Thermocycler lid)",
+    "location": "off_deck",
+    "temp_c": [
+     23.0,
+     37.0
+    ]
+   },
+   {
+    "id": "s22",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s23",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   }
+  ]
+ },
+ {
+  "name": "evercode-whole-transcriptomewt-kit-parse-biosciences-protocol3",
+  "family": "ngs-library-prep",
+  "title": "Sequencing Library Preparation using PBMC cells",
+  "description": "Fragmentation, End Prep, post-fragmentation and end prep size selection , Adapter Ligation, post-ligation purification, Barcoding Round 4 protocol using the Flex with Parse Evercode WT v3 kit",
+  "sample_count": 64,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Tubes -> Sample_plate_1)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Thermocycler lid temperature to 70.0 °C; Closing Thermocycler lid; Setting Thermocycler well block temperature to 32.0 °C with a hold time of 10.0 minut)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     24.0,
+     32.0,
+     65.0,
+     70.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 80.0,
+    "washes": 1,
+    "wash_ul": 800.0,
+    "elute_ul": 800.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Setting Thermocycler well block temperature to 20.0 °C with a hold time of 15.0 minutes and 0 seconds; Setting Thermocycler well block)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     20.0
+    ]
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0,
+    "washes": 1,
+    "wash_ul": 100.0,
+    "elute_ul": 23.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "incubate",
+    "text": "After pause (Setting Thermocycler lid temperature to 105.0 °C; Closing Thermocycler lid; Setting Thermocycler well block temperature to 95.0 °C with a hold time of 3.0 minut)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     72.0,
+     95.0,
+     105.0
+    ]
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0,
+    "washes": 1,
+    "wash_ul": 100.0,
+    "elute_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "evotips_96ch_2",
+  "family": "purification",
+  "title": "Sample Clean-up by Evotips",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Pausing robot operation",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Pausing robot operation",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (Samples -> Evotips)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Pausing robot operation",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (Solvent A -> Evotips)",
+    "location": "deck",
+    "volume_ul": 75.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Pausing robot operation",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Pause",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "flexuniversaldemo",
+  "family": "pcr-setup",
+  "title": "Universal_test_Protocol_Demo_Flex with Plate reader_May2025",
+  "description": "",
+  "sample_count": 22,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "20260924-13.34.58_Single Detection Result: {450: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "20260924-13.34.58_Single Detection Result: {562: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "20260924-13.34.58_Single Detection Result: {600: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "20260924-13.34.58_Single Detection Result: {650: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "flowratevolumetestprotocol_v1",
+  "family": "simple-transfer",
+  "title": "Flow rate/volume test protocol_CSV_Tab delimiter or comma_V1",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (NEST 96 Well Plate 100 µL PCR Full Skirt -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 60.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "THE PROTOCOL IS COMPLETE",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "forenseq_dna_signature_prep_pt2",
+  "family": "pooling",
+  "title": "Forenseq DNA Signature Prep Plus Kit - Pool and Denature",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please make sure there are fresh tubes in A1 and B1 of the stand-alone tube rack, as well as in A1 of the aluminum block",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Pooling Libraries into 1 Column (Sample Starting Plate -> Intermediate Plate)",
+    "location": "deck",
+    "volume_ul": 15.0
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Pooling Libraries into 1 Tube (Intermediate Plate -> Room Temp Tubes)",
+    "location": "deck",
+    "volume_ul": 80.0
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Transferring Denaturation Mix (Room Temp Tubes -> Warm Tubes)",
+    "location": "deck",
+    "volume_ul": 162.5
+   }
+  ]
+ },
+ {
+  "name": "hdq_dna_flex_96-bacteria",
+  "family": "bead-cleanup",
+  "title": "Omega Bio-tek Mag-Bind Blood & Tissue DNA HDQ 96 Kit- Bacteria",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Transferring TL and PK to samples (TL reservoir -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 280.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Transferring TL and Sample plates",
+    "location": "deck",
+    "volume_ul": 340.0,
+    "washes": 3,
+    "wash_ul": 600.0,
+    "elute_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "hdq_dna_flex_multi-bacteria",
+  "family": "bead-cleanup",
+  "title": "Omega Bio-tek Mag-Bind Blood & Tissue DNA HDQ 96 Kit- Bacteria",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (reagent reservoir 1 -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 290.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Transferring AL to samples",
+    "location": "deck",
+    "volume_ul": 240.0,
+    "washes": 1,
+    "wash_ul": 360.0,
+    "elute_ul": 120.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "After pause (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "hdq_dna_flex_multi-cells",
+  "family": "bead-cleanup",
+  "title": "Omega Bio-tek Mag-Bind Blood & Tissue DNA HDQ 96 Kit- Mammalian Cells",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (reagent reservoir 1 -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 320.0
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "Incubating Beads and Bind on H-S (Setting Heater-Shaker to Shake at 1800 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Removing Supernatant",
+    "location": "deck",
+    "volume_ul": 620.0,
+    "washes": 1,
+    "wash_ul": 620.0,
+    "elute_ul": 120.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "hdq_dna_ot2-cells",
+  "family": "bead-cleanup",
+  "title": "Omega HDQ DNA Extraction from Cells",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 265.0,
+    "washes": 6,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 170.0,
+    "washes": 6,
+    "wash_ul": 20.0,
+    "elute_ul": 100.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (Sample Plate -> Opentrons 96 Well Aluminum Block with NEST Well Plate 100 µL)",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "hdq_dna_ot2-saliva",
+  "family": "bead-cleanup",
+  "title": "Omega HDQ DNA Extraction from Saliva",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 235.0,
+    "washes": 8,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 170.0,
+    "washes": 6,
+    "wash_ul": 20.0,
+    "elute_ul": 100.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "idt-xgen-ez-48x",
+  "family": "ngs-library-prep",
+  "title": "IDT xGen EZ 48x",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 70.0 °C; Setting Temperature Module tem)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     70.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Temperatures are Set, Place any required Sample Plate and/or Reagent Plate(s) and Resume when ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 48.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 21.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-dna-prep-24x-for-ot2",
+  "family": "ngs-library-prep",
+  "title": "Illumina DNA Prep",
+  "description": "",
+  "sample_count": 9,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Opening Thermocycler lid)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "After pause (Opentrons 96 Well Aluminum Block with Bio-Rad Well Plate 200 µL -> NEST 96 Well Plate 100 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Seal, Run TAG (15min)",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Thermocycler starting 1 repetitions of cycle composed of the following steps: [{'temperature': 55, 'hold_time_minutes': 15}]; Setting )",
+    "location": "off_deck",
+    "temp_c": [
+     10.0
+    ]
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Remove Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Add TSB to Reagent Wells",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "add",
+    "text": "After pause (Opentrons 96 Well Aluminum Block with Bio-Rad Well Plate 200 µL -> NEST 96 Well Plate 100 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Seal, Run PTC (15min)",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Thermocycler starting 1 repetitions of cycle composed of the following steps: [{'temperature': 37, 'hold_time_minutes': 15}]; Setting )",
+    "location": "off_deck",
+    "temp_c": [
+     10.0
+    ]
+   },
+   {
+    "id": "s11",
+    "op": "manual",
+    "text": "Remove Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "PLACE sample_plate on MAGNET",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0,
+    "washes": 2,
+    "wash_ul": 100.0,
+    "elute_ul": 10.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "PLACE sample_plate on THERMO",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "manual",
+    "text": "Seal, Run PCR (25min)",
+    "location": "manual"
+   },
+   {
+    "id": "s16",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Thermocycler starting 1 repetitions of cycle composed of the following steps: [{'temperature': 68, 'hold_time_minutes': 3}, {'temperat)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s17",
+    "op": "manual",
+    "text": "Remove Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s18",
+    "op": "manual",
+    "text": "PLACE sample_plate on MAGNET",
+    "location": "manual"
+   },
+   {
+    "id": "s19",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s20",
+    "op": "manual",
+    "text": "RESET TIPS",
+    "location": "manual"
+   },
+   {
+    "id": "s21",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 150.0,
+    "washes": 1,
+    "wash_ul": 150.0,
+    "elute_ul": 32.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-dna-prep-32x-double-sided-size-selection",
+  "family": "ngs-library-prep",
+  "title": "Illumina DNA Prep 32x v10",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_200_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_50_1",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Please swap the PCR plate adapter with Deepwell plate adapter on the heater-shaker module.",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 1,
+    "wash_ul": 10.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-dna-prep-48x",
+  "family": "ngs-library-prep",
+  "title": "Illumina DNA Prep 48x v8",
+  "description": "",
+  "sample_count": 9,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_200_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_50_1",
+    "location": "deck",
+    "volume_ul": 100.0,
+    "washes": 2,
+    "wash_ul": 100.0,
+    "elute_ul": 300.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-dna-prep-96x",
+  "family": "ngs-library-prep",
+  "title": "Illumina DNA Prep 96x v8",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 1,
+    "wash_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "ADDING PLATE",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (NEST 96 Deep Well Plate 2mL -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "ADDING PLATE",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 40.0,
+    "washes": 1,
+    "wash_ul": 32.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "ADDING PLATE",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-dna-prep-pcr-free",
+  "family": "ngs-library-prep",
+  "title": "Illumina PCR-Free DNA Prep",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Opening Thermocycler lid)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Adding 50 ul tip rack #1 to slot A2 (Temp Module Reservoir Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Adding Stop Solution to Column 1 to Stop Tagmentation",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Adding 200 ul tip rack #1 to slot A3 (Sample Plate -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 80.0
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "Adding TWB",
+    "location": "deck",
+    "volume_ul": 160.0
+   },
+   {
+    "id": "s6",
+    "op": "add",
+    "text": "Ligating Indexes (Temp Module Reservoir Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 45.0
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "Adding and Mixing Adapters",
+    "location": "deck"
+   },
+   {
+    "id": "s8",
+    "op": "transfer",
+    "text": "Adding and Mixing HP3 (NEST 96 Deep Well Plate 2mL -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 45.0
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "Adding and Mixing Cleanup Beads",
+    "location": "deck",
+    "volume_ul": 36.0
+   },
+   {
+    "id": "s10",
+    "op": "transfer",
+    "text": "Adding 200 ul tip rack #2 to slot B2 (NEST 96 Deep Well Plate 2mL -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s11",
+    "op": "transfer",
+    "text": "Wash # 2 with Ethanol (Sample Plate -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 110.0
+   },
+   {
+    "id": "s12",
+    "op": "bead_cleanup",
+    "text": "Adding RSB to Columns: 1",
+    "location": "deck",
+    "volume_ul": 22.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-mrna-stranded",
+  "family": "ngs-library-prep",
+  "title": "Illumina Stranded mRNA Prep,Ligation",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (NEST 96 Deep Well Plate 2mL -> Sample_1)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Elute mRNA",
+    "location": "deck",
+    "volume_ul": 8.0,
+    "washes": 1,
+    "wash_ul": 25.0,
+    "elute_ul": 19.5
+   },
+   {
+    "id": "s3",
+    "op": "pool",
+    "text": "LIGATE ANCHORS (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
+    "location": "deck",
+    "volume_ul": 3.75
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "CLEANUP FRAGMENTS",
+    "location": "deck",
+    "volume_ul": 10.0,
+    "washes": 1,
+    "wash_ul": 20.0,
+    "elute_ul": 17.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-nextera-xt-library-prep-part1",
+  "family": "ngs-library-prep",
+  "title": "Illumina Nextera XT NGS Prep 1: Tagment Genomic DNA & Amplify Libraries",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (reagent rack -> output plate)",
+    "location": "deck",
+    "volume_ul": 7.5
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Centrifuge at 280 Ã— g at 20Â°C for 1 minute. Place on the preprogrammed thermal cycler and run the tagmentation program",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "After pause (reagent rack -> output plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Centrifuge at 280 Ã— g at 20Â°C for 1 minute. Place the plate back on slot 2.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "add",
+    "text": "After pause (reagent rack -> output plate)",
+    "location": "deck",
+    "volume_ul": 15.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-nextera-xt-library-prep-part2",
+  "family": "ngs-library-prep",
+  "title": "Illumina Nextera XT NGS Prep 2: Clean-Up Libraries",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (Load Plate -> Bio-Rad 96 Well Plate 200 µL PCR)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 2 minutes.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 200.0,
+    "washes": 1,
+    "wash_ul": 200.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 2 minutes.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-nextera-xt-library-prep-part3",
+  "family": "ngs-library-prep",
+  "title": "Illumina Nextera XT NGS Prep 3: Normalize Libraries",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (Load Plate -> Bio-Rad 96 Well Plate 200 µL PCR)",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 30 minutes. Place the plate back on the MagDeck in slot 4.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 45.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 5 minutes. Place the plate back on the MagDeck in slot 4.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "pool",
+    "text": "After pause (Bio-Rad 96 Well Plate 200 µL PCR -> Reservoir, 12-channel)",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 5 minutes. Place the plate back on the MagDeck in slot 4.",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Shake at 1800 rpm for 5 minutes. Place the plate back on the MagDeck in slot 4.",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   }
+  ]
+ },
+ {
+  "name": "illumina-stranded_total_rna_ribo-zero",
+  "family": "ngs-library-prep",
+  "title": "Illumina Stranded Total RNA Prep, Ligation with Ribo-Zero Plus, Tip Tracking",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "pool",
+    "text": "Start (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
+    "location": "deck",
+    "volume_ul": 4.5
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "REMOVE PROBES (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "CLEANUP RNA",
+    "location": "deck",
+    "volume_ul": 8.5,
+    "washes": 1,
+    "wash_ul": 8.0,
+    "elute_ul": 19.5
+   },
+   {
+    "id": "s4",
+    "op": "pool",
+    "text": "LIGATE ANCHORS (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
+    "location": "deck",
+    "volume_ul": 3.75
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "CLEANUP FRAGMENTS",
+    "location": "deck",
+    "volume_ul": 10.0,
+    "washes": 1,
+    "wash_ul": 20.0,
+    "elute_ul": 17.0
+   }
+  ]
+ },
+ {
+  "name": "imac-by-ni-nta-magnetic-agarose-beads-on-flex-plate-preparation",
+  "family": "purification",
+  "title": "Immobilized Metal Affinity Chromatography by Ni-NTA Magnetic Agarose Beads (plate preparation) - 96-well setting on Opentrons Flex",
+  "description": "This protocol prepares reagent plates for automated immobilized metal affinity chromatography (IMAC) using Ni-NTA magnetic agarose beads (up to 96 samples).",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Move the Working Plate to the Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "After pause (beads -> working plate)",
+    "location": "deck",
+    "volume_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "imac-by-ni-nta-magnetic-agarose-beads-on-flex",
+  "family": "purification",
+  "title": "Immobilized Metal Affinity Chromatography by Ni-NTA Magnetic Agarose Beads - 96-well setting on Opentrons Flex",
+  "description": "The protocol automates immobilized metal affinity chromatography (IMAC) using Ni-NTA magnetic agarose beads to isolate a protein of interest from liquid samples (up to 96 samples).",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Move the Working Plate to the Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 410.0,
+    "washes": 2,
+    "wash_ul": 510.0,
+    "elute_ul": 260.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Protocol Complete",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "immunoprecipitation-by-dynabeads-on-flex-96ch",
+  "family": "bead-cleanup",
+  "title": "Immunoprecipitation by Dynabeads - 96-well setting on Opentrons Flex with 96 channel pipette",
+  "description": "The protocol automates immunoprecipitation to isolate a protein of interest from liquid samples (up to 96 samples) by using protein A– or protein G–coupled magnetic beads.",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Move the Working Plate to the Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "washes": 3,
+    "wash_ul": 210.0,
+    "elute_ul": 60.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Protocol Complete",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "immunoprecipitation-by-dynabeads-on-flex-reagents-in-15-ml-tubes",
+  "family": "bead-cleanup",
+  "title": "Immunoprecipitation by Dynabeads - 96-well setting on Opentrons Flex (Reagents in 15 mL tubes)",
+  "description": "The protocol automates immunoprecipitation to isolate a protein of interest from liquid samples (up to 96 samples) by using protein A– or protein G–coupled magnetic beads.",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Move the Working Plate to the Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 60.0,
+    "washes": 3,
+    "wash_ul": 210.0,
+    "elute_ul": 60.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Protocol Complete",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "immunoprecipitation-by-dynabeads-on-flex",
+  "family": "purification",
+  "title": "Immunoprecipitation by Dynabeads - 96-well setting on Opentrons Flex",
+  "description": "The protocol automates immunoprecipitation to isolate a protein of interest from liquid samples (up to 96 samples) by using protein A– or protein G–coupled magnetic beads.",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Move the Working Plate to the Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 60.0,
+    "washes": 3,
+    "wash_ul": 210.0,
+    "elute_ul": 60.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Protocol Complete",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "invitrogen_elisa_captureabcoating",
+  "family": "elisa",
+  "title": "Invitrogen Uncoated ELISA on Flex - Capture Ab Coating (up to 6 targets)",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Seal the ELISA Plate with Slit Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Move the ELISA Plate to the Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (CAPTURE AB -> ELISA PLATE)",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Incubation on Deck",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Proceed to Target Capture",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "invitrogen_elisa_signaldevelopment",
+  "family": "elisa",
+  "title": "Invitrogen Uncoated ELISA on Flex - Signal Development (up to 6 targets)",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Load the ELISA Plate on the Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "pool",
+    "text": "After pause (ELISA PLATE -> WASTE - max. 290 mL)",
+    "location": "deck",
+    "volume_ul": 185.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Add substrate solution into the reagent reservoir",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "After pause (ENZYME, SUBSTRATE, STOP -> ELISA PLATE)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Move the ELISA Plate to the Reader",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "invitrogen_elisa_targetcapture",
+  "family": "elisa",
+  "title": "Invitrogen Uncoated ELISA on Flex - Target Capture (up to 6 targets)",
+  "description": "",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Load the ELISA Plate on the Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "After pause (ELISA PLATE -> ELISA PLATE)",
+    "location": "deck"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Incubation on Deck",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Proceed to Signal Development",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "kapa-library-quant-48x",
+  "family": "pcr-setup",
+  "title": "KAPA Library Quant 48x v8",
+  "description": "",
+  "sample_count": 16,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Adding tiprack_200_1 (Reservoir -> Armadillo 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 96.5
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Adding tiprack_50_1 (Armadillo 96 Well Plate 200 µL PCR Full Skirt -> Applied Biosystems MicroAmp 384 Well Plate 40 µL)",
+    "location": "deck",
+    "volume_ul": 10.0
+   }
+  ]
+ },
+ {
+  "name": "kapahyperplus",
+  "family": "ngs-library-prep",
+  "title": "KAPA HyperPlus Library Preparation",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Opening Thermocycler lid)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "pool",
+    "text": "Adding 50 ul tip rack #1 to slot A2 (Temp Module Reservoir Plate -> Sample Pate)",
+    "location": "deck",
+    "volume_ul": 12.5
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Adding 200 ul tip rack #1 to slot A3",
+    "location": "deck",
+    "volume_ul": 88.0
+   },
+   {
+    "id": "s4",
+    "op": "pool",
+    "text": "Wash # 1 with Ethanol (NEST 96 Deep Well Plate 2mL -> Sample Pate)",
+    "location": "deck",
+    "volume_ul": 160.0
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "Adding RSB to Columns: 1",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 30.0,
+    "elute_ul": 50.0
+   },
+   {
+    "id": "s6",
+    "op": "pool",
+    "text": "Wash # 1 with Ethanol (NEST 96 Deep Well Plate 2mL -> Sample Pate)",
+    "location": "deck",
+    "volume_ul": 160.0
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "Adding RSB to Columns: 1",
+    "location": "deck",
+    "volume_ul": 25.0
+   }
+  ]
+ },
+ {
+  "name": "ligseq",
+  "family": "ngs-library-prep",
+  "title": "Nanopore Genomic Ligation 24x v5",
+  "description": "",
+  "sample_count": 4,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 6.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     6.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Remove Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 60.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 61.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Remove Seal",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-dna-food",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_DNA_Food_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 45.0,
+    "washes": 11,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-dna-microbiome",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_DNA_Microbiome_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 45.0,
+    "washes": 9,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 220.0,
+    "washes": 3,
+    "wash_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-pathogen",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_Pathogen_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 40.0,
+    "washes": 12,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-rna",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_RNA_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 48.0,
+    "washes": 7,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 245.0,
+    "washes": 8,
+    "wash_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-tissue",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_Tissue_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 44.0,
+    "washes": 9,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "macherey-nagel-nucleomag-virus",
+  "family": "bead-cleanup",
+  "title": "NucleoMag_Virus_Rev01",
+  "description": "",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 9,
+    "wash_ul": 20.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "magmax_rna_flex_multi-cells",
+  "family": "bead-cleanup",
+  "title": "Applied Biosystems MagMAX-96 Total RNA Isolation Kit",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 160.0,
+    "washes": 1,
+    "wash_ul": 160.0,
+    "elute_ul": 60.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty the waste bin of all the tips before continuing.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 70.0
+   }
+  ]
+ },
+ {
+  "name": "magnesil",
+  "family": "bead-cleanup",
+  "title": "Promega MagneSil Purification",
+  "description": "",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 90.0,
+    "washes": 1,
+    "wash_ul": 120.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Pausing operation for 2 minutes.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0,
+    "washes": 1,
+    "wash_ul": 30.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Pausing operation for 10 minutes.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "Transferring 250uL from Odd columns to Even columns",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 2,
+    "wash_ul": 100.0,
+    "elute_ul": 100.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Please ensure elution plate is on deck. When ready, click RESUME",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "bead_cleanup",
+    "text": "Transferring 100µL Elution Buffer",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s9",
+    "op": "incubate",
+    "text": "Incubating for 10 minutes.",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   }
+  ]
+ },
+ {
+  "name": "magnesil_rna_ot2",
+  "family": "bead-cleanup",
+  "title": "Promega MagneSil Total RNA Extraction from Cells & Bacteria",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 260.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please move plate from Magdeck to Heater-Shaker module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 2000 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please move plate from Magdeck to Heater-Shaker module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 70.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Please move plate from Magdeck to Heater-Shaker module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "add",
+    "text": "After pause (Reagent Reservoir 1 -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Please move plate from Heater-Shaker to Magdeck module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0,
+    "washes": 1,
+    "wash_ul": 50.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Please move plate from Magdeck to Heater-Shaker module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 2000 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Please move plate from Heater-Shaker to Magdeck module before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   }
+  ]
+ },
+ {
+  "name": "micro-bio-id",
+  "family": "new-family-candidate",
+  "title": "microBioID Protocol",
+  "description": "",
+  "sample_count": 19,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (NEST 96 Deep Well Plate 2mL -> Corning 96 Well Plate 360 µL Flat)",
+    "location": "deck",
+    "volume_ul": 45.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 80.0,
+    "washes": 1,
+    "wash_ul": 80.0,
+    "elute_ul": 80.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Replace tip racks on deck and on expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 1,
+    "wash_ul": 50.0,
+    "elute_ul": 50.0
+   },
+   {
+    "id": "s5",
+    "op": "pool",
+    "text": "REMOVING SUPER (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 27.5
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "ADDING ABC (NEST 96 Deep Well Plate 2mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "“Add fresh Trypsin in ABC in 1.5mL tube to A1 4-1 tube rack”",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "add",
+    "text": "ADDING DIGESTION BUFFER (Opentrons 24 Tube Rack with Eppendorf 1.5 mL Safe-Lock Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 41.0
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Add a lid/seal to the pcr plate on the heater shaker before digestion",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 1200 RPM and waiting until reached; Deactivating Shaker; Deactivating Heater)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "ADDING FORMIC ACID",
+    "location": "deck"
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Replace tip racks on deck and on expansion slots",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "mn_dna_flex_96-cells",
+  "family": "bead-cleanup",
+  "title": "Macherey-Nagel Nucleomag Tissue DNA Extraction Kit- Mammalian Cells",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Lysis reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 225.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Bind steps are starting now",
+    "location": "deck",
+    "volume_ul": 385.0
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Removing Supernatant (Sample Plate -> Liquid Waste)",
+    "location": "deck",
+    "volume_ul": 1000.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Wash 1 is starting now",
+    "location": "deck",
+    "washes": 1,
+    "wash_ul": 600.0
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Removing Supernatant (Sample Plate -> Liquid Waste)",
+    "location": "deck",
+    "volume_ul": 650.0
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "Wash 2 is starting now",
+    "location": "deck",
+    "washes": 1,
+    "wash_ul": 600.0
+   },
+   {
+    "id": "s7",
+    "op": "transfer",
+    "text": "Removing Supernatant (Sample Plate -> Liquid Waste)",
+    "location": "deck",
+    "volume_ul": 650.0
+   },
+   {
+    "id": "s8",
+    "op": "bead_cleanup",
+    "text": "Wash 3 is starting now",
+    "location": "deck",
+    "washes": 1,
+    "wash_ul": 900.0,
+    "elute_ul": 100.0
+   }
+  ]
+ },
+ {
+  "name": "omega-bio-tek-mag-bind-environmental-dna-96",
+  "family": "bead-cleanup",
+  "title": "Omega Bio-Tek Mag-Bind Environmental DNA 96 Kit",
+  "description": "",
+  "sample_count": 2,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Transferring XP1/ Mag-bind master mixture (NEST 12 Well Reservoir 15 mL -> a1 (stand-in: nest_96_wellplate_100ul_pcr_full_skirt))",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please incubate samples for 10 minutes post resuspension.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Removing supernatant (a1 (stand-in: nest_96_wellplate_100ul_pcr_full_skirt) -> a1 (stand-in: nest_96_wellplate_100ul_pcr_full_skirt))",
+    "location": "deck"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please remove plate for manual resuspension",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Removing supernatant for wash: VHB (a1 (stand-in: nest_96_wellplate_100ul_pcr_full_skirt) -> NEST 1 Well Reservoir 195 mL)",
+    "location": "deck",
+    "volume_ul": 180.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Please remove plate for manual resuspension",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "transfer",
+    "text": "Removing supernatant for wash: ETOH (first wash) (a1 (stand-in: nest_96_wellplate_100ul_pcr_full_skirt) -> NEST 1 Well Reservoir 195 mL)",
+    "location": "deck",
+    "volume_ul": 180.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Please remove plate for manual resuspension",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "Removing supernatant for wash: ETOH (second wash)",
+    "location": "deck",
+    "volume_ul": 720.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Please check the Well Plate",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "Adding 20uL Elution Buffer to samples",
+    "location": "deck",
+    "volume_ul": 20.0
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Please remove samples and incubate at 65C for 5 minutes. When complete, replace samples and click RESUME",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "manual",
+    "text": "Please remove samples and mix off-deck for 10 minutes then resume run.",
+    "location": "manual"
+   },
+   {
+    "id": "s14",
+    "op": "bead_cleanup",
+    "text": "Transferring 20uL to final PCR plate",
+    "location": "deck",
+    "volume_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "pacbio-hifi-prep",
+  "family": "ngs-library-prep",
+  "title": "PacBio Hifi Prep 96",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 11.0,
+    "washes": 1,
+    "wash_ul": 4.0,
+    "elute_ul": 41.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Prepare Nuclease Master Mix and add 12 ul to each well of Column 3 of Reagent plate",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "QC SMRTbell Libraries",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 25.0,
+    "washes": 1,
+    "wash_ul": 50.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "add loading buffer to Column 4 in Nest plate on slot A2",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0
+   }
+  ]
+ },
+ {
+  "name": "pacbio-sre-shearing",
+  "family": "ngs-library-prep",
+  "title": "PacBio SRE and Shearing",
+  "description": "",
+  "sample_count": 2,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Place a seal on Deep well plate",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 3000 RPM and waiting until reached; Deactivating Shaker; Deactivating Heater)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Load Deep Well plate into Centrifuge, spin at 3000 rcf for 1 hour",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Remove seal from plate",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "After pause (NEST 96 Deep Well Plate 2mL -> Supernatant Storage Plate)",
+    "location": "deck",
+    "volume_ul": 90.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Remove supernatant plate from magnetic block, process/store as desired",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Quantify DNA, when finished place plate on heater shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Remove Plate and QC sheared material- return plate to C1 for cleanup",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "pacbio_kinnex_pcr",
+  "family": "ngs-library-prep",
+  "title": "PacBio Kinnex™ PCR",
+  "description": "Perform PacBio Kinnex™ PCR for the PacBio 16S, full-length RNA or single-cell RNA kits",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Preparing Kinnex™ using Kinnex 16S kit (MM tube rack -> Bio-Rad 96 Well Plate 200 µL PCR)",
+    "location": "deck",
+    "volume_ul": 22.5
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Using p300 for pipetting less than 20 ul! Will distribute 10 ul primer mix to intermediate plate, but 2.75 will be used",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "After pause (Alu block -> Intermediate primer plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Add primers to PCR plate for sample A1 (Intermediate primer plate -> Bio-Rad 96 Well Plate 200 µL PCR)",
+    "location": "deck",
+    "volume_ul": 2.5
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Cover plate with aluminum foil",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Setting Thermocycler well block temperature to 98.0 °C with a hold time of 3.0 minutes and 0 seconds; Thermocycler starting 9 repetiti)",
+    "location": "off_deck",
+    "temp_c": [
+     10.0,
+     72.0,
+     98.0
+    ]
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Uncover plate before pooling",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "pool",
+    "text": "After pause (Bio-Rad 96 Well Plate 200 µL PCR -> MM tube rack)",
+    "location": "deck",
+    "volume_ul": 150.0
+   }
+  ]
+ },
+ {
+  "name": "pcr_amp_uminn",
+  "family": "bead-cleanup",
+  "title": "PCR Amplification",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (kingfisher42_96_wellplate_2200ul (stand-in: nest_96_wellplate_100ul_pcr_full_skirt) -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "Incubation",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Adding Wash",
+    "location": "deck",
+    "volume_ul": 320.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Place barcode plate on slot A4",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   }
+  ]
+ },
+ {
+  "name": "peptide_cleanup_lcms",
+  "family": "bead-cleanup",
+  "title": "Digested Sample Clean-up for LC/MS - Flex w/ Thermal Cycler",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Place WORKING PLATE - DIGESTION in Thermal Cycler",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Load ACN Reservoir on Slot C1 and Reagent Plate on Slot C3",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Load WORKING PLATE - CLEAN-UP on Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 2,
+    "wash_ul": 1186.0,
+    "elute_ul": 90.0
+   }
+  ]
+ },
+ {
+  "name": "pierce-bca-protein-assay-kit",
+  "family": "protein-assay",
+  "title": "Pierce™ BCA Protein Assay Kit v2",
+  "description": "Pierce™ BCA Protein Assay Kit",
+  "sample_count": 87,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Transferring Standards (5 ml tube rack -> Assay Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Transferring Samples (2ml tube rack -> Assay Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Transfering Working Reagent (Standards reservoir -> Assay Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Do you want to continue for next run?",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Please change 20 uL tiprack, 200 uL tip rack, assay plate, sample tubes",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Is the deck ready for next run?",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "pierce-bradford-protein-assay",
+  "family": "protein-assay",
+  "title": "Pierce Bradford Protein Assay",
+  "description": "Pierce Bradford Protein Assay for OT-2",
+  "sample_count": 8,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Transfer Standards & Samples (SAMPLES -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Transfer Working Reagent (WORKING REAGENT -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 250.0
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "Incubate at RT for 10 minutes",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   }
+  ]
+ },
+ {
+  "name": "protein_digest_lcms",
+  "family": "protein-assay",
+  "title": "Trypsin Digestion for LC/MS - Flex w/ Thermal Cycler",
+  "description": "",
+  "sample_count": 96,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Load Reagent Plate on Slot D3",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (SAMPLES -> WORKING PLATE - DIGESTION)",
+    "location": "deck",
+    "volume_ul": 30.0
+   }
+  ]
+ },
+ {
+  "name": "protein_quant_normal",
+  "family": "normalization",
+  "title": "Protein Quantification and Normalization",
+  "description": "",
+  "sample_count": 26,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (WORKING REAGENT, DILUENT -> WORKING PLATE)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Column # 1: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Column # 2: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Sample #1: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Sample #2: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Sample #3: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Sample #4: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Sample #5: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Sample #6: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Sample #7: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "manual",
+    "text": "Sample #8: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Sample #9: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "manual",
+    "text": "Sample #10: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Sample #11: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "manual",
+    "text": "Sample #12: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Sample #13: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "manual",
+    "text": "Sample #14: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s18",
+    "op": "manual",
+    "text": "Sample #15: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s19",
+    "op": "manual",
+    "text": "Sample #16: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s20",
+    "op": "manual",
+    "text": "Sample #17: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s21",
+    "op": "manual",
+    "text": "Sample #18: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s22",
+    "op": "manual",
+    "text": "Sample #19: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s23",
+    "op": "manual",
+    "text": "Sample #20: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s24",
+    "op": "manual",
+    "text": "Sample #21: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s25",
+    "op": "manual",
+    "text": "Sample #22: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s26",
+    "op": "manual",
+    "text": "Sample #23: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s27",
+    "op": "manual",
+    "text": "Sample #24: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s28",
+    "op": "manual",
+    "text": "Sample #25: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s29",
+    "op": "manual",
+    "text": "Sample #26: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s30",
+    "op": "manual",
+    "text": "Sample #27: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s31",
+    "op": "manual",
+    "text": "Sample #28: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s32",
+    "op": "manual",
+    "text": "Sample #29: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s33",
+    "op": "manual",
+    "text": "Sample #30: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s34",
+    "op": "manual",
+    "text": "Sample #31: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s35",
+    "op": "manual",
+    "text": "Sample #32: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s36",
+    "op": "manual",
+    "text": "Sample #33: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s37",
+    "op": "manual",
+    "text": "Sample #34: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s38",
+    "op": "manual",
+    "text": "Sample #35: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s39",
+    "op": "manual",
+    "text": "Sample #36: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s40",
+    "op": "manual",
+    "text": "Sample #37: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s41",
+    "op": "manual",
+    "text": "Sample #38: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s42",
+    "op": "manual",
+    "text": "Sample #39: Estimated concentration lower than target concentration",
+    "location": "manual"
+   },
+   {
+    "id": "s43",
+    "op": "manual",
+    "text": "Sample #40: Estimated concentration lower than target concentration",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1018-1",
+  "family": "ngs-library-prep",
+  "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 1 cDNA Synthesis",
+  "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
+  "sample_count": 9,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Closing Thermocycler lid; Setting Thermocycler lid temperature to 75.0 °C; Se)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     65.0,
+     75.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Transferring Samples to Plate (NEST 96 Deep Well Plate 2mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 11.0
+   },
+   {
+    "id": "s3",
+    "op": "pool",
+    "text": "Prepare Control Well in A1 (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 5.5
+   },
+   {
+    "id": "s4",
+    "op": "add",
+    "text": "Adding Master Mix 1 to Plate (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 4.5
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1018-3",
+  "family": "bead-cleanup",
+  "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 3 Post-Multiplex PCR Cleanup",
+  "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Adding 30uL MagBeads to Samples (NEST 12 Well Reservoir 15 mL -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 30.0
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "Incubating for 5 minutes",
+    "location": "deck",
+    "minutes": [
+     5.0
+    ]
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Removing supernatant (Sample Plate -> NEST 12 Well Reservoir 15 mL)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "Incubating for 2 minutes",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Transferring eluate (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 17.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1018-5",
+  "family": "bead-cleanup",
+  "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 5 Post-Indexing PCR Cleanup",
+  "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Adding 32.5uL Magbeads to Sample (NEST 12 Well Reservoir 15 mL -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 32.5
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "Incubating for 5 minutes",
+    "location": "deck",
+    "minutes": [
+     5.0
+    ]
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Removing supernatant (Sample Plate -> NEST 12 Well Reservoir 15 mL)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "Incubating for 2 minutes",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Transferring eluate to elution plate (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1018-6",
+  "family": "normalization",
+  "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 6 NORMALASE I & II:",
+  "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
+  "sample_count": 48,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Closing Thermocycler lid; Setting Thermocycler well block temperature to 30.0)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     30.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Adding Post PCR TE to Plate (NEST 12 Well Reservoir 15 mL -> Normalase I Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Transferring Samples to Dilution Plate (Sample Plate -> Normalase I Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "add",
+    "text": "Adding Normalase I Mastermix to Plate (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Normalase I Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Pooling post-Normalase I treated library (Normalase I Plate -> Normalase II Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "~~~~~~~~~~Replace the tips & Empty Trash Bin~~~~~~~~~~~~~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "After pause (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Normalase II Plate)",
+    "location": "deck",
+    "volume_ul": 24.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1076-1",
+  "family": "cell-seeding",
+  "title": "ExpiCHO Expression System - Day 1 Parts I-III",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Adding OptiPRO Complexation Medium to Plasmid DNA Dilution Plate (NEST 12-well Reservoir -> Plasmid DNA Dilution Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Adding Plasmid DNA Mix to Plasmid DNA Dilution Plate (Plasmid DNA Stock Plate -> Plasmid DNA Dilution Plate)",
+    "location": "deck",
+    "volume_ul": 4.0
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding ExpiFectamine CHO Reagent to Protein Production Plate (NEST 12-well Reservoir -> Protein Production Plate)",
+    "location": "deck",
+    "volume_ul": 26.0
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Transferring Diluted DNA to Protein Production Plate (Plasmid DNA Dilution Plate -> Protein Production Plate)",
+    "location": "deck",
+    "volume_ul": 27.0
+   },
+   {
+    "id": "s5",
+    "op": "add",
+    "text": "Adding Cells to Protein Production Plate (NEST 12-well Reservoir -> Protein Production Plate)",
+    "location": "deck",
+    "volume_ul": 200.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1109",
+  "family": "bead-cleanup",
+  "title": "ZymoBIOMICS 96 MagBead DNA Kit-Flex_96_channel",
+  "description": "High-throughput purification of high quality, inhibitor-free DNA from lysed samples.",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Transfer Beads to Sample Plate",
+    "location": "deck",
+    "volume_ul": 650.0,
+    "washes": 3,
+    "wash_ul": 900.0,
+    "elute_ul": 50.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Transfer DNA to Final Elution Plate (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1111",
+  "family": "ngs-library-prep",
+  "title": "Ligation sequencing DNA V14 (SQK-LSK114)_Part 1_V1.1",
+  "description": "Part 1: DNA repair and end-prep + Adapter ligation and clean-up",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "Add DNA Control Sample, Repair Buffer, Repair Mix, and End-prep Enzyme Mix (Reagent Plate -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 2.5
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Remove the sample plate and place it in the external thermocycler, then return it to the Slot B3.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Beads Addition",
+    "location": "deck",
+    "volume_ul": 60.0,
+    "washes": 2,
+    "wash_ul": 200.0,
+    "elute_ul": 61.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Protocol completed. Remove the final plate on slot D2",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1112",
+  "family": "ngs-library-prep",
+  "title": "Ligation sequencing DNA V14 (SQK-LSK114)_Part 2",
+  "description": "Part 2: Adapter ligation and clean-up",
+  "sample_count": 27,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Make sure all reagents are prepared and placed in the correct slots. Then, click Resume.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Add Master Mix, mix, and incubate for 10 minutes at room temperature (Reagent Rack -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Beads Addition",
+    "location": "deck",
+    "volume_ul": 40.0,
+    "washes": 2,
+    "wash_ul": 167.0,
+    "elute_ul": 15.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Protocol completed. Remove the final plate on slot D2",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1155-1",
+  "family": "ngs-library-prep",
+  "title": "Chromium 3ʹ OCM GEM-X Single Cell (Dual Index) - Day 1",
+  "description": "10X Genomics PN-1000268 & PN-1000269",
+  "sample_count": 2,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Opentrons 24 Tube Rack with NEST 2 mL Snapcap -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 125.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Remove & Discard Supernate",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding ETOH to All Wells (NEST 12 Well Reservoir 15 mL -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 255.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "~~~~~~~~~Manually Check for Residual ETOH~~~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "add",
+    "text": "After pause (Opentrons 24 Tube Rack with NEST 2 mL Snapcap -> NEST 96 Deep Well Plate 2mL)",
+    "location": "deck",
+    "volume_ul": 35.5
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "Incubating at RT for 2 Minutes",
+    "location": "deck",
+    "volume_ul": 35.0
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "~~~~~~~Visually Check for Bead Contamination in Amplification Plate~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 65.0,
+    "washes": 1,
+    "wash_ul": 60.0
+   },
+   {
+    "id": "s9",
+    "op": "add",
+    "text": "Adding ETOH to All Wells (NEST 12 Well Reservoir 15 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 195.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "~~~~~~~Manually Check for Residual ETOH~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 40.5
+   }
+  ]
+ },
+ {
+  "name": "ptcl-1155-2",
+  "family": "ngs-library-prep",
+  "title": "Chromium 3ʹ OCM GEM-X Single Cell (Dual Index) - Day 2",
+  "description": "10X Genomics PN-1000268 & PN-1000269",
+  "sample_count": 10,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Opentrons 24 Well Aluminum Block with NEST 2 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Incubating at RT for 5 Minutes",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "Incubating at RT for 5 Minutes",
+    "location": "deck",
+    "minutes": [
+     7.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "add",
+    "text": "Adding ETOH to All Wells (NEST 12 Well Reservoir 15 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 130.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "~~~~~~~~~Manually Check for Residual ETOH~~~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "add",
+    "text": "After pause (Opentrons 24 Tube Rack with NEST 2 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 50.5
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "Incubating at RT for 2 Minutes",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 1,
+    "wash_ul": 80.0
+   },
+   {
+    "id": "s8",
+    "op": "incubate",
+    "text": "Incubating at RT for 5 Minutes",
+    "location": "deck",
+    "minutes": [
+     7.0
+    ]
+   },
+   {
+    "id": "s9",
+    "op": "add",
+    "text": "Adding ETOH to All Wells (NEST 12 Well Reservoir 15 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 195.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "~~~~~~~~~Manually Check for Residual ETOH~~~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "add",
+    "text": "After pause (Opentrons 24 Tube Rack with NEST 2 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 30.5
+   },
+   {
+    "id": "s12",
+    "op": "bead_cleanup",
+    "text": "Incubating at RT for 2 Minutes",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 1,
+    "wash_ul": 20.0,
+    "elute_ul": 60.0
+   },
+   {
+    "id": "s13",
+    "op": "incubate",
+    "text": "Incubating at RT for 5 Minutes",
+    "location": "deck",
+    "minutes": [
+     7.0
+    ]
+   },
+   {
+    "id": "s14",
+    "op": "add",
+    "text": "Adding ETOH to All Wells (NEST 12 Well Reservoir 15 mL -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 195.0
+   },
+   {
+    "id": "s15",
+    "op": "manual",
+    "text": "~~~~~~~~~Manually Check for Residual ETOH~~~~~~~~",
+    "location": "manual"
+   },
+   {
+    "id": "s16",
+    "op": "add",
+    "text": "After pause (Opentrons 24 Tube Rack with NEST 2 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 35.5
+   },
+   {
+    "id": "s17",
+    "op": "bead_cleanup",
+    "text": "Incubating at RT for 2 Minutes",
+    "location": "deck"
+   }
+  ]
+ },
+ {
+  "name": "ptcl-921-1",
+  "family": "ngs-library-prep",
+  "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 1 -\n    RNA Isolation, Fragmentation and Priming",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Thermocycler Module GEN2 on deck in A1-B1; Opening Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Set up for RNA Isolation, Fragmentation, Priming: RNA sample plate in deck slot B2 (50 ul total RNA) (up to 24 samples a",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "TRANSFER BEADS TO PLATE",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s5",
+    "op": "pool",
+    "text": "REMOVE SUPERNATANT (RNA Sample Plate -> Reagent Reservoir)",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "WASH BEADS 2 TIMES",
+    "location": "deck",
+    "volume_ul": 150.0,
+    "washes": 1,
+    "wash_ul": 150.0
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "ADD TRIS BUFFER & MIX (Reagent Plate -> RNA Sample Plate)",
+    "location": "deck",
+    "volume_ul": 50.0
+   },
+   {
+    "id": "s8",
+    "op": "incubate",
+    "text": "INCUBATE AT RT FOR 5 MINUTES",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   },
+   {
+    "id": "s9",
+    "op": "pool",
+    "text": "REMOVE SUPERNATANT (RNA Sample Plate -> Reagent Reservoir)",
+    "location": "deck",
+    "volume_ul": 140.0
+   },
+   {
+    "id": "s10",
+    "op": "bead_cleanup",
+    "text": "WASH BEADS",
+    "location": "deck",
+    "volume_ul": 150.0
+   },
+   {
+    "id": "s11",
+    "op": "pool",
+    "text": "REMOVE SUPERNATANT (RNA Sample Plate -> Reagent Reservoir)",
+    "location": "deck",
+    "volume_ul": 180.0
+   },
+   {
+    "id": "s12",
+    "op": "bead_cleanup",
+    "text": "ADD FIRST STRAND SYNTHESIS RXN BUFFER & RANDOM PRIMER MIX",
+    "location": "deck",
+    "volume_ul": 11.5
+   },
+   {
+    "id": "s13",
+    "op": "transfer",
+    "text": "TRANSFER ELUTION TO FINAL PLATE (RNA Sample Plate -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 10.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-921-2",
+  "family": "ngs-library-prep",
+  "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 2 -\n    First and Second Strand cDNA Synthesis and Bead Clean Up",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Thermocycler Module GEN2 on deck in A1-B1; Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Set up for first and second strand cDNA synthesis: RNA plate (from part 1) in pre-chilled Thermocycler (10 ul fragmented",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "ADD STRAND SPECIFICITY REAGENT (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> RNA Sample Plate)",
+    "location": "deck",
+    "volume_ul": 8.0
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "TRANSFER BEADS TO PLATE",
+    "location": "deck",
+    "volume_ul": 72.0,
+    "washes": 2,
+    "wash_ul": 115.0,
+    "elute_ul": 26.5
+   }
+  ]
+ },
+ {
+  "name": "ptcl-921-3",
+  "family": "ngs-library-prep",
+  "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 3 -\n    End Prep, Adapter Ligation and Bead Clean Up",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Thermocycler Module GEN2 on deck in A1-B1; Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Set up for End Prep and Adapter Ligation: sample plate (from part 2) in pre-chilled Thermocycler (50 ul double-stranded ",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "ADD END PREP REACTION BUFFER (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> RNA Sample Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "TRANSFER BEADS TO PLATE",
+    "location": "deck",
+    "volume_ul": 43.5,
+    "washes": 2,
+    "wash_ul": 115.0,
+    "elute_ul": 8.5
+   }
+  ]
+ },
+ {
+  "name": "ptcl-921-4",
+  "family": "ngs-library-prep",
+  "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 4 -\n    PCR Enrichment and Bead Clean Up",
+  "description": "",
+  "sample_count": 5,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Thermocycler Module GEN2 on deck in A1-B1; Opening Thermocycler lid)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Set up for PCR Enrichment and Bead Clean Up: sample plate (from part 3) on thermocycler (15 ul end-prepped, adaptor liga",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "ADD NEBNext Q5 MASTER MIX (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> cDNA Sample Plate)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "pausing for off-deck steps add 10 uL primer from selected primer plate cols, mix spin the plate then, return to thermocy",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "incubate",
+    "text": "After pause (Thermocycler steps: 30 sec 98 C 8-16 cycles: 10 sec 98 C 75 sec 65 C 5 min 65 C hold 4 C; Closing Thermocycler lid; Setting Thermocycler lid temperature to 105.)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     65.0,
+     98.0,
+     105.0
+    ]
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "TRANSFER BEADS TO PLATE",
+    "location": "deck",
+    "volume_ul": 45.0,
+    "washes": 2,
+    "wash_ul": 165.0,
+    "elute_ul": 23.0
+   }
+  ]
+ },
+ {
+  "name": "ptcl-969-miseq-library-prep",
+  "family": "ngs-library-prep",
+  "title": "MiSeq Library Preparation Protocol_extra-rack_mix_notouch_withshake",
+  "description": "Two-step PCR protocol for Illumina MiSeq library preparation with 96-channel pipette in column mode. Has a seperate tip rack for the index transfer, and a 96 well Revitty plate instead of a 384 plate",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (PCR Master Mix -> PCR1)",
+    "location": "deck",
+    "volume_ul": 7.5
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Transferring DNA samples (PCR Master Mix -> PCR2 Plate)",
+    "location": "deck",
+    "volume_ul": 6.0
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "Transferring indices (Indices -> PCR1 Dilution)",
+    "location": "deck"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Transferring diluted PCR1 to PCR2 (PCR1 Dilution -> PCR2 Dilution)",
+    "location": "deck"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "Protocol complete through PCR2 dilution (Deactivating Thermocycler lid heating; Deactivating Thermocycler well block heating)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Remove plates for quantification. Keep PCR2 dilution plate if continuing with pooling.",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-fx-48x",
+  "family": "ngs-library-prep",
+  "title": "QIASeq FX 48x v8",
+  "description": "",
+  "sample_count": 9,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_50_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_1",
+    "location": "deck",
+    "volume_ul": 80.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-fx-normalizer-workflow-b-48x",
+  "family": "ngs-library-prep",
+  "title": "QIASeq FX with Normalizer Workflow B 48x v8",
+  "description": "",
+  "sample_count": 10,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Adding tiprack_200_R1 (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_50_2 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_2",
+    "location": "deck",
+    "volume_ul": 45.0,
+    "washes": 1,
+    "wash_ul": 5.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "SWAP PLATES",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "Adding tiprack_200_3 (NEST 96 Deep Well Plate 2mL -> WashPlate)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_50_3",
+    "location": "deck",
+    "washes": 2,
+    "wash_ul": 190.0
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-mirna-48x",
+  "family": "ngs-library-prep",
+  "title": "QIAseq miRNA 48x v8",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 10.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module t)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     10.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 15.0,
+    "washes": 1,
+    "wash_ul": 22.0,
+    "elute_ul": 20.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Place sample_plate_2 in A4",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 130.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 17.0
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-normalizer-workflow-a-48x",
+  "family": "ngs-library-prep",
+  "title": "QIAseq Normalizer Workflow A x48 v8",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_50_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_1",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 2,
+    "wash_ul": 200.0,
+    "elute_ul": 33.0
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-targeted-dna-pro-48x",
+  "family": "ngs-library-prep",
+  "title": "QIAseq Targeted DNA 48x v8",
+  "description": "",
+  "sample_count": 4,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_50_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_1",
+    "location": "deck",
+    "volume_ul": 70.0
+   },
+   {
+    "id": "s5",
+    "op": "add",
+    "text": "Adding 400ul tp 800 (Reservoir -> Sample Plate 2)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s6",
+    "op": "bead_cleanup",
+    "text": "Adding tiprack_200_2",
+    "location": "deck",
+    "volume_ul": 80.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 30.0
+   }
+  ]
+ },
+ {
+  "name": "qiaseq-targeted-dna-pro-8x",
+  "family": "ngs-library-prep",
+  "title": "QIAseq Targeted DNA 8x v8",
+  "description": "",
+  "sample_count": 32,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler well block temperature to 4.0 °C; Setting Thermocycler lid temperature to 100.0 °C; Setting Temperature Module te)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "Adding tiprack_50_1 (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 4.2
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Pausing to run FRERAT on an off deck Thermocycler ~25min",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "add",
+    "text": "After pause (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 14.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Pausing to run LIG on an off deck Thermocycler ~35min",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "After pause (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 2.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Pausing to run ECR1 on an off deck Thermocycler ~25min",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "add",
+    "text": "After pause (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 22.65
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Pausing to run PCR on an off deck Thermocycler ~25min",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "transfer",
+    "text": "After pause (Sample Plate 1 -> Reagent Plate)",
+    "location": "deck",
+    "volume_ul": 32.65
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Pausing to run ECR2 on an off deck Thermocycler ~25min",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "add",
+    "text": "After pause (Reagent Plate -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Pausing to run PCR on an off deck Thermocycler ~25min",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   }
+  ]
+ },
+ {
+  "name": "quickr_1",
+  "family": "serial-dilution",
+  "title": "QUiCKR V2 kit - part 1",
+  "description": "",
+  "sample_count": 9,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Please remove one tip from tiprack D1 tip H12",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please remove one tip from tiprack D1 tip H8, H5",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (Assay Buffer -> Sample Plate #1)",
+    "location": "deck",
+    "volume_ul": 40.0
+   }
+  ]
+ },
+ {
+  "name": "quickr_2",
+  "family": "plate-reformatting",
+  "title": "QUiCKR V2 kit - part 2 (4 tipboxes)",
+  "description": "",
+  "sample_count": 4,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (Sample Plate #1 -> Assay Plate #1)",
+    "location": "deck",
+    "volume_ul": 7.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Plate #1 Ready",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (Sample Plate #2 -> Assay Plate #2)",
+    "location": "deck",
+    "volume_ul": 7.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Plate #2 Ready",
+    "location": "manual"
+   }
+  ]
+ },
+ {
+  "name": "robo_pt1",
+  "family": "ngs-library-prep",
+  "title": "Illumina RNA Seq Ribo-Zero Plus Part 1 of 2",
+  "description": "",
+  "sample_count": 2,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler lid temperature to 100.0 °C; Setting Thermocycler well block temperature to 37.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     37.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please ensure 12.4ul of rdb in A2 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum B",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Please ensure 24.8ul of prb in A3 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum B",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please ensure 21.08ul of eph3 in A4 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Please ensure 19.84ul of fsa in A5 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum ",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Please ensure 62.0ul of smm in A6 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum B",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Please ensure you have 4 ethanol wells in A3, A4, A5, A6 of the reservoir with 10mL each.",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Please ensure you have beads in A1 of the reservoir, with 4.5mL",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Please ensure you have Elution buffer in A7 of the reservoir, with 1.71mL",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Please ensure you have RSB in A9 of the reservoir, with 1.9mL",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Setting Thermocycler lid temperature to 100.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Please put sample plate on Thermocycler, then select \"resume\" to begin protocol\"",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "incubate",
+    "text": "After pause (Setting Thermocycler well block temperature to 37.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     37.0
+    ]
+   },
+   {
+    "id": "s14",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 60.0,
+    "washes": 2,
+    "wash_ul": 150.0,
+    "elute_ul": 19.5
+   }
+  ]
+ },
+ {
+  "name": "robo_pt2",
+  "family": "ngs-library-prep",
+  "title": "Illumina RNA Seq Ribo-Zero Plus Part 2 of 2",
+  "description": "",
+  "sample_count": 6,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Thermocycler lid temperature to 100.0 °C; Setting Thermocycler well block temperature to 37.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     37.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please ensure 93.0ul of atl4 in A1 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum ",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Please ensure 55.8ul of ligation_mmx in A2 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well A",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please ensure 37.2ul of stl in A3 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum B",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Please ensure 148.8ul of epm in A4 of Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt on Opentrons 96 Well Aluminum ",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Please ensure you have beads in A1 of the reservoir, with 6.54mL",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Please ensure you have 4 ethanol wells in A2, A3, A4, A5 of the reservoir with 10mL each.",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Please ensure you have 1 RSB well in A6 of the reservoir with 10 mL",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Setting Thermocycler lid temperature to 100.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     100.0
+    ]
+   },
+   {
+    "id": "s10",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 34.0,
+    "washes": 1,
+    "wash_ul": 150.0,
+    "elute_ul": 22.0
+   },
+   {
+    "id": "s11",
+    "op": "manual",
+    "text": "Add index to first 6 columns of slot C3",
+    "location": "manual"
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "EPM added. After the pause, the plate will moved from C3 to the thermocycler.",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "incubate",
+    "text": "After pause (Closing Thermocycler lid; Thermocycler starting 1 repetitions of cycle composed of the following steps: [{'temperature': 98, 'hold_time_seconds': 30}]; Thermocy)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Thermocycler complete, please check samples.",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "incubate",
+    "text": "After pause (Setting Thermocycler well block temperature to 21.0 °C)",
+    "location": "off_deck",
+    "temp_c": [
+     21.0
+    ]
+   },
+   {
+    "id": "s16",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 50.0,
+    "washes": 1,
+    "wash_ul": 150.0,
+    "elute_ul": 17.0
+   }
+  ]
+ },
+ {
+  "name": "rtp-96-ch-demo",
+  "family": "bead-cleanup",
+  "title": "RTP Demo DNA Extration with 96-channel pipette",
+  "description": "DNA extraction Flex with 96-ch and Run Time Parameters",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Binding Bead Transfer",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Transferring Washbuffer (Wash Buffer -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Washing Beads",
+    "location": "deck"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "Transferring Elution Buffer (Elution buffer -> Sample Plate 1)",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "Eluting 40 uL DNA (Sample Plate 1 -> Elution Plate 1)",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "Eluting 40 uL DNA (Sample Plate 2 -> Elution Plate 2)",
+    "location": "deck",
+    "volume_ul": 40.0
+   }
+  ]
+ },
+ {
+  "name": "sci-idt-normalase",
+  "family": "pooling",
+  "title": "IDT Normalase",
+  "description": "",
+  "sample_count": 2,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Start (Opentrons 96 Well Aluminum Block with Bio-Rad Well Plate 200 µL -> NEST 96 Well Plate 100 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "MOVE NORM PLATE TO POSITION 1, PLACE NEW PLATE IN THERMO",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "After pause (Opentrons 96 Well Aluminum Block with Bio-Rad Well Plate 200 µL -> NEST 96 Well Plate 100 µL PCR Full Skirt)",
+    "location": "deck",
+    "volume_ul": 1.0
+   }
+  ]
+ },
+ {
+  "name": "sci-lucif-assay4",
+  "family": "protein-assay",
+  "title": "Luciferase Reporter Assay for NF-kB Activation - Protocol 4: Luciferase Activity Measurement",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "pool",
+    "text": "REMOVE SUPERNATANT and WASH (working plate -> waste)",
+    "location": "deck",
+    "volume_ul": 97.5
+   },
+   {
+    "id": "s2",
+    "op": "add",
+    "text": "ADD LYSIS BUFFER (reagent stock -> working plate)",
+    "location": "deck",
+    "volume_ul": 75.0
+   }
+  ]
+ },
+ {
+  "name": "sci-omegabiotek-magbind-total-rna-96",
+  "family": "bead-cleanup",
+  "title": "Mag-BindÂ® Total RNA 96 Kit",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 40.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "mix on heater/shaker for 5 minutes",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 40.0,
+    "washes": 4,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "sci-promega-magnesil-total-rna-mini-isolation-system",
+  "family": "bead-cleanup",
+  "title": "MagneSil Total RNA Promega",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 70.0
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 70.0,
+    "washes": 1,
+    "wash_ul": 120.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Replace 300µl tipracks before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0,
+    "washes": 1,
+    "wash_ul": 120.0,
+    "elute_ul": 120.0
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 120.0
+   },
+   {
+    "id": "s18",
+    "op": "manual",
+    "text": "Please empty tips from waste before resuming.",
+    "location": "manual"
+   },
+   {
+    "id": "s19",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "sci-zymo-directzol-magbead",
+  "family": "bead-cleanup",
+  "title": "Zymo Research Direct-zolâ„¢-96 MagBead RNA Kit",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 163.33,
+    "washes": 1,
+    "wash_ul": 163.3,
+    "elute_ul": 163.33
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "mix for 10 minutes off-deck in a heatershaker",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 8,
+    "wash_ul": 20.0,
+    "elute_ul": 70.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Incubating for 10 minutes for DNase 1 treatment with occasional mixing.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 186.67,
+    "washes": 1,
+    "wash_ul": 186.7,
+    "elute_ul": 186.67
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Incubating for 10 minutes with occasional mixing for stop reaction",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 1,
+    "wash_ul": 20.0,
+    "elute_ul": 20.0
+   }
+  ]
+ },
+ {
+  "name": "seqwell-expressplex-library-prep",
+  "family": "ngs-library-prep",
+  "title": "seqWell ExpressPlex Library Preparation Part 1 of 2",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (Indices_1 -> Reaction Plate_1)",
+    "location": "deck",
+    "volume_ul": 4.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Seal and manually place Reaction Plate 1 onto heater shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "transfer",
+    "text": "After pause (Indices_2 -> Reaction Plate_2)",
+    "location": "deck",
+    "volume_ul": 4.0
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Seal and manually place Reagent Plate 2 onto heater shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 3000 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "seqwell-expressplex-pooling",
+  "family": "pooling",
+  "title": "seqWell ExpressPlex Library Preparation Part 2 of 2",
+  "description": "",
+  "sample_count": 4,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "Pulse spin plates once amplification is finished",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "pool",
+    "text": "After pause (Ready Reaction Plate 1 -> Pooling Plate)",
+    "location": "deck",
+    "volume_ul": 12.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Thouroughly seal plate and return to Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause (Setting Heater-Shaker to Shake at 3000 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Pulse spin plate, carefully unseal and return to Heater Shaker",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "After pause (Pooling Plate -> Final Pool)",
+    "location": "deck",
+    "volume_ul": 120.0
+   }
+  ]
+ },
+ {
+  "name": "sigdx-no50",
+  "family": "ngs-library-prep",
+  "title": "NEBNext® Enzymatic Methyl-seq Kit",
+  "description": "This protocol was written and validated in collaboration between Michaela Ednie (edniemh@upmc.edu), Lucas Tavares Naief (tavaresnaiefl@upmc.edu), Dr. Francis Amrit (francis@signaturedx.com), and Rami Farawi (rami.farawi@opentrons.com).",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Setting Temperature Module temperature to 4.0 °C (rounded off to nearest inte)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "You will need total of 61.8 mL of 80% EtOH and 4.65 mL of Elution Buffer to complete this protocol.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "You will need 2 bead columns in the deepwell plate with 1190.25 µL in each, starting at column 1.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Please confirm the temperature modules have reached 4C before proceeding.",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Samples should be loaded in 6 columns starting at column 1 on temperature module C1.",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "manual",
+    "text": "Load 69.0 µL of End Prep Mastermix in column 1 of PCR Reagents Plate, D1.",
+    "location": "manual"
+   },
+   {
+    "id": "s7",
+    "op": "add",
+    "text": "After pause (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s8",
+    "op": "manual",
+    "text": "End Prep MMX added without mixing. Place plate in thermal cycler according to SOP 1.2. Once samples are removed and door",
+    "location": "manual"
+   },
+   {
+    "id": "s9",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module; Deactivating Temperature Module; Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Setting Tem)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0
+    ]
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Temperature modules are cooling. Load 200 µL of Ligation Mastermix in column 2 of PCR Reagent Plate, D1. Premix 2.5 µL o",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "add",
+    "text": "ADDING LIGATION MASTER MIX (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 17.0
+   },
+   {
+    "id": "s12",
+    "op": "manual",
+    "text": "Ligation master mix added without mixing. Place in thermal cycler according to the end of section 1.3. Once samples have",
+    "location": "manual"
+   },
+   {
+    "id": "s13",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module; Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s14",
+    "op": "manual",
+    "text": "After incubation, it is a safe stopping point, samples overnight at -20C. Otherwise, press Confirm for reagent loading i",
+    "location": "manual"
+   },
+   {
+    "id": "s15",
+    "op": "manual",
+    "text": "Resuspend beads in Deepwell Reagent Plate by covering with parafilm and vortexing.",
+    "location": "manual"
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Load 1900 µL of ethanol in column 4 of Deepwell Reagent Plate, A2. Load 191.4 µL of elution buffer in column 3 of the PC",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "manual",
+    "text": "Place samples back on the temperature module, C1. Press Confirm to begin the clean-up. Samples should be on the left hal",
+    "location": "manual"
+   },
+   {
+    "id": "s18",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 110.0
+   },
+   {
+    "id": "s19",
+    "op": "add",
+    "text": "REMOVING SUPER TO TRASH (Reagents Deepwell -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s20",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s21",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s22",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s23",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s24",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s25",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s26",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s27",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s28",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s29",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s30",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s31",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 29.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s32",
+    "op": "manual",
+    "text": "First bead cleanup completed. Samples are on the right half of the plate, starting in column 7. Safe stopping point at -",
+    "location": "manual"
+   },
+   {
+    "id": "s33",
+    "op": "manual",
+    "text": "Load 112.2 µl of TET2 mastermix in column 7 of D1 on temperature module. Load at least 33.0 µl of Fe2 mastermix in colum",
+    "location": "manual"
+   },
+   {
+    "id": "s34",
+    "op": "add",
+    "text": "ADDING TET2 MMX (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s35",
+    "op": "manual",
+    "text": "Replace ALL 50 uL tip racks on DECK *and* expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s36",
+    "op": "add",
+    "text": "After pause (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s37",
+    "op": "manual",
+    "text": "TET2 mastermix has been added without mixing. Mix manually and return plate to C1 to continue on to adding Fe.",
+    "location": "manual"
+   },
+   {
+    "id": "s38",
+    "op": "add",
+    "text": "ADDING FE2 MMX (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s39",
+    "op": "manual",
+    "text": "Fe(II) has been added without mixing. Place in thermocycler and complete SOP 1.5 manually. Once samples are removed and ",
+    "location": "manual"
+   },
+   {
+    "id": "s40",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module; Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s41",
+    "op": "manual",
+    "text": "After incubation, it is a safe stopping point, either at 4C in thermal cycler or -20C. Otherwise, press Confirm for reag",
+    "location": "manual"
+   },
+   {
+    "id": "s42",
+    "op": "manual",
+    "text": "Resuspend beads in Deepwell Reagent Plate by covering with parafilm and vortexing.",
+    "location": "manual"
+   },
+   {
+    "id": "s43",
+    "op": "manual",
+    "text": "Load 1900 µL of ethanol in column 5 of Deepwell Reagent Plate, A2. Load 112.2 µL of elution buffer in column 4 of the PC",
+    "location": "manual"
+   },
+   {
+    "id": "s44",
+    "op": "manual",
+    "text": "Place samples back on the temperature module, C1. Press Confirm to begin the clean-up. Samples should be in the right ha",
+    "location": "manual"
+   },
+   {
+    "id": "s45",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 90.0
+   },
+   {
+    "id": "s46",
+    "op": "manual",
+    "text": "No 2-part removal this run. Is it ready for full super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s47",
+    "op": "add",
+    "text": "After pause (Reagents Deepwell -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s48",
+    "op": "manual",
+    "text": "Replace ALL 200 uL tip racks on DECK *and* expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s49",
+    "op": "add",
+    "text": "After pause (Reagents Deepwell -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s50",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s51",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s52",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s53",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s54",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s55",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s56",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s57",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s58",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s59",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s60",
+    "op": "manual",
+    "text": "Pausing until 160 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s61",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 17.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s62",
+    "op": "transfer",
+    "text": "Transferring Sample to PCR Plate (Sample PCR Plate -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s63",
+    "op": "manual",
+    "text": "Completed step 1.6. Samples are in left half of plate on temperature module. Safe stopping point, samples at -20C overni",
+    "location": "manual"
+   },
+   {
+    "id": "s64",
+    "op": "manual",
+    "text": "Load 28.8 µl of formamide mastermix in column 9 of D1 on temperature module. Preheat thermal cycler as per SOP.",
+    "location": "manual"
+   },
+   {
+    "id": "s65",
+    "op": "add",
+    "text": "ADDING FORMAMIDE MMX (Reagents PCR Plate -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 3.0
+   },
+   {
+    "id": "s66",
+    "op": "manual",
+    "text": "Formamide is added without mixing. Move to thermocycler. Place samples on ice and allow to cool afterwards. Continue for",
+    "location": "manual"
+   },
+   {
+    "id": "s67",
+    "op": "manual",
+    "text": "Load 600.0 µl of apobec mastermix in column 12 of deepwell reagent plate.",
+    "location": "manual"
+   },
+   {
+    "id": "s68",
+    "op": "manual",
+    "text": "Place cooled samples back on C1.",
+    "location": "manual"
+   },
+   {
+    "id": "s69",
+    "op": "add",
+    "text": "ADDING APOBEC MMX (Reagents Deepwell -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s70",
+    "op": "manual",
+    "text": "APOBEC added without mixing. Place in thermocycler according to SOP 1.8. Once samples are removed and door is closed, pr",
+    "location": "manual"
+   },
+   {
+    "id": "s71",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s72",
+    "op": "manual",
+    "text": "Safe stopping point, 4C in thermal cycler or -20C. Otherwise, press Confirm for reagent loading instructions for Clean-U",
+    "location": "manual"
+   },
+   {
+    "id": "s73",
+    "op": "manual",
+    "text": "Resuspend beads in Deepwell Reagent Plate by covering with parafilm and vortexing.",
+    "location": "manual"
+   },
+   {
+    "id": "s74",
+    "op": "manual",
+    "text": "Load 1900 µL of ethanol in column 6 of Deepwell Reagent Plate, A2. Load 138.6 µL of elution buffer in column 5 of the PC",
+    "location": "manual"
+   },
+   {
+    "id": "s75",
+    "op": "manual",
+    "text": "Place sample plate back on C1 and select Confirm when ready to begin the clean-up. Samples should be in the left half of",
+    "location": "manual"
+   },
+   {
+    "id": "s76",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 100.0
+   },
+   {
+    "id": "s77",
+    "op": "add",
+    "text": "REMOVING SUPER TO TRASH (Reagents Deepwell -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s78",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s79",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s80",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s81",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s82",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s83",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s84",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s85",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s86",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s87",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s88",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s89",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s90",
+    "op": "manual",
+    "text": "Replace ALL 50 uL tip racks on DECK *and* expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s91",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck"
+   },
+   {
+    "id": "s92",
+    "op": "manual",
+    "text": "Samples are in right half of PCR plate. Safe stopping point, samples at -20C. Otherwise, select Confirm to continue with",
+    "location": "manual"
+   },
+   {
+    "id": "s93",
+    "op": "manual",
+    "text": "Load 180.0 µL Q5U mastermix in column 10 of the temperature module reagent plate. Add index primers manually and place s",
+    "location": "manual"
+   },
+   {
+    "id": "s94",
+    "op": "add",
+    "text": "ADDING Q5U MMX (Reagents PCR Plate -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s95",
+    "op": "manual",
+    "text": "Q5U added without mixing. Move to thermocycler. Press Confirm to deactivate temp modules once samples are removed and do",
+    "location": "manual"
+   },
+   {
+    "id": "s96",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module; Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s97",
+    "op": "manual",
+    "text": "Safe stopping point, samples at 4C in thermal cycler or -20C. Otherwise, press Confirm for reagent loading instructions ",
+    "location": "manual"
+   },
+   {
+    "id": "s98",
+    "op": "manual",
+    "text": "Resuspend beads in Deepwell Reagent Plate by covering with parafilm and vortexing.",
+    "location": "manual"
+   },
+   {
+    "id": "s99",
+    "op": "manual",
+    "text": "Load 1900 µL of ethanol in column 7 of Deepwell Reagent Plate, A2. Load 138.6 µL of elution buffer in column 6 of the PC",
+    "location": "manual"
+   },
+   {
+    "id": "s100",
+    "op": "manual",
+    "text": "Place sample plate back on C1 and press Confirm when ready to begin the clean-up. Samples should be in the right half of",
+    "location": "manual"
+   },
+   {
+    "id": "s101",
+    "op": "manual",
+    "text": "Replace ALL 200 uL tip racks on DECK *and* expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s102",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 45.0
+   },
+   {
+    "id": "s103",
+    "op": "add",
+    "text": "REMOVING SUPER TO TRASH (Reagents Deepwell -> New Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s104",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s105",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s106",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s107",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s108",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s109",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s110",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s111",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s112",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s113",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s114",
+    "op": "manual",
+    "text": "Pausing until 60 seconds of drying have passed.",
+    "location": "manual"
+   },
+   {
+    "id": "s115",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 21.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s116",
+    "op": "transfer",
+    "text": "Transferring Sample to PCR Plate (New Sample PCR Plate -> Final PCR Plate)",
+    "location": "deck",
+    "volume_ul": 5.0
+   },
+   {
+    "id": "s117",
+    "op": "manual",
+    "text": "Protocol completed! Samples are on left half of the plate on the temperature module, C1. Once samples have been removed,",
+    "location": "manual"
+   },
+   {
+    "id": "s118",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "sigdx-pt2",
+  "family": "ngs-library-prep",
+  "title": "Twist Targeted Methylation Sequencing Protocol",
+  "description": "This protocol was written and tested in collaboration between Michaela Ednie (edniemh@upmc.edu), Lucas Tavares Naief (tavaresnaiefl@upmc.edu), Dr. Francis Amrit (francis@signaturedx.com), and Rami Farawi (rami.farawi@opentrons.com).",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Setting Temperature Module temperature to 60.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     60.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Load 690.0 prepared strep beads to column 1 and 188.02 µL water in column 6 of the deepwell reagent plate, A2.",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "Ensure temp module C1 has reached 60C. Add sample PCR plate from thermocycler to temperature module, C1.",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "transfer",
+    "text": "ADDING BEADS (Wash Plate -> Sample Deepwell)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s5",
+    "op": "manual",
+    "text": "Pausing to ensure samples have returned to 60C before adding to beads.",
+    "location": "manual"
+   },
+   {
+    "id": "s6",
+    "op": "transfer",
+    "text": "Adding Samples to Beads (Sample PCR Plate -> Sample Deepwell)",
+    "location": "deck",
+    "volume_ul": 32.5
+   },
+   {
+    "id": "s7",
+    "op": "manual",
+    "text": "Replace 96-well aluminum adaptor on C1 with deep well adaptor. Press Confirm on next prompt as well.",
+    "location": "manual"
+   },
+   {
+    "id": "s8",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 63.0 °C (rounded off to nearest integer); Setting Temperature Module temperature to 63.0 °C (rounded off to nearest in)",
+    "location": "off_deck",
+    "temp_c": [
+     63.0
+    ]
+   },
+   {
+    "id": "s9",
+    "op": "manual",
+    "text": "Ensure temperature modules have reached 63C before continuing. Load 690.0 µL of Fast Wash Buffer 1 in columns 3 and 4 of",
+    "location": "manual"
+   },
+   {
+    "id": "s10",
+    "op": "manual",
+    "text": "Load 690.0 µL of Wash Buffer 2 in columns 5, 6, 7 of Deepwell Reagent Plate on D1",
+    "location": "manual"
+   },
+   {
+    "id": "s11",
+    "op": "manual",
+    "text": "Samples should be in left half of deep well plate on C2. Confirm to begin SOP 3.10.",
+    "location": "manual"
+   },
+   {
+    "id": "s12",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s13",
+    "op": "manual",
+    "text": "Are beads clear for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s14",
+    "op": "transfer",
+    "text": "After pause (Wash Plate -> Sample Deepwell)",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s15",
+    "op": "bead_cleanup",
+    "text": "Transferring Sample to PCR Plate",
+    "location": "deck",
+    "volume_ul": 133.0,
+    "washes": 1,
+    "wash_ul": 67.0,
+    "elute_ul": 10.0
+   },
+   {
+    "id": "s16",
+    "op": "manual",
+    "text": "Carefully remove the hot deep well adaptor from temp module C1. Replace with 96-well aluminum block adaptor. Remove Samp",
+    "location": "manual"
+   },
+   {
+    "id": "s17",
+    "op": "manual",
+    "text": "Pausing for at least 90 seconds while beads are pelleting.",
+    "location": "manual"
+   },
+   {
+    "id": "s18",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 48.0 °C (rounded off to nearest integer))",
+    "location": "off_deck",
+    "temp_c": [
+     48.0
+    ]
+   },
+   {
+    "id": "s19",
+    "op": "manual",
+    "text": "Are beads ready for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s20",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s21",
+    "op": "manual",
+    "text": "Pausing for at least 90 seconds while beads are pelleting.",
+    "location": "manual"
+   },
+   {
+    "id": "s22",
+    "op": "manual",
+    "text": "Are beads ready for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s23",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s24",
+    "op": "manual",
+    "text": "Pausing for at least 90 seconds while beads are pelleting.",
+    "location": "manual"
+   },
+   {
+    "id": "s25",
+    "op": "manual",
+    "text": "Are beads ready for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s26",
+    "op": "manual",
+    "text": "Replace ALL 200 uL tip racks on DECK *and* expansion slots",
+    "location": "manual"
+   },
+   {
+    "id": "s27",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 200.0
+   },
+   {
+    "id": "s28",
+    "op": "manual",
+    "text": "Carefully remove hot plate adaptors from each temp mod. Briefly chill the 96-well aluminum block adaptor. Add chilled 96",
+    "location": "manual"
+   },
+   {
+    "id": "s29",
+    "op": "manual",
+    "text": "Pausing for at least 90 seconds while beads are pelleting.",
+    "location": "manual"
+   },
+   {
+    "id": "s30",
+    "op": "manual",
+    "text": "Are beads ready for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s31",
+    "op": "transfer",
+    "text": "Adding Water to Samples (Wash Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 16.25
+   },
+   {
+    "id": "s32",
+    "op": "manual",
+    "text": "Water added. Load 8.62 µL of Amplification Primers in column 1 and 86.25 µL of Equinox Library Amp Mix in column 2 of Re",
+    "location": "manual"
+   },
+   {
+    "id": "s33",
+    "op": "add",
+    "text": "Adding Primer (Reagents PCR Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 13.75
+   },
+   {
+    "id": "s34",
+    "op": "manual",
+    "text": "Primers and amp mix added. Sample plate on C1 is ready for PCR according to Step 4 of the SOP. Once samples are removed ",
+    "location": "manual"
+   },
+   {
+    "id": "s35",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module; Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s36",
+    "op": "manual",
+    "text": "There should be at least 110.4 µL of Water in column 9 of Deepwell Reagent Plate on deck A2.",
+    "location": "manual"
+   },
+   {
+    "id": "s37",
+    "op": "manual",
+    "text": "Load 1035.0 µL of Ethanol in column 10 and 310.5 µL of Purification Beads in column 12 of Deepwell Reagent Plate, A2.",
+    "location": "manual"
+   },
+   {
+    "id": "s38",
+    "op": "manual",
+    "text": "Return the samples to the temperature module, C1. Confirm to begin the clean-up.",
+    "location": "manual"
+   },
+   {
+    "id": "s39",
+    "op": "bead_cleanup",
+    "text": "ADDING BEADS",
+    "location": "deck",
+    "volume_ul": 90.0
+   },
+   {
+    "id": "s40",
+    "op": "manual",
+    "text": "Are beads ready for super removal?",
+    "location": "manual"
+   },
+   {
+    "id": "s41",
+    "op": "transfer",
+    "text": "REMOVING SUPER TO TRASH (Wash Plate -> Sample PCR Plate)",
+    "location": "deck",
+    "volume_ul": 82.5
+   },
+   {
+    "id": "s42",
+    "op": "manual",
+    "text": "Elapsed time is 90.0 seconds. Proceed to adding EB?",
+    "location": "manual"
+   },
+   {
+    "id": "s43",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 32.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s44",
+    "op": "manual",
+    "text": "Elapsed time is 90.0 seconds. Proceed to adding EB?",
+    "location": "manual"
+   },
+   {
+    "id": "s45",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 32.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s46",
+    "op": "manual",
+    "text": "Elapsed time is 90.0 seconds. Proceed to adding EB?",
+    "location": "manual"
+   },
+   {
+    "id": "s47",
+    "op": "bead_cleanup",
+    "text": "After pause",
+    "location": "deck",
+    "volume_ul": 30.0,
+    "washes": 1,
+    "wash_ul": 5.0,
+    "elute_ul": 5.0
+   },
+   {
+    "id": "s48",
+    "op": "manual",
+    "text": "Protocol completed! Samples are on right half of the plate on the temperature module, D1. Once samples have been removed",
+    "location": "manual"
+   },
+   {
+    "id": "s49",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "spri-beads-dna-extraction",
+  "family": "purification",
+  "title": "DNA Isolation Protocol with 8-Channel Pipette - Rev 3",
+  "description": "Isolation of DNA using bead solution and ethanol washes with an 8-channel pipette",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "manual",
+    "text": "--- Please place an Empty PCR plate ---",
+    "location": "manual"
+   },
+   {
+    "id": "s2",
+    "op": "bead_cleanup",
+    "text": "Transferring beads",
+    "location": "deck",
+    "volume_ul": 300.0
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "Incubating sample for 5 minutes",
+    "location": "deck",
+    "minutes": [
+     10.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "bead_cleanup",
+    "text": "Cleaning the well",
+    "location": "deck",
+    "volume_ul": 105.0,
+    "washes": 2,
+    "wash_ul": 1080.0
+   }
+  ]
+ },
+ {
+  "name": "takara_infusion_assembly_flex",
+  "family": "pcr-setup",
+  "title": "Takara In-Fusion Snap Assembly Kit on Flex",
+  "description": "",
+  "sample_count": 18,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "transfer",
+    "text": "Start (Inserts, Vectors, Master Mix, Water -> wokring plate)",
+    "location": "deck",
+    "volume_ul": 12.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Seal the plate",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "incubate",
+    "text": "After pause (Setting Temperature Module temperature to 50.0 °C (rounded off to nearest integer); Setting Temperature Module temperature to 4.0 °C (rounded off to nearest int)",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     50.0
+    ]
+   },
+   {
+    "id": "s4",
+    "op": "manual",
+    "text": "Reaction complete",
+    "location": "manual"
+   },
+   {
+    "id": "s5",
+    "op": "incubate",
+    "text": "After pause (Deactivating Temperature Module)",
+    "location": "off_deck"
+   }
+  ]
+ },
+ {
+  "name": "twist-ef-2_0",
+  "family": "ngs-library-prep",
+  "title": "Twist Library Preparation with Enzymatic Fragmention 2.0, tip track",
+  "description": "",
+  "sample_count": 3,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "incubate",
+    "text": "Start (Opening Thermocycler lid; Setting Temperature Module temperature to 4.0 °C (rounded off to nearest integer); Setting Thermocycler well block temperature to 4.0 )",
+    "location": "off_deck",
+    "temp_c": [
+     4.0,
+     105.0
+    ]
+   },
+   {
+    "id": "s2",
+    "op": "pool",
+    "text": "Adding 50 ul tip rack #1 to slot A2 (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_Plate)",
+    "location": "deck",
+    "volume_ul": 10.0
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Adding 200 ul tip rack #1 to slot B2",
+    "location": "deck",
+    "volume_ul": 25.0,
+    "washes": 1,
+    "wash_ul": 50.0,
+    "elute_ul": 22.0
+   }
+  ]
+ },
+ {
+  "name": "wo-3308",
+  "family": "serial-dilution",
+  "title": "Plate Screening",
+  "description": "",
+  "sample_count": 12,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "ADDING BUFFER TO PLATES (axygen_12_reservoir_15000ul (stand-in: nest_12_reservoir_15ml) -> waters_96_wellplate_350ul (stand-in: nest_96_wellplate_100ul_pcr_full_skirt))",
+    "location": "deck",
+    "volume_ul": 297.0
+   },
+   {
+    "id": "s2",
+    "op": "manual",
+    "text": "Proceed to manual step, then bring plates back to deck and select resume",
+    "location": "manual"
+   },
+   {
+    "id": "s3",
+    "op": "add",
+    "text": "ADDING 330ul CC BUFFER TO PLATES (axygen_12_reservoir_15000ul (stand-in: nest_12_reservoir_15ml) -> waters_96_wellplate_350ul (stand-in: nest_96_wellplate_100ul_pcr_full_skirt))",
+    "location": "deck",
+    "volume_ul": 160.0
+   }
+  ]
+ },
+ {
+  "name": "zymo-quick-dna-fecal-microbe-96-full-plate",
+  "family": "bead-cleanup",
+  "title": "Quick DNA Fecal Microbe Magbead Kit - 96 samples - rev. 2",
+  "description": "A protocol for DNA extraction from microbial samples using magnetic beads. Uses 96-channel pipette to process 96 samples in parallel.",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Step 1: Transferring Quick-DNA MagBinding Buffer. (Binding Buffer Reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 600.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Step 2: Transferring Beads to Sample Plate (Beads -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "**** Vortex the Sample + Beads + Binding Buffer Plate ****",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   },
+   {
+    "id": "s5",
+    "op": "transfer",
+    "text": "removing supernatant (Sample Plate -> Waste res)",
+    "location": "deck",
+    "volume_ul": 825.0
+   },
+   {
+    "id": "s6",
+    "op": "add",
+    "text": "Step 3: Transferring DNA Pre-Wash Buffer to the Sample Plate (Pre-gDNA Wash Buffer Reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 900.0
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "removing pre-DNA wash supernatant",
+    "location": "deck",
+    "washes": 1,
+    "wash_ul": 900.0
+   },
+   {
+    "id": "s8",
+    "op": "transfer",
+    "text": "removing gDNA wash supernatant (Sample Plate -> Waste res)",
+    "location": "deck",
+    "volume_ul": 900.0
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "Step 5: Transferring gDNA Wash Buffer to the Sample Plate",
+    "location": "deck",
+    "washes": 1,
+    "wash_ul": 900.0
+   },
+   {
+    "id": "s10",
+    "op": "transfer",
+    "text": "removing gDNA wash supernatant (Sample Plate -> Waste res)",
+    "location": "deck",
+    "volume_ul": 900.0
+   },
+   {
+    "id": "s11",
+    "op": "incubate",
+    "text": "Incubate at 65C for 10 minutes (Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s12",
+    "op": "bead_cleanup",
+    "text": "Step 6: Transferring elution buffer to the sample plate",
+    "location": "deck",
+    "elute_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "zymo-quick-dna-fecal-microbe-96-partial-column",
+  "family": "bead-cleanup",
+  "title": "Quick DNA Fecal Microbe Magbead Kit - 1 to 11 columns - rev. 5",
+  "description": "A protocol for DNA extraction from microbial samples using magnetic beads. Uses 96-channel pipette to process 96 samples in parallel.",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "add",
+    "text": "Step 1: Transferring Quick-DNA MagBinding Buffer. (Binding Buffer Reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 600.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Step 2: Transferring Beads to Sample Plate (Beads -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 25.0
+   },
+   {
+    "id": "s3",
+    "op": "manual",
+    "text": "**** Vortex the Sample + Beads + Binding Buffer Plate ****",
+    "location": "manual"
+   },
+   {
+    "id": "s4",
+    "op": "incubate",
+    "text": "After pause",
+    "location": "deck",
+    "minutes": [
+     2.0
+    ]
+   },
+   {
+    "id": "s5",
+    "op": "bead_cleanup",
+    "text": "removing supernatant",
+    "location": "deck"
+   },
+   {
+    "id": "s6",
+    "op": "add",
+    "text": "Step 3: Transferring DNA Pre-Wash Buffer to the Sample Plate (Pre-gDNA Wash Buffer Reservoir -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 900.0
+   },
+   {
+    "id": "s7",
+    "op": "bead_cleanup",
+    "text": "removing pre-DNA wash supernatant",
+    "location": "deck",
+    "washes": 2,
+    "wash_ul": 900.0
+   },
+   {
+    "id": "s8",
+    "op": "incubate",
+    "text": "Incubate at 65C for 10 minutes (Deactivating Temperature Module)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s9",
+    "op": "bead_cleanup",
+    "text": "Step 6: Transferring elution buffer to the sample plate",
+    "location": "deck",
+    "elute_ul": 50.0
+   }
+  ]
+ },
+ {
+  "name": "zymo_magbead_dna_flex_96-cells",
+  "family": "bead-cleanup",
+  "title": "Zymo Research ZymoBIOMICS 96 MagBead DNA Kit- Mammalian Cells (96 samples)",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "bead_cleanup",
+    "text": "Start",
+    "location": "deck",
+    "volume_ul": 625.0,
+    "washes": 4,
+    "wash_ul": 900.0,
+    "elute_ul": 75.0
+   },
+   {
+    "id": "s2",
+    "op": "transfer",
+    "text": "Transfer DNA to Final Elution Plate (Sample Plate -> Elution Plate)",
+    "location": "deck",
+    "volume_ul": 75.0
+   }
+  ]
+ },
+ {
+  "name": "zymo_quick-rna_flex_multi-cells",
+  "family": "bead-cleanup",
+  "title": "Zymo Magbead Quick-RNA- Mammalian Cells",
+  "description": "",
+  "sample_count": 1,
+  "steps": [
+   {
+    "id": "s1",
+    "op": "pool",
+    "text": "Start (reagent reservoir 1 -> Sample Plate)",
+    "location": "deck",
+    "volume_ul": 325.0
+   },
+   {
+    "id": "s2",
+    "op": "incubate",
+    "text": "Incubating Bind on Heater-Shaker (Setting Heater-Shaker to Shake at 1650 RPM and waiting until reached; Deactivating Shaker)",
+    "location": "off_deck"
+   },
+   {
+    "id": "s3",
+    "op": "bead_cleanup",
+    "text": "Removing Supernatant",
+    "location": "deck",
+    "volume_ul": 20.0,
+    "washes": 1,
+    "wash_ul": 520.0,
+    "elute_ul": 50.0
+   }
+  ]
+ }
+]
