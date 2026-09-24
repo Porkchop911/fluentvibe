@@ -112,6 +112,7 @@ def test_spri_cleanup_simulates_strictly_and_passes_every_semantic_check():
         "no_cross_contamination": "pass",
         "pooling_performed": "na",  # no source document supplied
         "spec_conformance": "na",  # no Bench Spec supplied
+        "reagent_budget": "na",
     }
     eluate_a1 = _final(deck.wt, "Eluate").wells["A1"]
     assert eluate_a1.volume_ul == pytest.approx(13.0)

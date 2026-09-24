@@ -1266,7 +1266,7 @@ def _quality_concerns(result: dict[str, Any]) -> dict[str, Any]:
     """Non-blocking simulator findings worth one repair turn."""
     return {
         key: result[key]
-        for key in ("tip_hygiene", "offdeck_steps")
+        for key in ("tip_hygiene", "offdeck_steps", "reagent_budget")
         if isinstance(result, dict) and result.get(key)
     }
 
@@ -1283,6 +1283,13 @@ def _quality_nudge_message(concerns: dict[str, Any]) -> HumanMessage:
             f"Tips touch more than one sample ({hygiene.get('counts')}), e.g. {examples}. "
             f"{hygiene.get('hint', '')}"
         )
+    budget = concerns.get("reagent_budget")
+    if budget:
+        over = "; ".join(
+            f"{b.get('reagent')}: loads {b.get('loaded_ul')} µl, kit provides {b.get('kit_provides_ul')} µl"
+            for b in budget.get("over_supply", [])[:4]
+        )
+        parts.append(f"Kit reagents exceed their supply ({over}). {budget.get('hint', '')}")
     offdeck = concerns.get("offdeck_steps")
     if offdeck:
         steps = "; ".join(

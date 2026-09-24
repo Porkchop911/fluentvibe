@@ -2913,6 +2913,10 @@ class AuthoringToolRegistry:
         if hygiene is not None:
             result["tip_hygiene"] = hygiene
             concerns.append("tips touch more than one sample (see tip_hygiene)")
+        budget = _reagent_budget_findings(wt if "wt" in locals() else None, self.current_prompt)
+        if budget:
+            result["reagent_budget"] = {"over_supply": budget, "hint": _REAGENT_BUDGET_HINT}
+            concerns.append("some kit reagents are loaded beyond what the kit supplies (see reagent_budget)")
         offdeck = [f.to_dict() for f in offdeck_findings(source)]
         if offdeck:
             result["offdeck_steps"] = {"steps": offdeck, "hint": _OFFDECK_HINT}
@@ -4236,6 +4240,30 @@ def _simulation_failure(report: Any) -> dict[str, Any] | None:
     for key, value in details.items():
         payload.setdefault(key, value)
     return payload
+
+
+_REAGENT_BUDGET_HINT = (
+    "The approved Bench Spec says how much of each kit reagent exists "
+    "(supply_ul × supply_count). Load no more than that: follow the document's "
+    "per-sample amounts (e.g. add 1 µl of a diluted adapter, not the whole "
+    "dilution per well), and keep kit reagents separate from lab-stock reagents "
+    "with different names."
+)
+
+
+def _reagent_budget_findings(wt: Any, prompt: str | None) -> list[dict[str, Any]]:
+    """Reagent-budget findings when the authoring prompt carries an approved spec."""
+    if wt is None:
+        return []
+    from .reagent_budget import check_reagent_budget, spec_from_prompt
+
+    spec = spec_from_prompt(prompt)
+    if spec is None:
+        return []
+    try:
+        return [finding.to_dict() for finding in check_reagent_budget(wt, spec)]
+    except Exception:
+        return []
 
 
 _OFFDECK_HINT = (

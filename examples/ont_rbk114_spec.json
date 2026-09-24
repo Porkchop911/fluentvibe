@@ -3,39 +3,177 @@
   "sample_count": 96,
   "sample_volume_ul": 9,
   "reagents": [
-    {"id": "DNA", "name": "Amplicon DNA (50 ng in 9 ul)", "role": "sample", "liquid_type": "aqueous"},
-    {"id": "RB", "name": "Rapid Barcodes RB01-96 (plate, 5 ul per well)", "role": "per_sample", "liquid_type": "aqueous"},
-    {"id": "AXP", "name": "AMPure XP Beads", "role": "bead_carrier", "liquid_type": "bead_suspension"},
-    {"id": "EtOH", "name": "80% ethanol, freshly prepared", "role": "wash", "liquid_type": "ethanol"},
-    {"id": "EB", "name": "Elution Buffer", "role": "eluent", "liquid_type": "aqueous"},
-    {"id": "RA", "name": "Rapid Adapter", "role": "reagent", "liquid_type": "aqueous"},
-    {"id": "ADB", "name": "Adapter Buffer", "role": "reagent", "liquid_type": "aqueous"}
+    {
+      "id": "DNA",
+      "name": "Amplicon DNA (50 ng in 9 ul)",
+      "role": "sample",
+      "liquid_type": "aqueous"
+    },
+    {
+      "id": "RB",
+      "name": "Rapid Barcodes RB01-96 (plate, 5 ul per well)",
+      "role": "per_sample",
+      "liquid_type": "aqueous",
+      "supply_ul": 5,
+      "supply_count": 96
+    },
+    {
+      "id": "AXP",
+      "name": "AMPure XP Beads",
+      "role": "bead_carrier",
+      "liquid_type": "bead_suspension",
+      "supply_ul": 1200,
+      "supply_count": 2
+    },
+    {
+      "id": "EtOH",
+      "name": "80% ethanol, freshly prepared",
+      "role": "wash",
+      "liquid_type": "ethanol"
+    },
+    {
+      "id": "EB",
+      "name": "Elution Buffer",
+      "role": "eluent",
+      "liquid_type": "aqueous",
+      "supply_ul": 500,
+      "supply_count": 1
+    },
+    {
+      "id": "RA",
+      "name": "Rapid Adapter",
+      "role": "reagent",
+      "liquid_type": "aqueous",
+      "supply_ul": 15,
+      "supply_count": 1
+    },
+    {
+      "id": "ADB",
+      "name": "Adapter Buffer",
+      "role": "reagent",
+      "liquid_type": "aqueous",
+      "supply_ul": 100,
+      "supply_count": 1
+    },
+    {
+      "id": "LAB_BEADS",
+      "name": "AMPure XP beads, lab stock (for the optional PCR clean-up)",
+      "role": "bead_carrier",
+      "liquid_type": "bead_suspension"
+    },
+    {
+      "id": "LAB_EB",
+      "name": "Elution buffer, lab stock (10 mM Tris, for the optional PCR clean-up)",
+      "role": "eluent",
+      "liquid_type": "aqueous"
+    }
   ],
   "steps": [
-    {"id": "s1", "op": "custom", "text": "Optional PCR clean-up of amplicons (method left open by the document)", "location": "deck",
-     "source_quote": "We recommend performing a purification step following the PCR reaction"},
-    {"id": "s2", "op": "manual", "text": "Normalise each amplicon to 50 ng in 9 ul (dilution table)", "location": "manual",
-     "volume_ul": 9, "source_quote": "amplicon DNA is required in 9 µl of volume for each sample"},
-    {"id": "s3", "op": "add", "text": "Add 1 ul of a unique Rapid Barcode to each sample and mix", "location": "deck",
-     "reagent": "RB", "volume_ul": 1, "source_quote": "Rapid Barcodes (RB01-96, one for each sample) 1 μ l"},
-    {"id": "s4", "op": "incubate", "text": "Incubate 30 C for 2 min then 80 C for 2 min on a thermal cycler, cool on ice, spin down", "location": "off_deck",
-     "temp_c": [30, 80], "minutes": [2, 2], "source_quote": "Incubate the tubes or plate at 30°C for 2 minutes and then at 80°C for 2"},
-    {"id": "s5", "op": "pool", "text": "Pool 10 ul of every barcoded sample (960 ul for 96)", "location": "deck",
-     "volume_ul": 10, "target": "pool", "source_quote": "Pool all the barcoded samples into a clean 1.5 or 2 ml Eppendorf DNA LoBind"},
-    {"id": "s6", "op": "bead_cleanup", "text": "Equal-volume AXP clean-up of the pool: Hula 10 min, magnet, two 1.5 ml 80% ethanol washes, dry 30 s, elute in 15 ul EB for 10 min, keep 15 ul eluate", "location": "off_deck",
-     "reagent": "AXP", "target": "pool", "ratio": 1, "washes": 2, "wash_ul": 1500, "elute_ul": 15, "minutes": [10, 10],
-     "source_quote": "add an equal volume of resuspended AMPure XP Beads (AXP)"},
-    {"id": "s7", "op": "measure", "text": "Quantify 1 ul of eluate on a Qubit", "location": "off_deck",
-     "volume_ul": 1, "source_quote": "Quantify 1 µl of eluted sample using a Qubit fluorometer."},
-    {"id": "s8", "op": "transfer", "text": "Take 11 ul of library (max 800 ng) into a clean tube", "location": "manual",
-     "volume_ul": 11, "source_quote": "Transfer 11 µl of the sample into a clean 1.5 ml Eppendorf DNA LoBind tube."},
-    {"id": "s9", "op": "add", "text": "Dilute RA (1.5 ul RA + 3.5 ul ADB) and add 1 ul to the library, incubate 5 min at room temperature", "location": "manual",
-     "reagent": "RA", "volume_ul": 1, "minutes": [5], "source_quote": "Add 1 µl of the diluted Rapid Adapter (RA) to the barcoded DNA."},
-    {"id": "s10", "op": "manual", "text": "Prime and load the MinION flow cell", "location": "manual",
-     "source_quote": "Priming and loading the MinION and GridION Flow Cell"}
+    {
+      "id": "s1",
+      "op": "custom",
+      "text": "Optional PCR clean-up of amplicons with lab-stock AMPure beads and elution buffer (method left open by the document); do not use the kit's AXP or EB",
+      "location": "deck",
+      "source_quote": "We recommend performing a purification step following the PCR reaction",
+      "reagent": "LAB_BEADS"
+    },
+    {
+      "id": "s2",
+      "op": "manual",
+      "text": "Normalise each amplicon to 50 ng in 9 ul (dilution table)",
+      "location": "manual",
+      "volume_ul": 9,
+      "source_quote": "amplicon DNA is required in 9 µl of volume for each sample"
+    },
+    {
+      "id": "s3",
+      "op": "add",
+      "text": "Add 1 ul of a unique Rapid Barcode to each sample and mix",
+      "location": "deck",
+      "reagent": "RB",
+      "volume_ul": 1,
+      "source_quote": "Rapid Barcodes (RB01-96, one for each sample) 1 μ l"
+    },
+    {
+      "id": "s4",
+      "op": "incubate",
+      "text": "Incubate 30 C for 2 min then 80 C for 2 min on a thermal cycler, cool on ice, spin down",
+      "location": "off_deck",
+      "temp_c": [
+        30,
+        80
+      ],
+      "minutes": [
+        2,
+        2
+      ],
+      "source_quote": "Incubate the tubes or plate at 30°C for 2 minutes and then at 80°C for 2"
+    },
+    {
+      "id": "s5",
+      "op": "pool",
+      "text": "Pool 10 ul of every barcoded sample (960 ul for 96)",
+      "location": "deck",
+      "volume_ul": 10,
+      "target": "pool",
+      "source_quote": "Pool all the barcoded samples into a clean 1.5 or 2 ml Eppendorf DNA LoBind"
+    },
+    {
+      "id": "s6",
+      "op": "bead_cleanup",
+      "text": "Equal-volume AXP clean-up of the pool: Hula 10 min, magnet, two 1.5 ml 80% ethanol washes, dry 30 s, elute in 15 ul EB for 10 min, keep 15 ul eluate",
+      "location": "off_deck",
+      "reagent": "AXP",
+      "target": "pool",
+      "ratio": 1,
+      "washes": 2,
+      "wash_ul": 1500,
+      "elute_ul": 15,
+      "minutes": [
+        10,
+        10
+      ],
+      "source_quote": "add an equal volume of resuspended AMPure XP Beads (AXP)"
+    },
+    {
+      "id": "s7",
+      "op": "measure",
+      "text": "Quantify 1 ul of eluate on a Qubit",
+      "location": "off_deck",
+      "volume_ul": 1,
+      "source_quote": "Quantify 1 µl of eluted sample using a Qubit fluorometer."
+    },
+    {
+      "id": "s8",
+      "op": "transfer",
+      "text": "Take 11 ul of library (max 800 ng) into a clean tube",
+      "location": "manual",
+      "volume_ul": 11,
+      "source_quote": "Transfer 11 µl of the sample into a clean 1.5 ml Eppendorf DNA LoBind tube."
+    },
+    {
+      "id": "s9",
+      "op": "add",
+      "text": "Dilute RA (1.5 ul RA + 3.5 ul ADB) and add 1 ul to the library, incubate 5 min at room temperature",
+      "location": "manual",
+      "reagent": "RA",
+      "volume_ul": 1,
+      "minutes": [
+        5
+      ],
+      "source_quote": "Add 1 µl of the diluted Rapid Adapter (RA) to the barcoded DNA."
+    },
+    {
+      "id": "s10",
+      "op": "manual",
+      "text": "Prime and load the MinION flow cell",
+      "location": "manual",
+      "source_quote": "Priming and loading the MinION and GridION Flow Cell"
+    }
   ],
   "notes": [
     "The pooled clean-up (s6) and adapter steps (s8, s9) are tube-scale (960 ul + 960 ul beads, 1.5 ml washes); on a deck without a tube magnet they are operator steps.",
-    "s1 (PCR clean-up) volumes are not given by the document; a standard AMPure clean-up is an acceptable automation choice."
+    "s1 (PCR clean-up) volumes are not given by the document; a standard AMPure clean-up is an acceptable automation choice.",
+    "Kit supplies from the kit contents table: RA 1 × 15 µl, ADB 1 × 100 µl, AXP 2 × 1,200 µl, EB 1 × 500 µl, Rapid Barcodes 5 µl per well (96-well plate). The optional PCR clean-up (s1) uses lab-stock AMPure beads and buffer, not the kit's."
   ]
 }

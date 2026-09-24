@@ -8,7 +8,8 @@ Document → deck mapping (RAA_9198_v114_revM):
 
 * PCR clean-up (recommended before barcoding; the document leaves the method
   open — 1.8× AMPure XP, 2 ethanol washes, 15 µl elution are assumptions):
-  ``spri_cleanup`` on the amplicon plate.
+  ``spri_cleanup`` on the amplicon plate, with lab-stock beads and buffer (the
+  kit's AXP and EB are kept for the pooled clean-up).
 * 9 µl of clean amplicon per sample into the barcoding plate: ``stamp``.
   (The document normalises input to 50 ng in 9 µl first; this protocol assumes
   the amplicons are already at that concentration.)
@@ -71,9 +72,9 @@ def build_worktable() -> Worktable:
 
     amplicons.fill_all(Reagent("Amplicon DNA", role="analyte"), 20.0)
     barcodes.fill_all(Reagent("Rapid Barcode"), 5.0)
-    axp.fill_all(Reagent("AMPure XP (AXP)", role="bead_carrier"), 5000.0)
+    axp.fill_all(Reagent("AMPure XP beads, lab stock", role="bead_carrier"), 5000.0)
     ethanol.fill_all(Reagent("80% ethanol"), 50000.0)
-    eb.fill_all(Reagent("Elution Buffer (EB)", role="eluent"), 3000.0)
+    eb.fill_all(Reagent("Elution buffer, lab stock (10 mM Tris)", role="eluent"), 3000.0)
 
     spri_cleanup(
         wt,
