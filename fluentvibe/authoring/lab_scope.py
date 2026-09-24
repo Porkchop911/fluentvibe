@@ -136,7 +136,11 @@ class LabScope:
     # against) and ``lookup_api``. The API lookup is deterministic (no model
     # call, no catalog search); without it models spent whole turns probing
     # the API through ``simulate_python_draft``.
-    _SKILLS_ALLOWED_TOOLS = _ENFORCE_ALLOWED_TOOLS | {"declare_protocol_workflow", "lookup_api"}
+    _SKILLS_ALLOWED_TOOLS = _ENFORCE_ALLOWED_TOOLS | {
+        "declare_protocol_workflow",
+        "lookup_api",
+        "edit_draft",
+    }
 
     def allowed_tools(self) -> frozenset[str] | None:
         """Tool names the LLM may call. ``None`` ⇒ no allow-list (all permitted).
@@ -203,7 +207,7 @@ _SKILLS_HEADER = (
     "LAB SCOPE (authoritative — this IS the catalog for this run). "
     "Grounding and approval tools are intentionally unavailable: the only "
     "tools you can call are `declare_protocol_workflow`, `lookup_api`, "
-    "`simulate_python_draft`, and `compile_and_simulate`. When unsure "
+    "`simulate_python_draft`, `edit_draft`, and `compile_and_simulate`. When unsure "
     "whether a method or argument exists, call `lookup_api` (e.g. "
     "`wt.liha`, `Plate96`) instead of submitting a probe draft to the "
     "simulator. Everything else the removed tools used to look up (valid deck "
@@ -218,8 +222,9 @@ _SKILLS_HEADER = (
     "washes, elution, barcoding) — do not collapse or omit a stage. Then "
     "write the COMPLETE protocol as a single `build_worktable()` in one "
     "pass — all variables, labware, and every declared group — and call "
-    "`simulate_python_draft` with the full source. Fix any simulator error "
-    "and re-call `simulate_python_draft`; once it passes, call "
+    "`simulate_python_draft` with the full source. Fix a simulator error with "
+    "`edit_draft` (replace the exact failing lines) instead of resubmitting the "
+    "whole file; once it passes, call "
     "`compile_and_simulate` on the same source. Use the exact `catalog=` "
     "names and `python_class` values listed below. If the request needs "
     "labware not in this list, say so explicitly and stop rather than "

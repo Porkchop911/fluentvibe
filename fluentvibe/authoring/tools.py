@@ -1064,6 +1064,10 @@ def tool_definitions() -> list[dict[str, Any]]:
             "source": {"type": "string"},
             "strict": {"type": "boolean"},
         }, required=("source",)),
+        _tool("edit_draft", "Fix the last simulated draft with a small replacement instead of resubmitting it: replace the exact text `old` (must occur once) with `new`, then re-run strict simulation.", {
+            "old": {"type": "string", "description": "Exact text from the last draft, including indentation; must occur exactly once."},
+            "new": {"type": "string", "description": "Replacement text."},
+        }, required=("old", "new")),
         _tool("compile_and_simulate", "Run the full gate: contract, import/build, compile .xscr, strict simulation.", {
             "source": {"type": "string"},
         }),
@@ -1455,6 +1459,7 @@ class AuthoringToolRegistry:
             "suggest_deck_layout": self.suggest_deck_layout,
             "ground_in_parallel": self.ground_in_parallel,
             "simulate_python_draft": self.simulate_python_draft,
+            "edit_draft": self.edit_draft,
             "compile_and_simulate": self.compile_and_simulate,
             "validate_fluentcontrol_shell": self.validate_fluentcontrol_shell,
         }
@@ -2803,12 +2808,51 @@ class AuthoringToolRegistry:
         expected_terminal_groups = max(0, len(plan.groups) - 1)
         return len(group_calls) < expected_terminal_groups
 
+    def apply_draft_edit(self, old: str, new: str) -> tuple[str | None, dict[str, Any] | None]:
+        """Replace ``old`` with ``new`` in the last simulated draft.
+
+        Returns ``(new_source, None)`` or ``(None, error_result)``. ``old`` must
+        occur exactly once so the edit is unambiguous.
+        """
+        base = getattr(self, "last_draft_source", None)
+        if not base:
+            return None, {
+                "ok": False, "category": "edit_draft_no_base",
+                "message": "No draft to edit yet: call simulate_python_draft with the full source first.",
+            }
+        if not isinstance(old, str) or not old:
+            return None, {"ok": False, "category": "edit_draft_bad_args",
+                          "message": "edit_draft needs a non-empty `old` text to replace."}
+        count = base.count(old)
+        if count != 1:
+            return None, {
+                "ok": False, "category": "edit_draft_ambiguous" if count else "edit_draft_not_found",
+                "message": (
+                    f"`old` occurs {count} times in the last draft; include enough surrounding "
+                    "lines to match exactly once." if count else
+                    "`old` was not found in the last draft. Copy it exactly (including "
+                    "indentation) from the draft you last simulated."
+                ),
+            }
+        return base.replace(old, str(new if new is not None else "")), None
+
+    def edit_draft(self, old: str, new: str) -> dict[str, Any]:
+        """Apply a small replacement to the last draft and re-simulate it."""
+        source, error = self.apply_draft_edit(old, new)
+        if error is not None:
+            return error
+        result = dict(self.simulate_python_draft(source))
+        result.setdefault("source", source)
+        return result
+
     def simulate_python_draft(self, source: str, strict: bool = True) -> dict[str, Any]:
         volume_rewrites: list[dict[str, Any]] = []
         class_rewrites: list[dict[str, Any]] = []
         source, class_rewrites = _autoground_labware_classes(
             source, dict(getattr(self.lab_scope, "labware_classes", {}) or {})
         )
+        # Base for edit_draft: the next small fix applies to this exact text.
+        self.last_draft_source = source
         for rewrite in class_rewrites:
             print(
                 f"[autoground] labware class: {rewrite['from']} -> {rewrite['to']} "
