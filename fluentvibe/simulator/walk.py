@@ -1067,10 +1067,16 @@ class Simulator:
                 current_volume_ul=well.volume_ul,
             )
         if tip.volume_ul > tip.capacity_ul + 1e-6:
+            before = tip.volume_ul - volume_ul
             raise _with_sim_details(
                 OverdrawError(
                     f"Aspirate: tip would hold {tip.volume_ul:.2f} uL but capacity is "
-                    f"{tip.capacity_ul:.2f} uL"
+                    f"{tip.capacity_ul:.2f} uL "
+                    + (f"(the tips already held {before:.2f} uL - not yet dispensed or emptied - plus "
+                       f"this {volume_ul:.2f} uL aspirate). Dispense or empty the tips first, or "
+                       if before > 1e-6 else f"(this aspirate alone is {volume_ul:.2f} uL). ")
+                    + f"aspirate at most {max(tip.capacity_ul - max(before, 0.0), 0.0):.2f} uL per trip "
+                    f"(split larger volumes into trips) or use larger tips."
                 ),
                 category="tip_capacity",
                 operation="Aspirate",
@@ -1159,9 +1165,16 @@ class Simulator:
                 f"{available:.2f} uL available but {volume_ul:.2f} uL requested"
             )
         if tip.volume_ul + volume_ul > tip.capacity_ul + 1e-6:
+            if tip.volume_ul > 1e-6:
+                why = (f"the tips already hold {tip.volume_ul:.2f} uL (aspirated earlier and not "
+                       f"dispensed or emptied) plus this {volume_ul:.2f} uL mix. Dispense or empty the "
+                       f"tips before mixing, or mix at most {tip.capacity_ul - tip.volume_ul:.2f} uL")
+            else:
+                why = (f"the mix volume alone is {volume_ul:.2f} uL; mix at most about "
+                       f"{0.9 * tip.capacity_ul:.0f} uL with these tips")
             raise OverdrawError(
                 f"Mix: tip would hold {tip.volume_ul + volume_ul:.2f} uL but "
-                f"capacity is {tip.capacity_ul:.2f} uL"
+                f"capacity is {tip.capacity_ul:.2f} uL: {why}."
             )
 
     def _mix_equilibrate(self, labware: Labware, well) -> None:
