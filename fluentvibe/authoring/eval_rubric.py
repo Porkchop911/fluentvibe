@@ -51,6 +51,10 @@ SEMANTIC_KEYS = (
     "reagent_budget",
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
+CLEANUP_KEYS = frozenset({
+    "derived_supernatant", "derived_eluate", "off_magnet_elution", "separate_eluate_destination",
+    "magnet_roundtrip", "eluate_recovered",
+})
 
 _PASS, _FAIL, _NA = "pass", "fail", "na"
 
@@ -792,4 +796,10 @@ def score_protocol(
             invariants.extend(
                 Invariant(k, _NA, f"did not simulate: {exc}") for k in SEMANTIC_KEYS
             )
+    if spec is not None and not any(step.op == "bead_cleanup" for step in spec.steps):
+        # The bead-model checks only mean something for a protocol with a clean-up.
+        invariants = [
+            Invariant(inv.key, _NA, "the spec has no bead clean-up") if inv.key in CLEANUP_KEYS else inv
+            for inv in invariants
+        ]
     return RubricResult(tuple(invariants))

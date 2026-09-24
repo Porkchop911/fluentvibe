@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .common import (
@@ -116,7 +117,7 @@ def spri_cleanup(
             f"elution_volume_ul ({elution_volume_ul})."
         )
     require_distinct(block, reagent_tips=reagent_tips, sample_tips=sample_tips, eluate_tips=eluate_tips)
-    require_role(sample_plate, "analyte", param="sample_plate", block=block)
+    require_role(sample_plate, "analyte", param="sample_plate", block=block, wt=wt)
     require_role(bead_source, "bead_carrier", param="bead_source", block=block)
     require_role(elution_source, "eluent", param="elution_source", block=block)
     ensure_analyte_marker(sample_plate)
@@ -140,8 +141,13 @@ def spri_cleanup(
     # Every volume, time and liquid class becomes a FluentControl variable
     # (``<NAME>_…``) unless variables=False, so the run stays editable in FC.
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block=block)
-    bead = v.ref("BEAD_VOLUME_UL", volumes.bead_ul)
-    supernatant = v.ref("SUPERNATANT_UL", volumes.supernatant_ul)
+    # Volumes above what the tips hold go in equal trips with the same tips.
+    reagent_capacity = float(getattr(reagent_tips, "capacity_ul", 0.0) or 200.0)
+    bead_trips = math.ceil(volumes.bead_ul / reagent_capacity)
+    supernatant_trips = math.ceil(volumes.supernatant_ul / tip_capacity)
+    bead = v.ref("BEAD_VOLUME_UL" if bead_trips == 1 else "BEAD_TRIP_UL", round(volumes.bead_ul / bead_trips, 2))
+    supernatant = v.ref("SUPERNATANT_UL" if supernatant_trips == 1 else "SUPERNATANT_TRIP_UL",
+                        round(volumes.supernatant_ul / supernatant_trips, 2))
     wash = v.ref("WASH_VOLUME_UL", volumes.wash_ul)
     elution = v.ref("ELUTION_VOLUME_UL", volumes.elution_ul)
     eluate = v.ref("ELUATE_TRANSFER_UL", volumes.eluate_transfer_ul)
@@ -159,8 +165,9 @@ def spri_cleanup(
     wt.group(f"{name} - bind")
     head.mount_adapter()
     head.pick_up(reagent_tips)
-    head.aspirate(bead_source, bead, liquid_class=lc)
-    head.dispense(sample_plate, bead, liquid_class=lc)
+    for _ in range(bead_trips):
+        head.aspirate(bead_source, bead, liquid_class=lc)
+        head.dispense(sample_plate, bead, liquid_class=lc)
     head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
     head.mix(sample_plate, bind_mix, cycles=bind_mix_cycles, liquid_class=mix_lc)
@@ -171,8 +178,9 @@ def spri_cleanup(
     wt.gripper.move(sample_plate, onto=magnet)
     wt.wait(duration_seconds=settle_time)
     head.pick_up(sample_tips)
-    head.aspirate(sample_plate, supernatant, liquid_class=lc)
-    head.empty_tips(waste, supernatant, liquid_class=empty_lc)
+    for _ in range(supernatant_trips):
+        head.aspirate(sample_plate, supernatant, liquid_class=lc)
+        head.empty_tips(waste, supernatant, liquid_class=empty_lc)
     head.return_tips(sample_tips)
 
     for index in range(1, wash_count + 1):

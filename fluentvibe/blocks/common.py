@@ -24,7 +24,29 @@ def roles_in(labware) -> set[str]:
     return roles
 
 
-def require_role(labware, role: str, *, param: str, block: str) -> None:
+def received_liquid(wt, labware) -> bool:
+    """True when a step recorded so far dispenses into ``labware`` (its contents
+    then come from the protocol itself, e.g. the eluate of an earlier clean-up)."""
+    label = getattr(labware, "label", labware)
+
+    def walk(steps) -> bool:
+        for step in steps:
+            if "Dispense" in type(step).__name__ and getattr(step, "labware_name", None) == label:
+                return True
+            if walk(getattr(step, "steps", None) or ()):
+                return True
+        return False
+
+    groups = list(getattr(wt, "_groups", ()))
+    stacked = [steps for steps in getattr(wt, "_emit_target_stack", ())]
+    return any(walk(group.steps) for group in groups) or any(walk(steps) for steps in stacked)
+
+
+def require_role(labware, role: str, *, param: str, block: str, wt=None) -> None:
+    """``labware`` must hold ``role`` initially, or (with ``wt``) have been filled
+    by an earlier step, in which case the simulator checks what it holds."""
+    if role in roles_in(labware) or (wt is not None and received_liquid(wt, labware)):
+        return
     if role not in roles_in(labware):
         present = sorted({
             f"{layer.reagent.name!r} (role={getattr(layer.reagent, 'role', 'plain')!r})"
