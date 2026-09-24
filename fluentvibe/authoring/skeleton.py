@@ -128,6 +128,10 @@ class _Writer:
     notes: list[str] = field(default_factory=list)
     names: set[str] = field(default_factory=set)
     handoff: tuple[str, int] | None = None
+    positions: dict[str, tuple[str, int]] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
+    retired: list[str] = field(default_factory=list)
+    swaps: int = 0
 
     def var(self, base: str) -> str:
         name = _ident(base)
@@ -137,38 +141,55 @@ class _Writer:
         self.names.add(candidate)
         return candidate
 
-    def nest(self) -> tuple[str, int]:
-        if not self.deck.free_nests:
+    def retire(self, *variables: str) -> None:
+        """Labware no later step uses: its nest may be reclaimed by an operator swap."""
+        for var in variables:
+            if var in self.positions and var not in self.retired:
+                self.retired.append(var)
+
+    def _reclaim(self) -> tuple[str, int]:
+        """Free a nest mid-run: the operator takes spent labware off the deck."""
+        if not self.retired:
             raise ValueError("skeleton: the deck has no free 61 mm nest left for another plate or tip box")
-        return self.deck.free_nests.pop(0)
+        old = self.retired.pop(0)
+        loc, pos = self.positions.pop(old)
+        self.body.append(f"    wt.user_prompt({json.dumps(f'Take the spent {self.labels[old]} off {loc} {pos}.')})")
+        self.body.append(f"    wt.remove({old})")
+        self.swaps += 1
+        return loc, pos
+
+    def nest(self) -> tuple[str, int]:
+        if self.deck.free_nests:
+            return self.deck.free_nests.pop(0)
+        return self._reclaim()
+
+    def _put(self, label: str, expr: str) -> str:
+        var = self.var(label)
+        if self.deck.free_nests:
+            loc, pos = self.deck.free_nests.pop(0)
+            self.placements.append(f'    {var} = wt.place({expr}, "{loc}", {pos})')
+        else:
+            loc, pos = self._reclaim()
+            self.body[-2] = self.body[-2].replace(".\")", f' and put a fresh {label} there.\")')
+            self.body.append(f'    {var} = wt.place({expr}, "{loc}", {pos})')
+        self.positions[var] = (loc, pos)
+        self.labels[var] = label
+        return var
 
     def plate(self, label: str) -> str:
-        loc, pos = self.nest()
-        var = self.var(label)
-        self.placements.append(
-            f'    {var} = wt.place(Plate96("{label}", catalog="{self.deck.plate_catalog}"), "{loc}", {pos})'
-        )
-        return var
+        return self._put(label, f'Plate96("{label}", catalog="{self.deck.plate_catalog}")')
 
     def mca_box(self, label: str) -> str:
         if not self.deck.mca_tips:
             raise ValueError("skeleton: the profile lists no MCA96 tip box")
-        loc, pos = self.nest()
-        var = self.var(label)
         cls = "MCA200Box" if "200" in self.deck.mca_tips else "MCA100Box"
-        self.placements.append(
-            f'    {var} = wt.place({cls}("{label}", catalog="{self.deck.mca_tips}"), "{loc}", {pos})'
-        )
-        return var
+        return self._put(label, f'{cls}("{label}", catalog="{self.deck.mca_tips}")')
 
     def fca_box(self, label: str) -> str:
         if not self.deck.fca_tips:
             raise ValueError("skeleton: the profile lists no FCA tip box")
-        loc, pos = self.nest()
-        var = self.var(label)
         catalog, cls = self.deck.fca_tips
-        self.placements.append(f'    {var} = wt.place({cls}("{label}", catalog="{catalog}"), "{loc}", {pos})')
-        return var
+        return self._put(label, f'{cls}("{label}", catalog="{catalog}")')
 
     def trough(self, label: str, *, large: bool) -> str:
         if not self.deck.free_trough_sites:
@@ -185,6 +206,14 @@ class _Writer:
 _PLATE_WORKING_UL = 180.0
 # What one pool well receives at most (12 columns into one).
 _POOL_WELL_UL = 300.0
+
+# Most a skeleton 96-well plate well may hold at any point.
+_PLATE_MAX_UL = 330.0
+
+
+class DeckMismatch(ValueError):
+    """The spec cannot run on this deck as written (e.g. deep-well volumes)."""
+
 
 _ROLE_FOR_SIM = {"sample": "analyte", "bead_carrier": "bead_carrier", "eluent": "eluent"}
 
@@ -269,11 +298,27 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         w.notes.append(f"no sample volume in the spec; {sample_ul:g} ul per well is ASSUMED")
     current = samples
     if sample_reagent is not None:
-        w.fills.append(f"    {samples}.fill_all({reagent_var(sample_reagent)}, {sample_ul:g})")
+        analyte_var = reagent_var(sample_reagent)
+        matrix_name = f"{sample_reagent.name} matrix"
     else:
         w.notes.append("no sample reagent in the spec; the sample fill is ASSUMED")
-        w.fills.append(f'    {samples}.fill_all(Reagent("Sample", role="analyte"), {sample_ul:g})  # ASSUMED')
+        analyte_var = 'Reagent("Sample", role="analyte")'
+        matrix_name = "Sample matrix"
+    # The simulator takes bound analyte out of the free liquid, so the analyte
+    # is a small marker in plain sample liquid; copies of the plate (stamps)
+    # then keep their volume through a clean-up too.
+    marker_ul = min(2.0, sample_ul / 10)
+    w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+    w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
     well_ul = sample_ul
+    pooled = False
+
+    def fits(step: SpecStep, volume: float) -> None:
+        if volume > _PLATE_MAX_UL:
+            raise DeckMismatch(
+                f"skeleton: {step.id} needs {volume:g} ul per well; a 96-well plate on this deck holds "
+                f"about {_PLATE_MAX_UL:g} ul (deep-well protocol? the profile has no deep-well plate)"
+            )
 
     magnet_var = waste_var = None
 
@@ -324,6 +369,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         label = json.dumps(f"{step.id}: {' '.join(step.text.split())[:50]}")
         reagent = next((r for r in spec.reagents if r.id == step.reagent), None)
 
+        if pooled and step.op != "incubate":
+            # The pool plate holds 8 wells in column 1; MCA96 full-plate
+            # blocks would address 96. Leave the step for LiHa authoring.
+            w.notes.append(f"{step.id} ({step.op}) runs on the pooled column; author it with the LiHa")
+            w.body.append(f"    wt.group({label})")
+            w.body.append(f"    wt.add_comment({json.dumps('TODO (LiHa, pooled column 1) ' + step.text)})")
+            continue
+
         if _is_cleanup(step, spec):
             magnet, waste = ensure_magnet_and_waste()
             beads = reagent if reagent and reagent.role == "bead_carrier" else _pick(spec, "bead_carrier")
@@ -345,6 +398,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             wash = wash or assumed("wash", "ASSUMED_ETOH", "80% ethanol", "ethanol")
             eluent = eluent or assumed("eluent", "ASSUMED_EB", "Elution buffer")
             bead_ul = float(step.volume_ul) if bead_given else ratio * well_ul
+            fits(step, well_ul + bead_ul)
             bead_arg = f"bead_volume_ul={bead_ul:g}" if bead_given else f"bead_ratio={ratio:g}"
             bead_trough = trough_for(beads, bead_ul * n * 1.15 + 500)
             wash_trough = trough_for(wash, wash_ul * washes * n * 1.1 + 2000)
@@ -366,6 +420,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"        liquid_class={json.dumps(lc)}, name={label},\n"
                 f"    ){comment}"
             )
+            w.retire(current, sample_tips)
             current, well_ul = eluate, elute_ul - 2.0
             continue
 
@@ -383,7 +438,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"    pool_columns(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
                 f"                 liquid_class={json.dumps(lc)}, dest_column=1, name={label})"
             )
+            w.retire(current, tips)
             current, well_ul = pool, vol * 12
+            pooled = True
             continue
 
         if step.op in {"add", "transfer", "mix"} and reagent is not None and reagent.role == "per_sample":
@@ -397,31 +454,41 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"    stamp(wt, source={source}, dest={current}, volume_ul={vol:g}, tips={tips},\n"
                 f"          liquid_class={json.dumps(lc)}{mix}, name={label})"
             )
+            w.retire(source, tips)
             well_ul += vol
+            fits(step, well_ul)
             continue
 
         if step.op == "add" and reagent is not None:
             vol = step.volume_ul if step.volume_ul is not None else 5.0
             trough = trough_for(reagent, vol * n * 1.15 + 500)
-            tips = w.mca_box(f"{step.id}_Tips")
+            # Reagent tips only meet reagent and dispense from above: one shared box.
+            if "reagent" not in shared_tips:
+                shared_tips["reagent"] = w.mca_box("ReagentTips")
+            tips = shared_tips["reagent"]
             w.body.append(
                 f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
                 f"                reagent_tips={tips}, liquid_class={json.dumps(lc)}, name={label})"
             )
             well_ul += vol
+            fits(step, well_ul)
             continue
 
         if step.op == "transfer":
             dest = w.plate(f"{step.id}_Plate")
-            tips = w.mca_box(f"{step.id}_Tips")
+            # Sample-lineage tips: channel i only ever meets sample i.
+            tips = carry[0] if carry and carry[1] == current else w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else well_ul
             if vol > well_ul - 1.0:
                 w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; moving {well_ul - 1.0:g} ul")
                 vol = well_ul - 1.0
+            fits(step, vol)
             w.body.append(
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
                 f"          liquid_class={json.dumps(lc)}, name={label})"
             )
+            w.retire(current)
+            carry = (tips, dest)
             current, well_ul = dest, vol
             continue
 
@@ -446,8 +513,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         note = "  # kit supply" if supply is not None else "  # lab stock, estimated need"
         w.fills.append(f"    {trough}.fill_all({reagent_var(reagent)}, {amount:.0f}){note}")
 
+    if w.swaps:
+        w.notes.append(f"the deck is full: {w.swaps} operator swap(s) replace spent labware mid-run")
     classes = sorted({
-        cls for line in w.placements
+        cls for line in w.placements + w.body
         for cls in re.findall(r"wt\.place\((\w+)\(", line)
     } | {"Reagent", "Worktable"})
     used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step")

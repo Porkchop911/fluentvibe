@@ -100,15 +100,18 @@ def add_reagent(
             )
         require_distinct("add_reagent", reagent_tips=reagent_tips, mix_tips=mix_tips)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="add_reagent")
-    volume = v.ref("VOLUME_UL", float(volume_ul))
+    capacity = float(getattr(reagent_tips, "capacity_ul", 0.0) or 0.0)
+    trips = math.ceil(float(volume_ul) / capacity) if capacity else 1
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
     head.pick_up(reagent_tips)
-    head.aspirate(reagent_source, volume, liquid_class=lc)
-    head.dispense(plate, volume, liquid_class=lc)
+    for _ in range(trips):
+        head.aspirate(reagent_source, volume, liquid_class=lc)
+        head.dispense(plate, volume, liquid_class=lc)
     head.return_tips(reagent_tips)
     if mix_cycles:
         head.pick_up(mix_tips)
