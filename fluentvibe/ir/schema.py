@@ -230,6 +230,11 @@ class RgaTransferLabwareStep(BaseStep):
     move_to_base: bool = Field(default=False, description="Move to base position after transfer")
     module_name: str = Field(default="RGA 1", description="RGA module name")
     available_id: Optional[str] = None
+    stack_onto: Optional[str] = Field(
+        default=None,
+        description="Label of the labware this move stacks onto (gripper.move(onto=...)); "
+        "None for a move to a site, which must then be free. Simulation only.",
+    )
 
 
 class CgaGetFingersStep(BaseStep):

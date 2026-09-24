@@ -482,6 +482,25 @@ class Simulator:
         dest = (step.destination_location, step.destination_site)
         if self._strict:
             self._validate_workspace_slot(dest, action=f"RgaTransferLabware({step.labware_name!r})")
+            occupants = [lw for lw in self._slot_map.get(dest, []) if lw is not labware]
+            if occupants and not getattr(step, "stack_onto", None):
+                # FluentControl: 'Destination location ... is occupied'. Moving
+                # *onto* labware (a magnet, a plate for a lid) is gripper.move(onto=...).
+                free = sorted(
+                    pos for loc, pos in (self._wt.valid_slots or ())
+                    if loc == dest[0] and not self._slot_map.get((loc, pos))
+                )
+                raise _with_sim_details(
+                    OccupiedSlotError(
+                        f"Gripper cannot move {step.labware_name!r} to {dest}: "
+                        f"{occupants[-1].label!r} is there. Free {dest[0]} positions now: {free}. "
+                        f"(To put it on top of labware, use gripper.move(..., onto=that_labware).)"
+                    ),
+                    category="slot_occupied",
+                    slot={"location": dest[0], "position": dest[1]},
+                    labware=step.labware_name,
+                    occupied_by=occupants[-1].label,
+                )
         # Pop from current stack.
         stack = self._slot_map.get(labware.slot, [])
         if labware in stack:
