@@ -372,6 +372,7 @@ def test_session_surfaces_pending_source_protocol_approval_over_empty_failure() 
 
 def test_provider_message_normalization_coalesces_system_and_keeps_tool_history() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+
     from fluentvibe.authoring.graph import _coalesce_system_messages
 
     history = [
