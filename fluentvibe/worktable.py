@@ -48,6 +48,11 @@ if TYPE_CHECKING:
     from .simulator.snapshots import Snapshot
 
 
+# Catalog-name markers of SBS-footprint reservoirs: they may sit on plate nests
+# and the MCA96 can pipette in them (slim troughs: neither).
+_SBS_MARKERS = ("sbs", "mca96", "mca384")
+
+
 class Worktable:
     """The Tecan worktable.
 
@@ -700,7 +705,7 @@ class Worktable:
         rules = self._deck_rules()
         trough_locations = rules.get("trough_locations") or ()
         catalog_l = (getattr(labware, "catalog_name", None) or "").lower()
-        sbs_markers = [str(m).lower() for m in (rules.get("sbs_trough_markers") or ("sbs",))]
+        sbs_markers = [str(m).lower() for m in (rules.get("sbs_trough_markers") or _SBS_MARKERS)]
         sbs_footprint = any(re.search(rf"\b{re.escape(m)}\b", catalog_l) for m in sbs_markers)
         if trough_locations and getattr(labware, "category", None) == "trough" and not sbs_footprint:
             from .simulator.invariants import TroughPlacementError
@@ -727,6 +732,13 @@ class Worktable:
                         f"marker if the run actually needs 96 × ≥200 µL wash "
                         f"capacity."
                     )
+        existing = self._placed.get(labware.label)
+        if existing is not None and existing is not labware:
+            raise ValueError(
+                f"Labware name {labware.label!r} is already used in this protocol "
+                f"(FluentControl: 'Labware name already exists', also after the first one "
+                f"was removed). Give the new labware its own name."
+            )
         if slot in self.slot_map and self.slot_map[slot] and not allow_occupied:
             occupied_by = self.slot_map[slot][-1]
             raise ValueError(
@@ -790,6 +802,8 @@ class Worktable:
         self._validate_liha_tip_pickup()
         self._validate_mix_liquid_classes()
         self._validate_empty_tip_liquid_classes()
+        self._validate_mca_reservoirs()
+        self._validate_reach()
         protocol = self.to_protocol()
         xml = render_protocol(protocol)
         path = Path(out_path)
@@ -982,6 +996,87 @@ class Worktable:
                     f"Mix-capable class such as \"Water Mix\" for mixing steps "
                     f"(keep \"Water Free Single\" for plain transfers)."
                 )
+
+    def _validate_reach(self) -> None:
+        """Refuse pipetting on a position the arm cannot reach.
+
+        Uses the profile's measured reach (``reach.json`` from
+        ``scripts/probe_deck_reach.py``: FluentControl's own "out of range"
+        verdicts). Only positions FluentControl flagged are refused; anything
+        unmeasured stays allowed.
+        """
+        unreachable = ((self._deck_rules().get("reach") or {}).get("unreachable") or {})
+        if not unreachable:
+            return
+        reachable = ((self._deck_rules().get("reach") or {}).get("reachable") or {})
+        for step in self._iter_all_steps():
+            kind = type(step).__name__
+            if kind in ("AspirateStep", "DispenseStep", "Mca384MixStep"):
+                arm = "mca96"
+            elif kind in ("LihaAspirateStep", "LihaDispenseStep", "LihaMixStep"):
+                arm = "liha"
+            else:
+                continue
+            try:
+                labware = self.labware_by_label(step.labware_name)
+            except KeyError:
+                continue
+            slot = self._first_slot_of(labware)
+            if slot is None:
+                continue
+            location, position = slot
+            if position in (unreachable.get(arm) or {}).get(location, []):
+                from .simulator.invariants import InvalidSlotError
+                options = (reachable.get(arm) or {}).get(location, [])
+                raise InvalidSlotError(
+                    f"{labware.label!r} sits on {location} {position}, which the {arm.upper()} cannot reach "
+                    f"(FluentControl: 'out of range'; measured in the profile's reach.json). "
+                    f"Reachable {location} positions for the {arm.upper()}: {options}."
+                )
+
+    def _first_slot_of(self, labware) -> "Optional[tuple[str, int]]":
+        """Where ``labware`` was first placed (its slot may be cleared by remove())."""
+        if getattr(labware, "slot", None):
+            return labware.slot
+        for step in self._iter_all_steps():
+            if type(step).__name__ == "AddLabwareStep" and getattr(step, "label", None) == labware.label:
+                return (step.location, int(step.position))
+        return None
+
+    def _validate_mca_reservoirs(self) -> None:
+        """Refuse MCA96 pipetting in a slim trough.
+
+        The MCA head's 96 tips span 12 columns; a slim (single-column) trough
+        leaves most tips without a well, which FluentControl's context check
+        reports as "<trough> out of range. Arm cannot move to position". MCA
+        reagents belong in SBS-footprint reservoirs (catalog names carrying a
+        deck-rule ``mca_reservoir_markers`` marker, default sbs / mca96 /
+        mca384) on a plate nest. Applies on decks with guard rules.
+        """
+        rules = self._deck_rules()
+        if not rules:
+            return
+        markers = [str(m).lower() for m in (rules.get("mca_reservoir_markers") or _SBS_MARKERS)]
+        for step in self._iter_all_steps():
+            if type(step).__name__ not in ("AspirateStep", "DispenseStep", "Mca384MixStep"):
+                continue
+            try:
+                labware = self.labware_by_label(step.labware_name)
+            except KeyError:
+                continue
+            if getattr(labware, "category", None) != "trough":
+                continue
+            catalog_l = (getattr(labware, "catalog_name", None) or "").lower()
+            if any(re.search(rf"\b{re.escape(m)}\b", catalog_l) for m in markers):
+                continue
+            from .simulator.invariants import TroughPlacementError
+            raise TroughPlacementError(
+                f"The MCA96 pipettes in slim trough {labware.label!r} ({labware.catalog_name!r}); "
+                f"MCA heads and slim troughs are incompatible (FluentControl: 'out of range'). "
+                f"Use an SBS reservoir on a plate nest, e.g. "
+                f"`wt.place(Trough100mL({labware.label!r}, catalog='MCA96 200ml'), 'Nest61mm_Pos', <n>)` "
+                f"or catalog='60ml SBS MCA96'."
+            )
 
     def _validate_empty_tip_liquid_classes(self) -> None:
         """Refuse to compile an empty-tips step that does not use the deck's

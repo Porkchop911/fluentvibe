@@ -69,14 +69,14 @@ class Deck:
         self.eluate_tips = wt.place(MCA200Box("EluateTips", catalog=MCA_TIPS), NEST, 7)
         self.fca_tips = wt.place(FCA200Box("FCATips", catalog="FCA, 200ul SBS"), NEST, 8)
         self.magnet = wt.place(MagnetRack("Magnet", catalog="LV_Alpaqua_A000350"), NEST, 13)
-        self.beads = wt.place(Trough25mL("Beads", catalog="25ml_short"), "WS_100ml_1", 1)
-        self.ethanol = wt.place(Trough100mL("Ethanol", catalog="100ml"), "WS_100ml_1", 2)
-        self.eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
+        self.beads = wt.place(Trough100mL("Beads", catalog="60ml SBS MCA96"), NEST, 9)
+        self.ethanol = wt.place(Trough100mL("Ethanol", catalog="60ml SBS MCA96"), NEST, 10)
+        self.eb = wt.place(Trough100mL("EB", catalog="60ml SBS MCA96"), NEST, 11)
         self.waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
         self.samples.fill_all(Reagent("Amplicon", role="analyte" if analyte else "plain"), 20.0)
         self.barcodes.fill_all(Reagent("Barcode"), 5.0)
         self.beads.fill_all(Reagent("AMPure XP", role="bead_carrier"), 15000.0)
-        self.ethanol.fill_all(Reagent("80% ethanol"), 60000.0)
+        self.ethanol.fill_all(Reagent("80% ethanol"), 55000.0)
         self.eb.fill_all(Reagent("EB", role="eluent" if eluent else "plain"), 5000.0)
 
     def cleanup(self, **overrides):
@@ -149,7 +149,8 @@ def test_second_cleanup_runs_on_the_eluate_of_the_first():
     # The eluate plate was filled by the protocol, not authored: still accepted.
     deck.cleanup(sample_plate=deck.eluate, eluate_plate=deck.pool, sample_tips=deck.eluate_tips,
                  eluate_tips=deck.sample_tips,
-                 sample_volume_ul=38.0, bead_ratio=1.0, elution_volume_ul=15.0, name="Cleanup 2")
+                 sample_volume_ul=38.0, bead_ratio=1.0, elution_volume_ul=15.0, wash_count=1,
+                 name="Cleanup 2")  # one 55 ml ethanol reservoir covers 3 washes
     deck.wt.simulate(strict=True)
     statuses = {inv.key: inv.status for inv in score_semantic(deck.wt)}
     assert statuses["eluate_recovered"] == "pass"
@@ -435,3 +436,37 @@ def test_user_prompt_without_auto_close_renders_a_valid_timeout():
     deck.wt.user_prompt("Swap the tip racks.")
     xml = render_protocol(deck.wt.to_protocol())
     assert re.search(r"<AutoClose>False</AutoClose>\s*<Timeout>1</Timeout>", xml)
+
+
+def test_mca_in_a_slim_trough_is_refused_at_compile(tmp_path, monkeypatch):
+    """FC reports MCA96 + slim trough as 'out of range'; refuse it before FC does."""
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.simulator.invariants import TroughPlacementError
+
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    deck = Deck()
+    slim = deck.wt.place(Trough25mL("Slim", catalog="25ml_short"), "WS_100ml_1", 2)
+    slim.fill_all(Reagent("Buffer"), 20000.0)
+    stamp(deck.wt, source=slim, dest=deck.pool, volume_ul=10.0, tips=deck.reagent_tips, liquid_class=LC)
+    with pytest.raises(TroughPlacementError, match="slim trough 'Slim'"):
+        deck.wt.compile(tmp_path / "x.xscr")
+
+
+def test_positions_fluentcontrol_flagged_as_unreachable_are_refused(tmp_path, monkeypatch):
+    """reach.json (scripts/probe_deck_reach.py) records FC's 'out of range' verdicts."""
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.simulator.invariants import InvalidSlotError
+
+    reach = PROFILE.parent / "reach.json"
+    if not reach.exists():
+        pytest.skip("no measured reach for the sat_1080_test profile")
+    unreachable = json.loads(reach.read_text(encoding="utf-8"))["unreachable"]["mca96"].get("Nest7mm_Pos")
+    if not unreachable:
+        pytest.skip("no unreachable 7 mm nest measured")
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    deck = Deck()
+    far = deck.wt.place(Trough25mL("Far", catalog="300ml SBS"), "Nest7mm_Pos", unreachable[0])
+    far.fill_all(Reagent("Buffer"), 50000.0)
+    stamp(deck.wt, source=far, dest=deck.pool, volume_ul=10.0, tips=deck.reagent_tips, liquid_class=LC)
+    with pytest.raises(InvalidSlotError, match="cannot reach"):
+        deck.wt.compile(tmp_path / "x.xscr")

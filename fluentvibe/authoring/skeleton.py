@@ -33,6 +33,7 @@ from .bench_spec import BenchSpec, SpecReagent, SpecStep
 SKELETON_MARKER = "# BENCH SPEC SKELETON"
 _PLATE_LOCATION = "Nest61mm_Pos"
 _TROUGH_PREFIX = "WS_"
+_LARGE_RESERVOIR_LOCATION = "Nest7mm_Pos"
 _DEFAULT_LC = "Water Free Single"
 
 
@@ -47,9 +48,23 @@ class _Deck:
     waste: tuple[str, str, int] | None           # (catalog, location, position)
     mca_tips: str | None
     fca_tips: tuple[str, str] | None             # (catalog, python class)
-    trough_small: str = "25ml_short"
-    trough_large: str = "100ml"
+    # MCA96 blocks pipette reagents from SBS reservoirs (slim troughs do not
+    # fit the 96-tip head). Verified in FluentControl on the 1080 deck:
+    # "60ml SBS MCA96" connects to a 61 mm nest, "300ml SBS" to a 7 mm nest;
+    # "MCA96 200ml" has no connector on the 61 mm nest. Large reservoirs are
+    # only used on 7 mm nests the profile's reach.json measured as MCA-reachable.
+    free_large_sites: list[tuple[str, int]] = field(default_factory=list)
+    reservoir_small: str = "60ml SBS MCA96"
+    reservoir_large: str = "300ml SBS"
     liquid_class: str = _DEFAULT_LC
+
+
+def _reach(root: Path) -> dict[str, Any]:
+    path = root / "reach.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
 
 def load_deck(profile_dir: Path | str) -> _Deck:
@@ -94,6 +109,12 @@ def load_deck(profile_dir: Path | str) -> _Deck:
         (_PLATE_LOCATION, pos) for pos in summary.get(_PLATE_LOCATION, [])
         if (_PLATE_LOCATION, pos) not in occupied and (_PLATE_LOCATION, pos) not in reserved
     ]
+    mca_reachable = (_reach(root).get("reachable") or {}).get("mca96") or {}
+    free_large_sites = [
+        (_LARGE_RESERVOIR_LOCATION, pos) for pos in summary.get(_LARGE_RESERVOIR_LOCATION, [])
+        if (_LARGE_RESERVOIR_LOCATION, pos) not in occupied and (_LARGE_RESERVOIR_LOCATION, pos) not in reserved
+        and pos in mca_reachable.get(_LARGE_RESERVOIR_LOCATION, [])
+    ]
     free_troughs = [
         (loc, pos) for loc, positions in summary.items() if loc.startswith(_TROUGH_PREFIX)
         for pos in positions if (loc, pos) not in occupied and (loc, pos) not in reserved
@@ -104,6 +125,7 @@ def load_deck(profile_dir: Path | str) -> _Deck:
         plate_catalog=(plate or {}).get("catalog_name", "96_ABgene_SuperPlate_Thermo_AB2800"),
         free_nests=free_nests,
         free_trough_sites=free_troughs,
+        free_large_sites=free_large_sites,
         magnet=magnet_slot,
         waste=waste_slot,
         mca_tips=(mca or {}).get("catalog_name"),
@@ -132,6 +154,8 @@ class _Writer:
     labels: dict[str, str] = field(default_factory=dict)
     retired: list[str] = field(default_factory=list)
     swaps: int = 0
+    # Labware placed mid-run (after a swap): its fills follow its placement.
+    placed_in_body: set[str] = field(default_factory=set)
 
     def var(self, base: str) -> str:
         name = _ident(base)
@@ -164,6 +188,15 @@ class _Writer:
         return self._reclaim()
 
     def _put(self, label: str, expr: str) -> str:
+        # FluentControl labware names are unique for the whole script, even
+        # after the first one was removed.
+        taken = set(self.labels.values())
+        if label in taken:
+            n = 2
+            while f"{label}_{n}" in taken:
+                n += 1
+            expr = expr.replace(f'("{label}"', f'("{label}_{n}"', 1)
+            label = f"{label}_{n}"
         var = self.var(label)
         if self.deck.free_nests:
             loc, pos = self.deck.free_nests.pop(0)
@@ -172,6 +205,7 @@ class _Writer:
             loc, pos = self._reclaim()
             self.body[-2] = self.body[-2].replace(".\")", f' and put a fresh {label} there.\")')
             self.body.append(f'    {var} = wt.place({expr}, "{loc}", {pos})')
+            self.placed_in_body.add(var)
         self.positions[var] = (loc, pos)
         self.labels[var] = label
         return var
@@ -192,18 +226,23 @@ class _Writer:
         return self._put(label, f'{cls}("{label}", catalog="{catalog}")')
 
     def trough(self, label: str, *, large: bool) -> str:
-        if not self.deck.free_trough_sites:
-            raise ValueError("skeleton: the deck has no free trough site left")
-        loc, pos = self.deck.free_trough_sites.pop(0)
-        var = self.var(label)
-        catalog = self.deck.trough_large if large else self.deck.trough_small
-        cls = "Trough100mL" if large else "Trough25mL"
-        self.placements.append(f'    {var} = wt.place({cls}("{label}", catalog="{catalog}"), "{loc}", {pos})')
-        return var
+        """An MCA-compatible SBS reservoir: large ones on a 7 mm nest, small on a plate nest."""
+        if large and self.deck.free_large_sites:
+            loc, pos = self.deck.free_large_sites.pop(0)
+            var = self.var(label)
+            self.placements.append(
+                f'    {var} = wt.place(Trough25mL("{label}", catalog="{self.deck.reservoir_large}"), "{loc}", {pos})'
+            )
+            return var
+        return self._put(label, f'Trough100mL("{label}", catalog="{self.deck.reservoir_small}")')
 
 
 # What a skeleton 96-well plate can hold during a clean-up (sample + beads).
 _PLATE_WORKING_UL = 180.0
+# Most one MCA reservoir ("60ml SBS MCA96") is filled with; more need opens another.
+_RESERVOIR_FILL_UL = 55000.0
+# ... and a "300ml SBS" on a 7 mm nest.
+_LARGE_RESERVOIR_FILL_UL = 250000.0
 # What one pool well receives at most (12 columns into one).
 _POOL_WELL_UL = 300.0
 
@@ -254,8 +293,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     n = 96
     lc = deck.liquid_class
     reagent_vars: dict[str, str] = {}
-    trough_vars: dict[str, str] = {}
+    # Reagent id -> its reservoirs (a new one whenever the current one would
+    # exceed _RESERVOIR_FILL_UL); reservoir variable -> what it must hold.
+    trough_vars: dict[str, list[str]] = {}
     fill_estimate: dict[str, float] = {}
+    large_troughs: set[str] = set()
     assumed_reagents: dict[str, SpecReagent] = {}
     shared_tips: dict[str, str] = {}
     # Eluate tips of the last clean-up and the plate they served: on the MCA96
@@ -280,11 +322,17 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         return reagent_vars[reagent.id]
 
     def trough_for(reagent: SpecReagent, need_ul: float) -> str:
-        fill_estimate[reagent.id] = fill_estimate.get(reagent.id, 0.0) + need_ul
-        if reagent.id not in trough_vars:
-            large = (reagent.liquid_type or "") == "ethanol" or reagent.role == "wash"
-            trough_vars[reagent.id] = w.trough(f"{reagent.id}_trough", large=large)
-        return trough_vars[reagent.id]
+        troughs = trough_vars.setdefault(reagent.id, [])
+        large = (reagent.liquid_type or "") == "ethanol" or reagent.role == "wash"
+        cap = _LARGE_RESERVOIR_FILL_UL if troughs and troughs[-1] in large_troughs else _RESERVOIR_FILL_UL
+        if not troughs or fill_estimate[troughs[-1]] + need_ul > cap:
+            use_large = large and bool(deck.free_large_sites)
+            troughs.append(w.trough(f"{reagent.id}_trough", large=use_large))
+            if use_large:
+                large_troughs.add(troughs[-1])
+            fill_estimate[troughs[-1]] = 0.0
+        fill_estimate[troughs[-1]] += need_ul
+        return troughs[-1]
 
     # Samples.
     sample_reagent = _pick(spec, "sample")
@@ -505,13 +553,21 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     flush_offdeck(final=True)
 
     # Fills for troughs, now that every step's need is known.
-    for reagent_id, trough in trough_vars.items():
+    for reagent_id, troughs in trough_vars.items():
         reagent = next((r for r in spec.reagents if r.id == reagent_id), None) or assumed_reagents[reagent_id]
         supply = _supply(reagent)
-        need = fill_estimate[reagent_id]
-        amount = min(need, supply) if supply is not None else need
-        note = "  # kit supply" if supply is not None else "  # lab stock, estimated need"
-        w.fills.append(f"    {trough}.fill_all({reagent_var(reagent)}, {amount:.0f}){note}")
+        for trough in troughs:
+            need = fill_estimate[trough]
+            amount = min(need, supply) if supply is not None else need
+            if supply is not None:
+                supply = max(0.0, supply - amount)
+            note = "  # kit supply" if _supply(reagent) is not None else "  # lab stock, estimated need"
+            line = f"    {trough}.fill_all({reagent_var(reagent)}, {amount:.0f}){note}"
+            if trough in w.placed_in_body:
+                at = next(i for i, text in enumerate(w.body) if text.startswith(f"    {trough} = wt.place("))
+                w.body.insert(at + 1, line)
+            else:
+                w.fills.append(line)
 
     if w.swaps:
         w.notes.append(f"the deck is full: {w.swaps} operator swap(s) replace spent labware mid-run")
