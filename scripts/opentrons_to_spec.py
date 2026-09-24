@@ -339,28 +339,54 @@ def convert(protocol_dir: Path) -> dict:
     }
 
 
+def _convert_one(directory: Path, out: Path) -> dict:
+    row = {"protocol": directory.name}
+    try:
+        spec = convert(directory)
+        (out / f"{directory.name}.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+        row.update(status="ok", steps=len(spec["steps"]),
+                   ops=dict(Counter(s["op"] for s in spec["steps"])))
+    except Exception as exc:  # noqa: BLE001 - record and continue
+        row.update(status="error", error=f"{type(exc).__name__}: {exc}"[:300],
+                   trace=traceback.format_exc(limit=2)[-600:])
+    return row
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("protocols", nargs="+", type=Path, help="protocol directories (or a corpus root with --all)")
     ap.add_argument("--all", action="store_true", help="treat each argument as a corpus root")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--timeout", type=float, default=120.0, help="seconds per protocol (default 120)")
+    ap.add_argument("--single", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     dirs = [d for root in args.protocols for d in (sorted(p for p in root.iterdir() if p.is_dir()) if args.all else [root])]
     summary = []
     for directory in dirs:
-        row = {"protocol": directory.name}
-        try:
-            spec = convert(directory)
-            (args.out / f"{directory.name}.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
-            row.update(status="ok", steps=len(spec["steps"]),
-                       ops=dict(Counter(s["op"] for s in spec["steps"])))
-        except Exception as exc:  # noqa: BLE001 - record and continue
-            row.update(status="error", error=f"{type(exc).__name__}: {exc}"[:300],
-                       trace=traceback.format_exc(limit=2)[-600:])
+        if args.single:
+            row = _convert_one(directory, args.out)
+        else:
+            # One process per protocol: some protocols hang in the simulator.
+            import subprocess
+
+            try:
+                done = subprocess.run(
+                    [sys.executable, __file__, str(directory), "--out", str(args.out), "--single"],
+                    capture_output=True, text=True, timeout=args.timeout,
+                )
+                lines = [line for line in done.stdout.splitlines() if line.startswith("{")]
+                row = json.loads(lines[-1]) if lines else {
+                    "protocol": directory.name, "status": "error",
+                    "error": (done.stderr.strip().splitlines() or ["no output"])[-1][:300],
+                }
+            except subprocess.TimeoutExpired:
+                row = {"protocol": directory.name, "status": "error",
+                       "error": f"Timeout: simulation took longer than {args.timeout}s"}
         summary.append(row)
         print(json.dumps({k: v for k, v in row.items() if k != "trace"}), flush=True)
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if not args.single:
+        (args.out / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     ok = sum(1 for r in summary if r["status"] == "ok")
     print(f"converted {ok}/{len(summary)}", file=sys.stderr)
     return 0
