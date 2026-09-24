@@ -4,7 +4,9 @@ A protocol often needs the operator mid-run: a thermal-cycler incubation, a
 centrifuge spin, a Qubit reading. Models tend to write these as a comment plus
 ``wt.wait(...)``, which leaves the plate on the deck while the run carries on.
 This check finds functional groups whose comments (or group name) describe an
-off-deck action and that contain no ``wt.user_prompt(...)``, as long as the
+off-deck action and that neither pause for the operator (``wt.user_prompt``)
+nor drive an on-deck device that does the job (``wt.odtc_*`` for the Inheco
+thermal cycler, ``wt.inheco_*``), as long as the
 protocol handles liquid both before and after it. Preparation before the first
 liquid handling and manual steps after the last one (e.g. loading a flow cell
 once the run is over) are not flagged.
@@ -77,7 +79,8 @@ def offdeck_findings(source: str) -> list[OffDeckFinding]:
             text = _string_arg(call) or ""
             if OFF_DECK_PATTERN.search(text) and group not in mentions:
                 mentions[group] = (call.lineno, text)
-        elif method == "user_prompt":
+        elif method == "user_prompt" or method.startswith(("odtc_", "inheco_")):
+            # Paused for the operator, or handled by an integrated device.
             prompted.add(group)
         elif method in _LIQUID_METHODS:
             first_liquid_line = first_liquid_line or call.lineno

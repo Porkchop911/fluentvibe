@@ -54,3 +54,13 @@ def test_on_deck_incubation_is_not_off_deck():
         "Incubate 10 min at room temperature.",
     )
     assert offdeck_findings(src) == []
+
+
+def test_integrated_thermal_cycler_counts_as_handled():
+    src = _source(
+        'wt.odtc_open_door()\n'
+        '    wt.gripper.move(dst, to=("ODTC", 1))\n'
+        '    wt.odtc_close_door()\n'
+        '    wt.odtc_execute_method("TAG_30C_80C")'
+    )
+    assert offdeck_findings(src) == []
