@@ -72,7 +72,7 @@ class Deck:
         self.beads = wt.place(Trough25mL("Beads", catalog="25ml_short"), "WS_100ml_1", 1)
         self.ethanol = wt.place(Trough100mL("Ethanol", catalog="100ml"), "WS_100ml_1", 2)
         self.eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
-        self.waste = wt.place(Trough100mL("Waste", catalog="100ml"), "WS_100ml_1", 4)
+        self.waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
         self.samples.fill_all(Reagent("Amplicon", role="analyte" if analyte else "plain"), 20.0)
         self.barcodes.fill_all(Reagent("Barcode"), 5.0)
         self.beads.fill_all(Reagent("AMPure XP", role="bead_carrier"), 15000.0)
@@ -319,3 +319,36 @@ def test_missing_role_error_shows_what_the_plate_holds():
     message = str(info.value)
     assert "'Amplicon' (role='plain')" in message
     assert "fill_all(Reagent('<name>', role='analyte')" in message
+
+
+def test_sbs_reservoir_may_sit_on_a_plate_nest_but_carrier_troughs_may_not(monkeypatch):
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.simulator.invariants import TroughPlacementError
+
+    name, guid = _workspace()
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    wt = Worktable.from_workspace(name, workspace_guid=guid, auto_place=False, protocol_name="x")
+    wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
+    with pytest.raises(TroughPlacementError, match="SBS-footprint"):
+        wt.place(Trough25mL("Beads", catalog="25ml_short"), "Nest7mm_Pos", 5)
+
+
+def test_empty_tips_must_use_the_empty_tip_class(tmp_path, monkeypatch):
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+
+    _workspace()
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    good = Deck()
+    good.cleanup()  # blocks empty into waste with "Empty Tip"
+    good.wt.compile(tmp_path / "good.xscr")
+
+    bad = Deck()
+    head = bad.wt.mca96
+    head.mount_adapter()
+    head.pick_up(bad.sample_tips)
+    head.aspirate(bad.samples, 5.0, liquid_class=LC)
+    head.empty_tips(bad.waste, 5.0, liquid_class=LC)
+    head.return_tips(bad.sample_tips)
+    head.drop_adapter()
+    with pytest.raises(Exception, match="Empty Tip"):
+        bad.wt.compile(tmp_path / "bad.xscr")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .common import (
+    DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     DEFAULT_MIX_LIQUID_CLASS,
     BlockError,
     ensure_analyte_marker,
@@ -54,6 +55,7 @@ def spri_cleanup(
     elute_seconds: int = 120,
     wash_liquid_class: str | None = None,
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
+    empty_liquid_class: str = DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     name: str = "Bead cleanup",
 ) -> CleanupVolumes:
     """Full-plate magnetic bead cleanup: bind, wash, elute off-magnet, recover.
@@ -67,6 +69,7 @@ def spri_cleanup(
     Give either ``bead_ratio`` (e.g. 1.8 for 1.8×) or ``bead_volume_ul``.
     Mixing uses ``mix_liquid_class`` (a class with a Mix section, default
     ``"Water Mix"``); FluentControl rejects mixing with a transfer-only class.
+    Emptying tips into ``waste`` uses ``empty_liquid_class`` (``"Empty Tip"``).
     Derived per well: supernatant = sample + beads − retain; eluate transfer =
     elution − retain (``retain_volume_ul`` stays behind so the pellet is not
     disturbed).
@@ -143,7 +146,7 @@ def spri_cleanup(
     wt.wait(duration_seconds=settle_seconds)
     head.pick_up(sample_tips)
     head.aspirate(sample_plate, volumes.supernatant_ul, liquid_class=liquid_class)
-    head.empty_tips(waste, volumes.supernatant_ul, liquid_class=liquid_class)
+    head.empty_tips(waste, volumes.supernatant_ul, liquid_class=empty_liquid_class)
     head.return_tips(sample_tips)
 
     for index in range(1, wash_count + 1):
@@ -155,7 +158,7 @@ def spri_cleanup(
         wt.wait(duration_seconds=30)
         head.pick_up(sample_tips)
         head.aspirate(sample_plate, volumes.wash_ul, liquid_class=wash_lc)
-        head.empty_tips(waste, volumes.wash_ul, liquid_class=wash_lc)
+        head.empty_tips(waste, volumes.wash_ul, liquid_class=empty_liquid_class)
         head.return_tips(sample_tips)
     if wash_count:
         wt.wait(duration_seconds=dry_seconds)

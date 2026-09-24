@@ -67,8 +67,7 @@ def build_worktable() -> Worktable:
     axp = wt.place(Trough25mL("AXP", catalog="25ml_short"), "WS_100ml_1", 1)
     ethanol = wt.place(Trough100mL("Ethanol80", catalog="100ml"), "WS_100ml_1", 2)
     eb = wt.place(Trough25mL("EB", catalog="25ml_short"), "WS_100ml_1", 3)
-    # The profile deck rule only allows troughs on WS_100ml_* sites.
-    waste = wt.place(Trough100mL("Waste", catalog="100ml"), "WS_100ml_1", 4)
+    waste = wt.place(Trough25mL("Waste", catalog="300ml SBS"), "Nest7mm_Pos", 4)
 
     amplicons.fill_all(Reagent("Amplicon DNA", role="analyte"), 20.0)
     barcodes.fill_all(Reagent("Rapid Barcode"), 5.0)

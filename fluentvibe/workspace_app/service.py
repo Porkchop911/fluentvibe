@@ -946,6 +946,7 @@ def _profile_deck_rules(profile: dict[str, Any]) -> dict[str, Any]:
             "trough_locations": trough_prefixes,
             "require_fca_tipbox": True,
             "check_mix_section": True,
+            "empty_tip_liquid_class": "Empty Tip",
         }
     }
 
