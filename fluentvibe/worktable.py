@@ -8,6 +8,7 @@ calls; it is reconstructed by the Simulator from the IR list).
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Optional, Union
@@ -690,15 +691,22 @@ class Worktable:
         #   - Troughs only reach on the configured `trough_locations`.
         #   - The configured tall catalog is too tall for standard tips (Z-Max
         #     unreachable) unless the trough is earmarked for ethanol/wash.
+        #   - Reservoirs with an SBS plate footprint (e.g. "300ml SBS") sit on
+        #     plate nests, not trough carriers, so the trough-site rule does not
+        #     apply to them.
         rules = self._deck_rules()
         trough_locations = rules.get("trough_locations") or ()
-        if trough_locations and getattr(labware, "category", None) == "trough":
+        catalog_l = (getattr(labware, "catalog_name", None) or "").lower()
+        sbs_markers = [str(m).lower() for m in (rules.get("sbs_trough_markers") or ("sbs",))]
+        sbs_footprint = any(re.search(rf"\b{re.escape(m)}\b", catalog_l) for m in sbs_markers)
+        if trough_locations and getattr(labware, "category", None) == "trough" and not sbs_footprint:
             from .simulator.invariants import TroughPlacementError
             if not any(location.startswith(prefix) for prefix in trough_locations):
                 raise TroughPlacementError(
                     f"Trough {labware.label!r} must be placed on a reachable "
                     f"trough site ({', '.join(trough_locations)}…) on "
-                    f"{self.workspace_name}. Got {slot!r}."
+                    f"{self.workspace_name}. Got {slot!r}. (SBS-footprint "
+                    f"reservoirs such as '300ml SBS' may sit on plate nests.)"
                 )
             tall_catalog = str(rules.get("tall_trough_catalog") or "").strip().lower()
             catalog = (labware.catalog_name or "").strip().lower()
@@ -777,6 +785,7 @@ class Worktable:
         self._validate_liha_tipbox_presence()
         self._validate_liha_tip_pickup()
         self._validate_mix_liquid_classes()
+        self._validate_empty_tip_liquid_classes()
         protocol = self.to_protocol()
         xml = render_protocol(protocol)
         path = Path(out_path)
@@ -968,6 +977,40 @@ class Worktable:
                     f"with `Liquid subclass section \"Mix\" is missing`. Use a "
                     f"Mix-capable class such as \"Water Mix\" for mixing steps "
                     f"(keep \"Water Free Single\" for plain transfers)."
+                )
+
+    def _validate_empty_tip_liquid_classes(self) -> None:
+        """Refuse to compile an empty-tips step that does not use the deck's
+        empty-tip liquid class (``Empty Tip`` unless the deck rules say
+        otherwise).
+
+        Applies on decks with guard rules (a set-up profile or configured
+        workspace). Skipped when the required class is not in the catalog
+        index, so an install without it is never blocked.
+        """
+        rules = self._deck_rules()
+        if not rules:
+            return
+        required = str(rules.get("empty_tip_liquid_class") or "Empty Tip")
+        try:
+            from .catalog import index_exists
+            from .catalog.catalog import resolve_liquid_class_by_name
+            if not index_exists() or resolve_liquid_class_by_name(required) is None:
+                return
+        except Exception:
+            return
+        defaults = self.protocol_variables
+        for step in self._iter_all_steps():
+            if type(step).__name__ not in ("Mca384EmptyTipsStep", "LihaEmptyTipsStep"):
+                continue
+            lc = getattr(step, "liquid_class", None) or required
+            resolved = defaults.get(lc, lc)
+            if isinstance(resolved, str) and resolved != required:
+                from .simulator.invariants import LiquidClassSectionError
+                raise LiquidClassSectionError(
+                    f"Empty-tips step uses liquid class {resolved!r}; on this deck "
+                    f"empty_tips must use {required!r} (e.g. "
+                    f"`head.empty_tips(waste, volume, liquid_class={required!r})`)."
                 )
 
     def _emit(self, step: Step) -> None:
