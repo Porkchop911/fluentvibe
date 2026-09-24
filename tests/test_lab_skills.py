@@ -439,3 +439,22 @@ def test_build_initial_scope_message_non_skills_is_static():
     scope = load_lab_scope("enforce")
     msg = build_initial_scope_message(scope, "anything", _BoomClient())
     assert msg and scope.cheatsheet_text in msg
+
+
+def test_skill_selection_is_sent_without_tools():
+    from fluentvibe.authoring.graph import adapt_client
+    from fluentvibe.authoring.lab_skills import select_skills
+
+    class Legacy:
+        def __init__(self):
+            self.tools = None
+
+        def complete(self, messages, tools):
+            self.tools = tools
+            return {"role": "assistant", "content": '["family-pooling"]', "tool_calls": []}
+
+    legacy = Legacy()
+    catalog = load_lab_scope("skills").skill_catalog
+    names = select_skills("pool the samples", catalog, adapt_client(legacy))
+    assert legacy.tools == []
+    assert "family-pooling" in names
