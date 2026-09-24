@@ -55,6 +55,20 @@ def _activate_profile(profile_dir: Path) -> tuple[str, str]:
     return rp.workspace_name, rp.workspace_guid
 
 
+def _git_commit() -> str | None:
+    """Short commit hash of the code under test (None outside a git checkout)."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO, capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
+
+
 def _build_prompt(user_text: str, pdf: Path) -> tuple[str, str]:
     """Return ``(prompt_with_attachment, extracted_source_text)``.
 
@@ -230,6 +244,10 @@ def main() -> int:
             "endpoint": args.endpoint,
             "request_timeout_s": args.request_timeout,
             "run_timeout_s": args.run_timeout,
+            # Generation settings read from the environment by the LM client.
+            "max_tokens": os.environ.get("FLUENTVIBE_LM_MAX_TOKENS"),
+            "reasoning_effort": os.environ.get("FLUENTVIBE_LM_REASONING_EFFORT"),
+            "git_commit": _git_commit(),
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }
         status_path = run_dir / "run-status.json"
