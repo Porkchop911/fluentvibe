@@ -111,6 +111,7 @@ def test_spri_cleanup_simulates_strictly_and_passes_every_semantic_check():
         "analyte_not_in_waste": "pass",
         "no_cross_contamination": "pass",
         "pooling_performed": "na",  # no source document supplied
+        "spec_conformance": "na",  # no Bench Spec supplied
     }
     eluate_a1 = _final(deck.wt, "Eluate").wells["A1"]
     assert eluate_a1.volume_ul == pytest.approx(13.0)
@@ -244,3 +245,36 @@ def test_lookup_api_describes_blocks_from_their_signatures(tmp_path):
     assert set(methods) == {"spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step"}
     assert "eluate_tips" in methods["spri_cleanup"]["signature"]
     assert AuthoringToolRegistry(output_dir=tmp_path).lookup_api("pool_columns")["ok"] is True
+
+
+def test_spec_conformance_against_the_gold_spec():
+    import importlib.util
+
+    from fluentvibe.authoring.bench_spec import validate_bench_spec
+
+    _workspace()
+    spec, problems = validate_bench_spec(
+        json.loads((REPO_ROOT / "examples" / "ont_rbk114_spec.json").read_text(encoding="utf-8"))
+    )
+    assert spec is not None and problems == []
+    path = REPO_ROOT / "examples" / "ont_rbk114_blocks.py"
+    loader = importlib.util.spec_from_file_location("ont_rbk114_blocks_conformance", path)
+    module = importlib.util.module_from_spec(loader)
+    loader.loader.exec_module(module)
+    wt = module.build_worktable()
+    wt.simulate(strict=True)
+    inv = next(i for i in score_semantic(wt, spec=spec) if i.key == "spec_conformance")
+    assert inv.status == "pass", inv.evidence
+
+    # Barcoding, then a thermal-cycler step written as a wait, then pooling:
+    # no operator pause for the off-deck stretch.
+    deck = Deck()
+    stamp(deck.wt, source=deck.barcodes, dest=deck.samples, volume_ul=1.0,
+          tips=deck.reagent_tips, liquid_class=LC)
+    deck.wt.wait(duration_seconds=240)
+    pool_columns(deck.wt, source=deck.samples, dest=deck.pool, volume_ul=10.0,
+                 tips=deck.fca_tips, liquid_class=LC)
+    deck.wt.simulate(strict=True)
+    inv = next(i for i in score_semantic(deck.wt, spec=spec) if i.key == "spec_conformance")
+    assert inv.status == "fail"
+    assert "operator pause" in inv.evidence

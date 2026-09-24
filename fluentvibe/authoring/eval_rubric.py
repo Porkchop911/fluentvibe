@@ -47,6 +47,7 @@ SEMANTIC_KEYS = (
     "analyte_not_in_waste",
     "no_cross_contamination",
     "pooling_performed",
+    "spec_conformance",
 )
 ALL_KEYS = SOURCE_KEYS + SEMANTIC_KEYS
 
@@ -646,7 +647,80 @@ def _check_pooling_performed(final, has_analyte: bool, source_text: str | None) 
     )
 
 
-def score_semantic(wt, source_text: str | None = None) -> list[Invariant]:
+def _first_snapshot_index(snapshots, predicate) -> int | None:
+    for index, snap in enumerate(snapshots):
+        if predicate(snap):
+            return index
+    return None
+
+
+def _has_pooled_well(snap) -> bool:
+    for lw in _iter_labware(snap):
+        if _is_waste(lw):
+            continue
+        for well in getattr(lw, "wells", {}).values():
+            if len(getattr(well, "liquid_origins", ()) or ()) >= 2:
+                return True
+    return False
+
+
+def _has_magnetized_plate(snap) -> bool:
+    return any(getattr(lw, "is_magnetized", False) for lw in _iter_labware(snap))
+
+
+def _check_spec_conformance(wt, spec) -> Invariant:
+    """Does the simulated protocol do what the approved Bench Spec says?
+
+    * every ``deck`` pool step → some well really receives liquid from ≥2 samples;
+    * every ``deck`` bead_cleanup → a magnet bind → off → recover round trip;
+    * a deck pool listed before a deck cleanup → pooling happens before the
+      plate first goes onto the magnet;
+    * each stretch of ``off_deck`` / ``manual`` steps between two ``deck``
+      steps → at least one operator pause (``user_prompt``) in the protocol.
+    """
+    if spec is None:
+        return Invariant("spec_conformance", _NA, "no Bench Spec supplied")
+    snapshots = wt.snapshots
+    problems: list[str] = []
+    deck_ops = [(i, s.op) for i, s in enumerate(spec.steps) if s.location == "deck"]
+    pooled_at = _first_snapshot_index(snapshots, _has_pooled_well)
+    magnet_at = _first_snapshot_index(snapshots, _has_magnetized_plate)
+    if any(op == "pool" for _, op in deck_ops) and pooled_at is None:
+        problems.append("deck pool step: no well receives liquid from two samples")
+    if any(op == "bead_cleanup" for _, op in deck_ops):
+        roundtrip = _check_magnet_roundtrip(snapshots, _magnet_plate_label(snapshots))
+        if not roundtrip.ok:
+            problems.append(f"deck bead clean-up: {roundtrip.evidence}")
+    pool_index = next((i for i, op in deck_ops if op == "pool"), None)
+    cleanup_index = next((i for i, op in deck_ops if op == "bead_cleanup"), None)
+    if (
+        pool_index is not None and cleanup_index is not None and pool_index < cleanup_index
+        and pooled_at is not None and magnet_at is not None and magnet_at < pooled_at
+    ):
+        problems.append("spec pools before the clean-up, but the protocol cleans up first")
+    deck_positions = [i for i, _ in deck_ops]
+    stretches = 0
+    if deck_positions:
+        in_stretch = False
+        for index in range(deck_positions[0] + 1, deck_positions[-1]):
+            off = spec.steps[index].location != "deck"
+            if off and not in_stretch:
+                stretches += 1
+            in_stretch = off
+    prompts = sum(1 for snap in snapshots if type(snap.step).__name__ == "UserPromptStep")
+    if prompts < stretches:
+        problems.append(
+            f"{stretches} off-deck stretch(es) between deck steps but only {prompts} operator pause(s)"
+        )
+    if problems:
+        return Invariant("spec_conformance", _FAIL, "; ".join(problems))
+    return Invariant(
+        "spec_conformance", _PASS,
+        f"{len(deck_ops)} deck step(s) conform; {prompts} operator pause(s) for {stretches} off-deck stretch(es)",
+    )
+
+
+def score_semantic(wt, source_text: str | None = None, spec=None) -> list[Invariant]:
     """Simulate ``wt`` (if needed) and score the bead-model ground truth."""
     if not getattr(wt, "snapshots", None):
         wt.simulate()
@@ -668,6 +742,7 @@ def score_semantic(wt, source_text: str | None = None) -> list[Invariant]:
         _check_analyte_not_in_waste(final, has_analyte),
         _check_no_cross_contamination(wt, has_analyte),
         _check_pooling_performed(final, has_analyte, source_text),
+        _check_spec_conformance(wt, spec),
     ]
 
 
@@ -680,6 +755,7 @@ def score_protocol(
     source_text: str | None = None,
     simulate: bool = True,
     filename: str = "<generated>",
+    spec=None,
 ) -> RubricResult:
     """Score one generated protocol across both tiers.
 
@@ -690,7 +766,7 @@ def score_protocol(
     if simulate:
         try:
             wt = build_worktable_from_source(source, filename)
-            invariants.extend(score_semantic(wt, source_text))
+            invariants.extend(score_semantic(wt, source_text, spec))
         except Exception as exc:  # noqa: BLE001 - any failure → semantic NA
             invariants.extend(
                 Invariant(k, _NA, f"did not simulate: {exc}") for k in SEMANTIC_KEYS
