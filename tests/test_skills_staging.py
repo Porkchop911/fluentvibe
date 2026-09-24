@@ -377,3 +377,40 @@ def test_simulator_findings_get_one_repair_turn_then_the_draft_is_kept(tmp_path,
     assert len(nudges) == 1
     assert "line 12" in nudges[0].content
     assert final["result"].status == AuthoringStatus.SUCCESS
+
+
+def test_edit_draft_applies_a_unique_replacement_and_resimulates(tmp_path):
+    reg = _registry(tmp_path, "skills")
+    draft = _valid_draft()
+    assert reg.edit_draft("x", "y")["category"] == "edit_draft_no_base"
+    assert reg.simulate_python_draft(draft)["ok"] is True
+    missing = reg.edit_draft("this text is not in the draft", "y")
+    assert missing["category"] == "edit_draft_not_found"
+    ambiguous = reg.edit_draft("wt.", "wt.")
+    assert ambiguous["category"] == "edit_draft_ambiguous"
+    unique = next(line for line in draft.splitlines() if "def build_worktable" in line)
+    result = reg.edit_draft(unique, unique + "  # edited")
+    assert result["ok"] is True
+    assert "# edited" in result["source"]
+
+
+def test_graph_treats_edit_draft_like_a_full_simulation(tmp_path):
+    from tests.test_authoring_graph import _build
+
+    reg = _registry(tmp_path, "skills")
+    _grounded(reg)
+    draft = _valid_draft()
+    broken = draft.replace("def build_worktable", "def build_worktable_broken", 1)
+    sim = {"name": "simulate_python_draft", "args": {"source": broken}, "id": "call-sim"}
+    fix = {"name": "edit_draft", "args": {"old": "def build_worktable_broken",
+                                            "new": "def build_worktable"}, "id": "call-fix"}
+    graph = _build(
+        registry=reg,
+        responses=[
+            AIMessage(content="", tool_calls=[_simple_plan_call(), sim]),
+            AIMessage(content="", tool_calls=[fix]),
+        ],
+    )
+    final = graph.invoke(_initial_state())
+    assert final["result"].status == AuthoringStatus.SUCCESS
+    assert "def build_worktable()" in (final["best_code"] or "")

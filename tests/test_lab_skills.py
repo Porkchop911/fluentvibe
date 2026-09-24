@@ -169,6 +169,7 @@ def test_skills_load_shares_enforce_posture():
     assert scope.allowed_tools() == enforce.allowed_tools() | {
         "declare_protocol_workflow",
         "lookup_api",
+        "edit_draft",
     }
     assert scope.denied_tools() == enforce.denied_tools()
 

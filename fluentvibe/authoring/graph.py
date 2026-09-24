@@ -469,6 +469,23 @@ class _Nodes:
             arguments = _tool_call_args(call)
             tool_call_id = _tool_call_id(call) or f"tool-{tool_call_count}"
 
+            if name == "edit_draft":
+                # A small fix to the last draft: apply it here and handle the
+                # result exactly like a simulate_python_draft of the full text.
+                payload = self.registry._parse_arguments(arguments)
+                edited, edit_error = self.registry.apply_draft_edit(
+                    payload.get("old"), payload.get("new")
+                )
+                if edit_error is not None:
+                    appended.append(ToolMessage(
+                        content=json.dumps(edit_error, default=str),
+                        tool_call_id=tool_call_id,
+                        name=name,
+                    ))
+                    continue
+                name = "simulate_python_draft"
+                arguments = {"source": edited}
+
             block_reason = self.repair_lock.block_reason(name)
             if block_reason is not None:
                 appended.append(ToolMessage(
