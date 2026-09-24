@@ -143,6 +143,8 @@ class LabScope:
         # FluentControl's own context check on the compiled draft; answers
         # "not available" quickly when FluentControl is not running.
         "check_in_fluentcontrol",
+        # Edits someone made to the compiled script in FluentControl.
+        "pull_fluentcontrol_edits",
     }
 
     def allowed_tools(self) -> frozenset[str] | None:

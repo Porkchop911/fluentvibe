@@ -1080,6 +1080,14 @@ def tool_definitions() -> list[dict[str, Any]]:
         ), {
             "source": {"type": "string", "description": "Optional Python draft; default: the last simulated draft."},
         }, required=()),
+        _tool("pull_fluentcontrol_edits", (
+            "Read the changes someone made to the compiled script in FluentControl (volumes, positions, "
+            "liquid classes, variable defaults, added/removed commands) with the Python line each one "
+            "belongs to, so you can make the same change in the draft."
+        ), {
+            "base_xscr": {"type": "string", "description": "Compiled script the edits started from; default: the last compiled draft."},
+            "edited_xscr": {"type": "string", "description": "Script saved in FluentControl; default: the shell script."},
+        }, required=()),
         _tool("validate_fluentcontrol_shell", "Patch/open the FluentControl shell script and scrape InfoPad validation errors.", {
             "source": {"type": "string", "description": "Optional Python draft. If provided, compile_and_simulate runs first and the resulting .xscr is shell-validated."},
             "xscr_path": {"type": "string", "description": "Optional existing .xscr path to validate if source is not supplied."},
@@ -1472,6 +1480,7 @@ class AuthoringToolRegistry:
             "compile_and_simulate": self.compile_and_simulate,
             "validate_fluentcontrol_shell": self.validate_fluentcontrol_shell,
             "check_in_fluentcontrol": self.check_in_fluentcontrol,
+            "pull_fluentcontrol_edits": self.pull_fluentcontrol_edits,
         }
 
     def ask_user(self, question: str, axes: list[str] | None = None) -> dict[str, Any]:
@@ -2986,6 +2995,13 @@ class AuthoringToolRegistry:
         )
         payload = report.to_dict()
         payload["ok"] = report.success
+        if report.success:
+            # The script FluentControl edits start from (pull_fluentcontrol_edits).
+            self.last_compiled = {
+                "xscr_path": payload.get("xscr_path"),
+                "python_path": payload.get("python_path"),
+                "source": source,
+            }
         if class_rewrites:
             # Surface the corrected source/import so callers carry the
             # profile-pinned classes forward, not the model's generic draft.
@@ -3029,6 +3045,43 @@ class AuthoringToolRegistry:
             source_file=compiled.get("python_path"),
         ))
         return check
+
+    def pull_fluentcontrol_edits(self, base_xscr: str | None = None, edited_xscr: str | None = None) -> dict[str, Any]:
+        """Changes made in FluentControl to a compiled draft, mapped to Python lines."""
+        from .eval_rubric import build_worktable_from_source
+        from .fc_roundtrip import diff_scripts, locate_variables, roundtrip_message
+        from .fluentcontrol_shell import DEFAULT_SHELL_XSCR
+
+        last = getattr(self, "last_compiled", None) or {}
+        base = Path(base_xscr) if base_xscr else (Path(last["xscr_path"]) if last.get("xscr_path") else None)
+        if base is None or not base.exists():
+            return {"ok": False, "message": "No compiled draft to compare with: run compile_and_simulate first."}
+        edited = Path(edited_xscr) if edited_xscr else DEFAULT_SHELL_XSCR
+        if not edited.exists():
+            return {"ok": False, "message": f"Edited script not found: {edited}"}
+        source = last.get("source") if not base_xscr else None
+        wt = None
+        if source:
+            try:
+                wt = build_worktable_from_source(source, last.get("python_path") or "<draft>")
+            except Exception:
+                wt = None
+        try:
+            changes = locate_variables(diff_scripts(base, edited, wt=wt), source)
+        except Exception as exc:
+            return {"ok": False, "message": f"Could not compare the scripts: {exc}"}
+        removed = sum(1 for c in changes if c.kind == "removed")
+        if removed > 40:
+            return {"ok": False, "message": (
+                f"The edited script differs in {len(changes)} places ({removed} removed commands): it is "
+                "probably not this draft. Open the draft in FluentControl (fluentvibe fc-open) before editing."
+            )}
+        return {
+            "ok": True,
+            "change_count": len(changes),
+            "changes": [c.to_dict() for c in changes[:40]],
+            "message": roundtrip_message(changes),
+        }
 
     def record_fc_check(self, check: dict[str, Any]) -> dict[str, Any]:
         """Keep the latest FluentControl verdict (also as fluentcontrol_check.json in the run folder)."""
