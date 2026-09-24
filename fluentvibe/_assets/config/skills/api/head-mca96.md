@@ -7,7 +7,8 @@ always_on: false
 ## `wt.mca96`
 
 True 96-channel head: one aspirate/dispense/mix touches all 96 wells at once —
-no per-column loop. PASS DECLARED VARIABLES BY NAME (a string) for the volume
+no per-column loop. For hand-written calls (blocks take numbers and declare
+their own variables), PASS DECLARED VARIABLES BY NAME (a string) for the volume
 and liquid_class (e.g. `'SUPERNATANT_ASPIRATE_UL'`, `'LIQUID_CLASS_SUPERNATANT'`);
 passing the Python value bakes a literal into the protocol and leaves the FC
 variable unused.

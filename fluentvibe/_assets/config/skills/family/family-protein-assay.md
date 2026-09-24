@@ -48,9 +48,10 @@ read happens off-deck on a plate reader. Adapt volumes/replicates to the request
    For **duplicate/replicate** wells, lay the reaction plate out so replicates
    are separate columns and dispense the sample into each replicate column with
    a LiHa column loop instead.
-5. **Incubate**: `wt.wait(duration_seconds="INCUBATION_SECONDS")` — this is where
-   the Opentrons heater-shaker/temperature-module 37 °C step maps; note the
-   intended temperature in a `#` comment (fluentvibe has no module abstraction).
+5. **Incubate**: at room temperature on the deck, `wt.wait(duration_seconds="INCUBATION_SECONDS")`.
+   A 37 °C or shaking incubation (the source protocols' heater-shaker /
+   temperature module) needs a device this deck does not model: use
+   `offdeck_step(...)` so the operator moves the plate to an incubator and back.
 6. **Read**: `wt.add_comment("Measure absorbance at 562 nm (BCA) / 595 nm (Bradford) on a plate reader")`
    — the read itself is off-deck.
 
@@ -66,5 +67,5 @@ re-derive the dilution logic here.
 - The working-reagent prep (mixing Reagent A:B 50:1) is assumed done off-deck or
   pre-filled in the reservoir; if on-deck prep is requested, add a group that
   aspirates A and B from troughs into the reservoir and mixes.
-- 37 °C incubation and the absorbance read are not Tecan operations here — they
-  are a timed `wt.wait` and an off-deck `add_comment`.
+- 37 °C incubation mid-run is an `offdeck_step` (operator + incubator); the
+  final absorbance read, after the last liquid handling, may be a closing note.

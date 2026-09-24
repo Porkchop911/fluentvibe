@@ -9,7 +9,8 @@ always_on: false
 `wt.liha` is the only fixed-channel pipetting head exposed by fluentvibe. Use it
 for FCA-style operations (trough-to-plate dispenses, single-channel or
 per-column transfers, individual well aspirate/dispense). Use `wt.mca96` only
-for true 96-channel plate-to-plate moves. PASS DECLARED VARIABLES BY NAME (a
+for true 96-channel plate-to-plate moves. For hand-written calls (blocks take
+numbers and declare their own variables), PASS DECLARED VARIABLES BY NAME (a
 string) for volume and liquid_class — `'BEAD_VOLUME_UL'`, not the Python value
 — or the rendered protocol bakes in a literal and the FC variable is dead. To
 cover all 12 columns, wrap a single aspirate/dispense in

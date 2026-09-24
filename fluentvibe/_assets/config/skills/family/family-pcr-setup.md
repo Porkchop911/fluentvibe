@@ -7,8 +7,10 @@ always_on: false
 ## Canonical workflow: PCR setup (liquid-handling skeleton)
 
 Dispense water, DNA template, and master mix into a 96-well PCR plate in
-preparation for thermocycling. The thermocycler program itself is **not**
-modelled — it becomes an off-deck step with `wt.add_comment(...)`.
+preparation for thermocycling. Thermocycling is a hand-off to the operator —
+`offdeck_step(...)` from `fluentvibe.blocks` — unless the deck has an Inheco
+ODTC, which you drive with `wt.odtc_*` (see `device-odtc`). Never model a
+thermal program as `wt.wait` or a comment.
 
 ### Variables
 
@@ -77,9 +79,13 @@ with wt.loop(times=NUM_COLUMNS, name="Mix reaction", loop_variable="col"):
              liquid_class="LIQUID_CLASS_MASTERMIX", well_offset="(col-1)*8")
 head.drop_tips()
 
-# Thermocycling is off-deck
-wt.add_comment("Remove PCR plate and run thermocycler program: "
-               "95C 3min; then 30x [95C 15s, 60C 30s]; final 72C 5min")
+# Thermocycling: hand the plate to the operator (or use wt.odtc_* on an ODTC deck)
+offdeck_step(
+    wt,
+    "Seal the PCR plate and run the thermocycler program: "
+    "95C 3min; then 30x [95C 15s, 60C 30s]; final 72C 5min",
+    labware=pcr_plate, handoff=("Nest61mm_Pos", 10), name="Thermocycling",
+)
 ```
 
 ### Variant: library-quant qPCR (kapa-library-quant)
@@ -98,16 +104,17 @@ format switching:
   reaction across replicate wells. If replicate/standard volumes vary per well,
   use a worklist (`api-worklists`).
 
-### Limitation: no thermocycler or temperature module (needs-extension P4/P5)
+### Thermocycler and cooling
 
-The Opentrons protocols use a **thermocycler module** for amplification and a
-**temperature module** to keep master mix chilled. fluentvibe has neither
-abstraction yet:
+The source protocols (Opentrons) use a **thermocycler module** for
+amplification and a **temperature module** to keep master mix chilled. On the
+Fluent:
 
-- **Thermocycling**: represented as `wt.add_comment(...)` with the program
-  described; plate is removed from deck manually.
-- **Reagent cooling (4°C)**: not modelled — note in comments that master mix
-  should be kept cold until use.
+- **Thermocycling**: `wt.odtc_*` when the deck has an ODTC; otherwise
+  `offdeck_step(...)` so the run pauses while the operator runs the program.
+- **Reagent cooling (4°C)**: prepare cold reagents before the run (a pre-run
+  note is fine); if the protocol needs a cold step mid-run, it is an
+  `offdeck_step`.
 
 See [capability-roadmap](../../docs/skill-authoring/capability-roadmap.md) P4
 (thermocycler) and P5 (temperature module) for planned extensions.

@@ -39,12 +39,18 @@ Z-Max" / "No connector for this rotation" errors):**
   ~20 mL fill; only use `100ml` when ethanol washes need the capacity (96 ×
   200 µL × 2 ≈ 42 mL).
 - Use `300ml SBS` exclusively as the waste sink (never for liquid reagents).
+  It has a plate (SBS) footprint and sits on a plate nest (e.g. `Nest7mm_Pos`),
+  not on the trough carrier sites that other troughs need.
 - Different trough catalogs on the same trough site need different rotation
   connectors. If a slot/catalog combo fails with `No connector for this
   rotation at this site available`, swap to `25ml_short` on the deck's trough
   site — the most broadly reachable combo.
 
 ## Liquid classes (approved)
+
+The list is intentionally short: one transfer class for every liquid is the
+lab's convention, not a mistake to fix. The fixed exceptions are mixing
+(`Water Mix`) and emptying tips (`Empty Tip`).
 
 - `Water Free Single` — general default for aspirate/dispense (aqueous). When
   the user asks for liquid classes as variables, declare one variable per role

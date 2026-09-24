@@ -16,7 +16,11 @@ waits). Import at the top of the file:
 from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step
 ```
 
-Blocks take plain numbers for volumes (not variable names). `liquid_class` is
+Blocks take plain numbers for volumes (not variable names) and declare them as
+FluentControl variables themselves, named after the call's `name`
+(`name="PCR clean-up"` → `PCR_CLEAN_UP_BEAD_VOLUME_UL` …), so the protocol stays
+editable in FluentControl. Give every block call its own `name`; do not declare
+variables for block values yourself. `liquid_class` is
 used for transfers; mixing uses `mix_liquid_class` (default `"Water Mix"`,
 which has the Mix section FluentControl requires). They raise
 `BlockError` with a fix-oriented message if a precondition is missing — read it

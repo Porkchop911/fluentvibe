@@ -353,3 +353,26 @@ def test_empty_tips_must_use_the_empty_tip_class(tmp_path, monkeypatch):
     head.drop_adapter()
     with pytest.raises(Exception, match="Empty Tip"):
         bad.wt.compile(tmp_path / "bad.xscr")
+
+
+def test_blocks_declare_fluentcontrol_variables_named_after_the_call():
+    deck = Deck()
+    deck.cleanup(name="PCR clean-up")
+    stamp(deck.wt, source=deck.barcodes, dest=deck.eluate, volume_ul=1.0,
+          tips=deck.eluate_tips,
+          liquid_class=LC, name="Barcoding")
+    variables = deck.wt.protocol_variables
+    assert variables["PCR_CLEAN_UP_BEAD_VOLUME_UL"] == pytest.approx(36.0)
+    assert variables["PCR_CLEAN_UP_SUPERNATANT_UL"] == pytest.approx(54.0)
+    assert variables["PCR_CLEAN_UP_EMPTY_LIQUID_CLASS"] == "Empty Tip"
+    assert variables["BARCODING_VOLUME_UL"] == pytest.approx(1.0)
+    deck.wt.simulate(strict=True)
+    assert _final(deck.wt, "Eluate").wells["A1"].volume_ul == pytest.approx(14.0)
+
+    # A second cleanup with the same name would overwrite the first one's values.
+    with pytest.raises(BlockError, match="different name"):
+        deck.cleanup(name="PCR clean-up", bead_ratio=1.0)
+
+    literal = Deck()
+    literal.cleanup(variables=False)
+    assert not any(k.startswith("BEAD_CLEANUP") for k in literal.wt.protocol_variables)
