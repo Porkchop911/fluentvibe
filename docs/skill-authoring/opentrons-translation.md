@@ -28,11 +28,11 @@ file maps Opentrons concepts onto them.
 | `load_labware` plate / reservoir | `Plate96` (`96_ABgene_SuperPlate_Thermo_AB2800`) / `Trough` (`25ml_short`, `100ml`, `300ml SBS`) |
 | `load_labware` deep-well / PCR-skirt / tube-rack | **whitelist addition** — resolve exact catalog name via `fluentvibe/catalog` (`find_components`/`resolve_by_name`) and add to `generation.yaml` `lab_scope.labware` before using |
 | `load_module('magnetic…')` + `engage()`/`disengage()` | `wt.gripper.move(plate, onto=magnet)` / `wt.gripper.move(plate, to=(loc, site))`; beads via reagent roles — see `api-magnetization-model` |
-| `load_module('thermocyclerModuleV2')`, `heaterShakerModuleV1`, `temperature module` | **no abstraction** → represent the incubation as `wt.wait(duration_seconds=…)`; note set-temp/shake intent in a `#` comment or `wt.add_comment(...)`. See [capability-roadmap](capability-roadmap.md) |
+| `load_module('thermocyclerModuleV2')`, `heaterShakerModuleV1`, `temperature module` | **device step** → `wt.odtc_*` when the deck has an Inheco ODTC (`device-odtc`); otherwise `offdeck_step(wt, "<program>", labware=plate, handoff=(loc, pos))` from `fluentvibe.blocks` so the run pauses for the operator. Never `wt.wait` + comment — that leaves the plate on the deck and skips the step. Room-temperature holds stay `wt.wait`. |
 | `transfer(v, src, dst)` / `distribute` | `head.aspirate(src, "V_UL", liquid_class=…)` + `head.dispense(dst, "V_UL", …)` (+ loop for many wells) |
 | `mix(reps, vol, well)` | `head.mix(well, "V_UL", cycles=reps, liquid_class=…)` |
 | `delay(minutes=m)` / `delay(seconds=s)` | `wt.wait(duration_seconds=m*60)` / `wt.wait(duration_seconds=s)` |
-| `pause("msg")` (manual step / centrifuge / reader) | `wt.add_comment("msg")` — author the on-deck steps only; flag the manual step |
+| `pause("msg")` (manual step / centrifuge / reader) | mid-run: `offdeck_step(wt, "msg", …)` or `wt.user_prompt("msg")` so the run actually pauses; after the last liquid handling a closing note is enough. Never a bare `wt.add_comment` mid-run. |
 | `aspirate(rate=…, .bottom(z=…))`, `touch_tip`, `blow_out`, `air_gap` | **not exposed** → drop; mention as an out-of-scope handling detail in prose if important |
 | CSV-driven per-well volumes / pick lists (`configure_for_volume(row_vol)`, per-row volume) | **worklist** — `wt.worklist("picklist.csv")` (or build a `Gwl` and load it). Each record carries its own volume, so per-well distinct volumes and arbitrary source→dest mappings are first-class. See `api-worklists`. (Scalar `aspirate`/`dispense` + `wt.loop` is still the right choice for uniform/column-wise volumes.) |
 | `define_liquid` / `load_liquid` (deck state) | initial fills via `labware.fill_all(reagent, vol)` / `well.layers` (author-side only) |
@@ -42,15 +42,26 @@ file maps Opentrons concepts onto them.
 - Use **exact approved `catalog=` names**; if the protocol needs labware not on
   the whitelist, either map to the nearest approved item or add it (with a
   resolved catalog name) — never invent a name.
-- Pass volumes **and** liquid classes **by name string** (`"BEAD_VOLUME_UL"`,
-  `"LIQUID_CLASS_BEADS"`), never the Python value.
+- Use a **block** (`fluentvibe.blocks`: `spri_cleanup`, `stamp`, `add_reagent`,
+  `pool_columns`, `offdeck_step`) wherever one covers the stage; blocks take
+  numbers and declare their own FluentControl variables.
+- In hand-written head calls, pass volumes **and** liquid classes **by name
+  string** (`"BEAD_VOLUME_UL"`, `"LIQUID_CLASS_BEADS"`), never the Python value.
+- Empty tips with the `Empty Tip` liquid class; mix with a Mix-capable class
+  (`Water Mix`).
 - Column iteration uses a **native `wt.loop`**, never a Python `for`.
 - Per-well *distinct* volumes / CSV pick lists use a **worklist** (`api-worklists`),
   not a Python `for` over scalar steps.
 - Derive dependent volumes from primitives before `declare_variable`.
 - No `wt.comment(...)` method — it's a `from_workspace(comment=…)` kwarg; use
   `#` comments or `wt.add_comment(...)` for step notes.
-- Fill troughs for the whole run incl. dead volume: `wells × per_well × reps × 1.1`.
+- Fill **lab-stock** troughs for the whole run incl. dead volume:
+  `wells × per_well × reps × 1.1`. **Kit** reagents are limited by the kit's
+  supply (record `supply_ul` × `supply_count` in the Bench Spec; the reagent
+  budget check enforces it) — name lab-stock and kit reagents differently.
+- Prefer converting a protocol into a **Bench Spec** (machine-neutral: order,
+  volumes, ratios, what is manual/off-deck) over prose; the Fluent specifics
+  come from blocks and the deck profile.
 
 ## What a converted skill is (and isn't)
 

@@ -60,7 +60,7 @@ with wt.loop(times=12, name="Dispense blocking buffer", loop_variable="col"):
                   liquid_class="LIQUID_CLASS_BLOCK", well_offset="(col-1)*8")
 head.drop_tips()
 
-wt.add_comment("Incubate 1h at room temperature (or 37C on heater-shaker)")
+# Room temperature: wait on the deck. For 37C / shaking use offdeck_step(...)
 wt.wait(duration_seconds=3600)
 
 # === Wash cycles (repeated NUM_WASH_CYCLES times) ===
@@ -84,7 +84,7 @@ with wt.loop(times=NUM_TARGETS * SAMPLE_COLS_PER_TARGET, name="Add samples",
                   liquid_class="LIQUID_CLASS_SAMPLE", well_offset="(col-1)*8")
 head.drop_tips()
 
-wt.add_comment("Incubate 2h at room temperature (or 37C on heater-shaker)")
+# Room temperature: wait on the deck. For 37C / shaking use offdeck_step(...)
 wt.wait(duration_seconds=7200)
 
 # Repeat wash cycles after sample incubation
@@ -117,10 +117,10 @@ wt.add_comment("Read plate at 450 nm on microplate reader (off-deck)")
 
 ### Limitations (needs-extension P2/P3)
 
-- **Incubation temperatures**: ELISA uses 4°C overnight, room temperature, and
-  optionally 37°C incubations. fluentvibe models these as `wt.wait()` + comments.
-  See [capability-roadmap](../../docs/skill-authoring/capability-roadmap.md) P2
-  (annotated waits) and P3 (heater-shaker).
+- **Incubation temperatures**: room-temperature incubations are `wt.wait()` on
+  the deck. 4°C overnight and 37°C / shaking incubations need a device the deck
+  does not model: pause for the operator with `offdeck_step(...)`
+  (`fluentvibe.blocks`) — never a `wt.wait` plus a comment.
 - **Plate reader**: final absorbance read at 450 nm is off-deck — noted in
   comments.
 

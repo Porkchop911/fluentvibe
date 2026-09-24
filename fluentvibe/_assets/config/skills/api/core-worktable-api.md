@@ -46,8 +46,11 @@ then make every entry exactly:
 matching `wt.declare_variable("LIQUID_CLASS_<ROLE>", "Water Free Single")`
 + `wt.set_sim_value(...)`.
 
-**Pass declared variables BY NAME — as a string — for both `volume` and
-`liquid_class`.** The renderer emits a FluentControl variable reference
+**One rule for FluentControl variables.** Blocks (`fluentvibe.blocks`) take
+plain numbers and declare their own variables (`<NAME>_BEAD_VOLUME_UL` …), so
+never declare variables for a block's values yourself. For head calls you
+write by hand, **pass declared variables BY NAME — as a string — for both
+`volume` and `liquid_class`.** The renderer emits a FluentControl variable reference
 *only* when the argument string equals a declared variable name. Passing
 the Python value bakes a literal into the protocol and leaves the FC
 variable dead, defeating the point of declaring it.

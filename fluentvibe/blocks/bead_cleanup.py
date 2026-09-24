@@ -8,10 +8,12 @@ from .common import (
     DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     DEFAULT_MIX_LIQUID_CLASS,
     BlockError,
+    BlockVariables,
     ensure_analyte_marker,
     require_distinct,
     require_positive,
     require_role,
+    variable_prefix,
 )
 
 
@@ -57,6 +59,7 @@ def spri_cleanup(
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     empty_liquid_class: str = DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     name: str = "Bead cleanup",
+    variables: bool = True,
 ) -> CleanupVolumes:
     """Full-plate magnetic bead cleanup: bind, wash, elute off-magnet, recover.
 
@@ -86,6 +89,11 @@ def spri_cleanup(
     If the sample wells are mostly analyte, the block re-expresses the excess
     as plain sample liquid (see :func:`~fluentvibe.blocks.common.ensure_analyte_marker`);
     total volumes are unchanged.
+
+    Volumes, times and liquid classes are declared as FluentControl variables
+    named after ``name`` (``"PCR clean-up"`` → ``PCR_CLEAN_UP_BEAD_VOLUME_UL`` …),
+    so they stay editable in FluentControl; pass ``variables=False`` for plain
+    literals. Two cleanups need different ``name`` values.
 
     Returns the derived :class:`CleanupVolumes`.
     """
@@ -127,59 +135,77 @@ def spri_cleanup(
     tip_capacity = float(getattr(sample_tips, "capacity_ul", 0.0) or 200.0)
     bind_mix_ul = 0.8 * min(float(sample_volume_ul) + bead_ul, tip_capacity)
     elution_mix_ul = 0.8 * min(float(elution_volume_ul), tip_capacity)
-    wash_lc = wash_liquid_class or liquid_class
     head = wt.mca96
+
+    # Every volume, time and liquid class becomes a FluentControl variable
+    # (``<NAME>_…``) unless variables=False, so the run stays editable in FC.
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block=block)
+    bead = v.ref("BEAD_VOLUME_UL", volumes.bead_ul)
+    supernatant = v.ref("SUPERNATANT_UL", volumes.supernatant_ul)
+    wash = v.ref("WASH_VOLUME_UL", volumes.wash_ul)
+    elution = v.ref("ELUTION_VOLUME_UL", volumes.elution_ul)
+    eluate = v.ref("ELUATE_TRANSFER_UL", volumes.eluate_transfer_ul)
+    bind_mix = v.ref("BIND_MIX_UL", bind_mix_ul)
+    elution_mix = v.ref("ELUTION_MIX_UL", elution_mix_ul)
+    lc = v.ref("LIQUID_CLASS", liquid_class)
+    wash_lc = v.ref("WASH_LIQUID_CLASS", wash_liquid_class or liquid_class)
+    mix_lc = v.ref("MIX_LIQUID_CLASS", mix_liquid_class)
+    empty_lc = v.ref("EMPTY_LIQUID_CLASS", empty_liquid_class)
+    bind_time = v.ref("BIND_SECONDS", bind_seconds)
+    settle_time = v.ref("SETTLE_SECONDS", settle_seconds)
+    dry_time = v.ref("DRY_SECONDS", dry_seconds)
+    elute_time = v.ref("ELUTE_SECONDS", elute_seconds)
 
     wt.group(f"{name} - bind")
     head.mount_adapter()
     head.pick_up(reagent_tips)
-    head.aspirate(bead_source, volumes.bead_ul, liquid_class=liquid_class)
-    head.dispense(sample_plate, volumes.bead_ul, liquid_class=liquid_class)
+    head.aspirate(bead_source, bead, liquid_class=lc)
+    head.dispense(sample_plate, bead, liquid_class=lc)
     head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
-    head.mix(sample_plate, bind_mix_ul, cycles=bind_mix_cycles, liquid_class=mix_liquid_class)
+    head.mix(sample_plate, bind_mix, cycles=bind_mix_cycles, liquid_class=mix_lc)
     head.return_tips(sample_tips)
-    wt.wait(duration_seconds=bind_seconds)
+    wt.wait(duration_seconds=bind_time)
 
     wt.group(f"{name} - separate and remove supernatant")
     wt.gripper.move(sample_plate, onto=magnet)
-    wt.wait(duration_seconds=settle_seconds)
+    wt.wait(duration_seconds=settle_time)
     head.pick_up(sample_tips)
-    head.aspirate(sample_plate, volumes.supernatant_ul, liquid_class=liquid_class)
-    head.empty_tips(waste, volumes.supernatant_ul, liquid_class=empty_liquid_class)
+    head.aspirate(sample_plate, supernatant, liquid_class=lc)
+    head.empty_tips(waste, supernatant, liquid_class=empty_lc)
     head.return_tips(sample_tips)
 
     for index in range(1, wash_count + 1):
         wt.group(f"{name} - wash {index}")
         head.pick_up(reagent_tips)
-        head.aspirate(wash_source, volumes.wash_ul, liquid_class=wash_lc)
-        head.dispense(sample_plate, volumes.wash_ul, liquid_class=wash_lc)
+        head.aspirate(wash_source, wash, liquid_class=wash_lc)
+        head.dispense(sample_plate, wash, liquid_class=wash_lc)
         head.return_tips(reagent_tips)
         wt.wait(duration_seconds=30)
         head.pick_up(sample_tips)
-        head.aspirate(sample_plate, volumes.wash_ul, liquid_class=wash_lc)
-        head.empty_tips(waste, volumes.wash_ul, liquid_class=empty_liquid_class)
+        head.aspirate(sample_plate, wash, liquid_class=wash_lc)
+        head.empty_tips(waste, wash, liquid_class=empty_lc)
         head.return_tips(sample_tips)
     if wash_count:
-        wt.wait(duration_seconds=dry_seconds)
+        wt.wait(duration_seconds=dry_time)
 
     wt.group(f"{name} - elute off magnet")
     wt.gripper.move(sample_plate, to=home)
     head.pick_up(reagent_tips)
-    head.aspirate(elution_source, volumes.elution_ul, liquid_class=liquid_class)
-    head.dispense(sample_plate, volumes.elution_ul, liquid_class=liquid_class)
+    head.aspirate(elution_source, elution, liquid_class=lc)
+    head.dispense(sample_plate, elution, liquid_class=lc)
     head.return_tips(reagent_tips)
     head.pick_up(sample_tips)
-    head.mix(sample_plate, elution_mix_ul, cycles=elution_mix_cycles, liquid_class=mix_liquid_class)
+    head.mix(sample_plate, elution_mix, cycles=elution_mix_cycles, liquid_class=mix_lc)
     head.return_tips(sample_tips)
-    wt.wait(duration_seconds=elute_seconds)
+    wt.wait(duration_seconds=elute_time)
 
     wt.group(f"{name} - recover eluate")
     wt.gripper.move(sample_plate, onto=magnet)
-    wt.wait(duration_seconds=settle_seconds)
+    wt.wait(duration_seconds=settle_time)
     head.pick_up(eluate_tips)
-    head.aspirate(sample_plate, volumes.eluate_transfer_ul, liquid_class=liquid_class)
-    head.dispense(eluate_plate, volumes.eluate_transfer_ul, liquid_class=liquid_class)
+    head.aspirate(sample_plate, eluate, liquid_class=lc)
+    head.dispense(eluate_plate, eluate, liquid_class=lc)
     head.return_tips(eluate_tips)
     head.drop_adapter()
     wt.gripper.move(sample_plate, to=home)

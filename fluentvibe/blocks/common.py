@@ -75,6 +75,47 @@ def ensure_analyte_marker(plate, *, max_fraction: float = 0.1, max_marker_ul: fl
         ]
 
 
+def variable_prefix(name: str | None) -> str | None:
+    """FluentControl variable prefix for a block call, e.g. ``"PCR clean-up"`` →
+    ``"PCR_CLEAN_UP"``; ``None`` when the block has no name."""
+    if not name:
+        return None
+    slug = "".join(ch if ch.isalnum() else "_" for ch in str(name).upper())
+    slug = "_".join(part for part in slug.split("_") if part)
+    return slug or None
+
+
+class BlockVariables:
+    """Declares a block's values as FluentControl variables.
+
+    With a prefix, ``ref("BEAD_VOLUME_UL", 36.0)`` declares
+    ``<PREFIX>_BEAD_VOLUME_UL`` (default and sim value 36.0) and returns the
+    variable name, so the emitted step references the variable and the value
+    stays editable in FluentControl. Without a prefix it returns the value
+    unchanged (a literal). Re-declaring a name with a different value raises:
+    two blocks with the same ``name`` would otherwise overwrite each other.
+    """
+
+    def __init__(self, wt, prefix: str | None, *, block: str) -> None:
+        self.wt = wt
+        self.prefix = prefix
+        self.block = block
+
+    def ref(self, key: str, value):
+        if self.prefix is None:
+            return value
+        name = f"{self.prefix}_{key}"
+        existing = self.wt.protocol_variables.get(name)
+        if existing is not None and existing != value:
+            raise BlockError(
+                f"{self.block}: variable {name} already holds {existing!r}; give this "
+                f"{self.block}() call a different name= (e.g. name='Library clean-up')."
+            )
+        self.wt.declare_variable(name, value)
+        self.wt.set_sim_value(name, value)
+        return name
+
+
 def require_distinct(block: str, **tip_boxes) -> None:
     seen: dict[int, str] = {}
     for name, box in tip_boxes.items():

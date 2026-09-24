@@ -7,9 +7,11 @@ from typing import Iterable
 from .common import (
     DEFAULT_MIX_LIQUID_CLASS,
     BlockError,
+    BlockVariables,
     columns_or_all,
     require_distinct,
     require_positive,
+    variable_prefix,
 )
 
 
@@ -25,6 +27,7 @@ def stamp(
     mix_volume_ul: float | None = None,
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
+    variables: bool = True,
 ) -> None:
     """Copy every well of ``source`` into the same well of ``dest`` (MCA96).
 
@@ -35,19 +38,25 @@ def stamp(
 
     ``tips`` is an MCA96 tip box used for this stamp only; reuse the same box
     later only for the same samples. The block mounts and drops the adapter.
+    With a ``name``, volumes and liquid classes become FluentControl variables
+    (``<NAME>_VOLUME_UL`` …) unless ``variables=False``.
     """
     require_positive("stamp", volume_ul=volume_ul)
     if mix_cycles and mix_volume_ul is None:
         mix_volume_ul = 0.8 * float(volume_ul)
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block="stamp")
+    volume = v.ref("VOLUME_UL", float(volume_ul))
+    lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
     head.pick_up(tips)
-    head.aspirate(source, volume_ul, liquid_class=liquid_class)
-    head.dispense(dest, volume_ul, liquid_class=liquid_class)
+    head.aspirate(source, volume, liquid_class=lc)
+    head.dispense(dest, volume, liquid_class=lc)
     if mix_cycles:
-        head.mix(dest, mix_volume_ul, cycles=mix_cycles, liquid_class=mix_liquid_class)
+        head.mix(dest, v.ref("MIX_UL", float(mix_volume_ul)), cycles=mix_cycles,
+                 liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class))
     head.return_tips(tips)
     head.drop_adapter()
 
@@ -65,6 +74,7 @@ def add_reagent(
     mix_volume_ul: float | None = None,
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
+    variables: bool = True,
 ) -> None:
     """Add a reagent from a trough to every well of ``plate`` (MCA96).
 
@@ -82,21 +92,24 @@ def add_reagent(
                 "(not the reagent_tips)."
             )
         require_distinct("add_reagent", reagent_tips=reagent_tips, mix_tips=mix_tips)
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block="add_reagent")
+    volume = v.ref("VOLUME_UL", float(volume_ul))
+    lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
     head.pick_up(reagent_tips)
-    head.aspirate(reagent_source, volume_ul, liquid_class=liquid_class)
-    head.dispense(plate, volume_ul, liquid_class=liquid_class)
+    head.aspirate(reagent_source, volume, liquid_class=lc)
+    head.dispense(plate, volume, liquid_class=lc)
     head.return_tips(reagent_tips)
     if mix_cycles:
         head.pick_up(mix_tips)
         head.mix(
             plate,
-            mix_volume_ul if mix_volume_ul is not None else 0.8 * float(volume_ul),
+            v.ref("MIX_UL", float(mix_volume_ul if mix_volume_ul is not None else 0.8 * float(volume_ul))),
             cycles=mix_cycles,
-            liquid_class=mix_liquid_class,
+            liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class),
         )
         head.return_tips(mix_tips)
     head.drop_adapter()
@@ -113,6 +126,7 @@ def pool_columns(
     dest_column: int = 1,
     columns: Iterable[int] | None = None,
     name: str | None = None,
+    variables: bool = True,
 ) -> None:
     """Pool the columns of ``source`` into one column of ``dest`` (LiHa, 8 channels).
 
@@ -130,13 +144,14 @@ def pool_columns(
     cols = columns_or_all(columns)
     if not 1 <= int(dest_column) <= 12:
         raise BlockError(f"pool_columns: dest_column must be 1..12, got {dest_column!r}.")
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block="pool_columns")
+    volume = v.ref("VOLUME_UL", float(volume_ul))
+    lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
     head = wt.liha
     for column in cols:
         head.get_tips(tips)
-        head.aspirate(source, volume_ul, liquid_class=liquid_class, well_offset=(column - 1) * 8)
-        head.dispense(
-            dest, volume_ul, liquid_class=liquid_class, well_offset=(int(dest_column) - 1) * 8
-        )
+        head.aspirate(source, volume, liquid_class=lc, well_offset=(column - 1) * 8)
+        head.dispense(dest, volume, liquid_class=lc, well_offset=(int(dest_column) - 1) * 8)
         head.drop_tips()
