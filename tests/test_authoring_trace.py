@@ -395,3 +395,40 @@ def test_lmstudio_strict_workflow_marks_only_declaration(monkeypatch):
     assert seen["tools"][0]["function"]["strict"] is True
     assert "strict" not in seen["tools"][1]["function"]
     assert "strict" not in tools[0]["function"]
+
+
+def _json_response(body: bytes, seen: dict):
+    class Response:
+        headers = {"Content-Type": "application/json"}
+        def read(self):
+            return body
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+    def capture(req, timeout=None):
+        seen.update(json.loads(req.data.decode("utf-8")))
+        return Response()
+    return capture
+
+
+def test_lmstudio_sends_max_tokens_from_env(monkeypatch):
+    seen: dict = {}
+    body = b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+    monkeypatch.setattr("urllib.request.urlopen", _json_response(body, seen))
+    monkeypatch.setenv("FLUENTVIBE_LM_MAX_TOKENS", "32768")
+    LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert seen["max_tokens"] == 32768
+    monkeypatch.delenv("FLUENTVIBE_LM_MAX_TOKENS")
+    seen.clear()
+    LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert "max_tokens" not in seen
+
+
+def test_lmstudio_reports_output_limit_instead_of_an_empty_turn(monkeypatch):
+    import pytest
+
+    from fluentvibe.authoring.lm_client import LMStudioError
+
+    body = b'{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"length"}]}'
+    monkeypatch.setattr("urllib.request.urlopen", _json_response(body, {}))
+    with pytest.raises(LMStudioError, match="output-token limit"):
+        LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])

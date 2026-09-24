@@ -26,6 +26,31 @@ DEFAULT_REQUEST_TIMEOUT_S = 240.0
 _ALLOWED_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 
 
+def _max_tokens_from_env() -> int | None:
+    raw = os.environ.get("FLUENTVIBE_LM_MAX_TOKENS")
+    if raw is None or not raw.strip():
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("FLUENTVIBE_LM_MAX_TOKENS must be a positive integer") from exc
+    if value <= 0:
+        raise ValueError("FLUENTVIBE_LM_MAX_TOKENS must be a positive integer")
+    return value
+
+
+def _raise_if_truncated(message: dict[str, Any]) -> dict[str, Any]:
+    """A response cut off by the output-token limit before any tool call is a
+    configuration problem, not an empty model turn: say so explicitly."""
+    if message.get("finish_reason") == "length" and not message.get("tool_calls"):
+        raise LMStudioError(
+            "Model response hit the output-token limit (finish_reason=length) before "
+            "calling a tool. Raise FLUENTVIBE_LM_MAX_TOKENS / --max-tokens or lower "
+            "the reasoning effort."
+        )
+    return message
+
+
 def _request_timeout_from_env() -> float:
     raw = os.environ.get("FLUENTVIBE_LM_TIMEOUT_S")
     if raw is None:
@@ -59,6 +84,7 @@ class LMStudioChatClient:
         request_timeout_s: float | None = None,
         api_key: str | None = None,
         reasoning_effort: str | None = None,
+        max_tokens: int | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
@@ -74,6 +100,10 @@ class LMStudioChatClient:
                 raise ValueError(
                     "reasoning_effort must be one of low, medium, high, xhigh"
                 )
+        # Output-token cap per model response. Some servers (e.g. NInfer) apply
+        # a small default when it is omitted, which cuts long reasoning turns
+        # off before any tool call. FLUENTVIBE_LM_MAX_TOKENS sets it globally.
+        self.max_tokens = max_tokens if max_tokens is not None else _max_tokens_from_env()
         self.trace_recorder = trace_recorder
         self.request_timeout_s = (
             _request_timeout_from_env()
@@ -114,6 +144,8 @@ class LMStudioChatClient:
         # default so other OpenAI-compatible providers retain their behavior.
         if self.reasoning_effort is not None:
             payload["reasoning_effort"] = self.reasoning_effort
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
         if self.trace_recorder is not None:
             self.trace_recorder.record(
                 "request_payload",
@@ -147,7 +179,7 @@ class LMStudioChatClient:
             with urllib.request.urlopen(req, timeout=effective_timeout) as response:
                 content_type = response.headers.get("Content-Type", "")
                 if "text/event-stream" in content_type:
-                    return self._read_stream(response, deadline=deadline)
+                    return _raise_if_truncated(self._read_stream(response, deadline=deadline))
                 data = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:
@@ -208,7 +240,7 @@ class LMStudioChatClient:
                 reasoning_fields=_reasoning_fields(message),
                 response=data,
             )
-        return message
+        return _raise_if_truncated(message)
 
     def _read_stream(self, response, *, deadline: float | None = None) -> dict[str, Any]:
         content_parts: list[str] = []
