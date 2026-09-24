@@ -410,6 +410,9 @@ def _check_coverage(source: str, source_text: str | None) -> Invariant:
     return Invariant("coverage_complete", _PASS, "no automated coverage gaps")
 
 
+_SPRI_BLOCK_CALL = re.compile(r"(?<![A-Za-z0-9_])spri_cleanup\(")
+
+
 def _check_offdeck_prompted(source: str) -> Invariant:
     findings = offdeck_findings(source)
     if not findings:
@@ -431,7 +434,7 @@ def score_source(source: str, source_text: str | None = None) -> list[Invariant]
         vars_: dict[str, float] = {}
     else:
         vars_ = _declared_numeric_vars(tree)
-    return [
+    invariants = [
         coverage,
         _check_analyte_role(source),
         _check_derived_supernatant(vars_),
@@ -440,6 +443,22 @@ def score_source(source: str, source_text: str | None = None) -> list[Invariant]
         _check_separate_eluate_destination(source),
         _check_offdeck_prompted(source),
     ]
+    if _SPRI_BLOCK_CALL.search(source):
+        # fluentvibe.blocks.spri_cleanup derives both volumes and does the
+        # bind -> off-magnet elution -> recover moves itself (tested in
+        # tests/test_blocks.py); credit it where the source shows nothing.
+        credited = {
+            "derived_supernatant": "derived inside blocks.spri_cleanup (sample + beads - retain)",
+            "derived_eluate": "derived inside blocks.spri_cleanup (elution - retain)",
+            "off_magnet_elution": "blocks.spri_cleanup elutes off the magnet",
+        }
+        invariants = [
+            Invariant(inv.key, _PASS, credited[inv.key])
+            if inv.key in credited and inv.status == _NA
+            else inv
+            for inv in invariants
+        ]
+    return invariants
 
 
 # ── Semantic tier ────────────────────────────────────────────────────────
