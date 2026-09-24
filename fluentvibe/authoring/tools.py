@@ -1072,6 +1072,14 @@ def tool_definitions() -> list[dict[str, Any]]:
         _tool("compile_and_simulate", "Run the full gate: contract, import/build, compile .xscr, strict simulation.", {
             "source": {"type": "string"},
         }),
+        _tool("check_in_fluentcontrol", (
+            "Open the draft in FluentControl (the instrument software) and read its InfoPad context check: "
+            "arm reach, labware fit on deck sites, labware names, prompts, liquid classes. Use it after "
+            "compile_and_simulate passes; fix every finding (they carry the Python line and a fix hint) and "
+            "check again. Takes about a minute."
+        ), {
+            "source": {"type": "string", "description": "Optional Python draft; default: the last simulated draft."},
+        }, required=()),
         _tool("validate_fluentcontrol_shell", "Patch/open the FluentControl shell script and scrape InfoPad validation errors.", {
             "source": {"type": "string", "description": "Optional Python draft. If provided, compile_and_simulate runs first and the resulting .xscr is shell-validated."},
             "xscr_path": {"type": "string", "description": "Optional existing .xscr path to validate if source is not supplied."},
@@ -1463,6 +1471,7 @@ class AuthoringToolRegistry:
             "edit_draft": self.edit_draft,
             "compile_and_simulate": self.compile_and_simulate,
             "validate_fluentcontrol_shell": self.validate_fluentcontrol_shell,
+            "check_in_fluentcontrol": self.check_in_fluentcontrol,
         }
 
     def ask_user(self, question: str, axes: list[str] | None = None) -> dict[str, Any]:
@@ -2997,6 +3006,40 @@ class AuthoringToolRegistry:
                 approved_plan=self.source_protocol_plan,
             )
         return payload
+
+    def check_in_fluentcontrol(self, source: str | None = None) -> dict[str, Any]:
+        """Compile the draft, open it in FluentControl, explain the InfoPad findings."""
+        from .fc_feedback import check_in_fluentcontrol
+
+        source = source or getattr(self, "last_draft_source", None)
+        if not source:
+            return {"ok": False, "message": "No draft yet: run simulate_python_draft first."}
+        compiled = self.compile_and_simulate(source)
+        if not compiled.get("ok"):
+            return {
+                "ok": False,
+                "stage": "compile_and_simulate",
+                "message": "The draft does not compile/simulate yet; fix that first (FluentControl opens only compiled scripts).",
+                "failure_category": compiled.get("failure_category"),
+                "failure_message": compiled.get("failure_message") or compiled.get("message"),
+            }
+        check = self.record_fc_check(check_in_fluentcontrol(
+            Path(compiled["xscr_path"]),
+            source=compiled.get("source") or source,
+            source_file=compiled.get("python_path"),
+        ))
+        return check
+
+    def record_fc_check(self, check: dict[str, Any]) -> dict[str, Any]:
+        """Keep the latest FluentControl verdict (also as fluentcontrol_check.json in the run folder)."""
+        self.last_fc_check = check
+        try:
+            (Path(self.output_dir) / "fluentcontrol_check.json").write_text(
+                json.dumps(check, indent=2, default=str), encoding="utf-8"
+            )
+        except Exception:
+            pass
+        return check
 
     def validate_fluentcontrol_shell(
         self,

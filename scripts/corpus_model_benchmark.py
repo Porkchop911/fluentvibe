@@ -81,7 +81,7 @@ def main() -> int:
     ap.add_argument("--retry-budget", type=int, default=3)
     args = ap.parse_args()
 
-    from eval_authoring import _activate_profile, _run_once
+    from eval_authoring import _activate_profile, _fc_verdict, _run_once
 
     from fluentvibe.authoring import PromptAuthoringService
     from fluentvibe.authoring.bench_spec import spec_context_block, validate_bench_spec
@@ -119,6 +119,7 @@ def main() -> int:
                 row["status"] = f"error: {type(exc).__name__}"
                 (run_dir / "error.txt").write_text(traceback.format_exc(), encoding="utf-8")
             row["minutes"] = f"{(time.monotonic() - started) / 60:.1f}"
+            row["fluentcontrol"] = _fc_verdict(run_dir)
             rows.append(row)
             print(f"[bench] {name} [{family}] {mode}: {row['status']} score={row['score']} "
                   f"fails={row['failed']} {row['minutes']} min", flush=True)
@@ -126,9 +127,10 @@ def main() -> int:
     lines = ["# Corpus model benchmark", "",
              f"Model: {os.environ.get('FLUENTVIBE_LM_MODEL', 'default')} at "
              f"{os.environ.get('FLUENTVIBE_LM_ENDPOINT', 'default endpoint')}; deck {ws_name}.", "",
-             "| Spec | Family | Mode | Status | Score | Failed checks | Minutes |", "|---|---|---|---|---|---|---|"]
-    lines += [f"| {r['spec']} | {r['family']} | {r['mode']} | {r['status']} | {r['score']} | {r['failed']} | {r['minutes']} |"
-              for r in rows]
+             "| Spec | Family | Mode | Status | Score | Failed checks | FluentControl | Minutes |",
+             "|---|---|---|---|---|---|---|---|"]
+    lines += [f"| {r['spec']} | {r['family']} | {r['mode']} | {r['status']} | {r['score']} | {r['failed']} | "
+              f"{r.get('fluentcontrol', '')} | {r['minutes']} |" for r in rows]
     for mode in args.modes.split(","):
         scored = [float(r["score"]) for r in rows if r["mode"] == mode and r["score"]]
         clean = sum(1 for r in rows if r["mode"] == mode and r["score"] and not r["failed"])

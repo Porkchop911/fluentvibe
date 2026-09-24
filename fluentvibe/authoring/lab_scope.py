@@ -140,6 +140,9 @@ class LabScope:
         "declare_protocol_workflow",
         "lookup_api",
         "edit_draft",
+        # FluentControl's own context check on the compiled draft; answers
+        # "not available" quickly when FluentControl is not running.
+        "check_in_fluentcontrol",
     }
 
     def allowed_tools(self) -> frozenset[str] | None:
@@ -207,7 +210,8 @@ _SKILLS_HEADER = (
     "LAB SCOPE (authoritative — this IS the catalog for this run). "
     "Grounding and approval tools are intentionally unavailable: the only "
     "tools you can call are `declare_protocol_workflow`, `lookup_api`, "
-    "`simulate_python_draft`, `edit_draft`, and `compile_and_simulate`. When unsure "
+    "`simulate_python_draft`, `edit_draft`, `compile_and_simulate`, and "
+    "`check_in_fluentcontrol`. When unsure "
     "whether a method or argument exists, call `lookup_api` (e.g. "
     "`wt.liha`, `Plate96`) instead of submitting a probe draft to the "
     "simulator. Everything else the removed tools used to look up (valid deck "
@@ -225,7 +229,11 @@ _SKILLS_HEADER = (
     "`simulate_python_draft` with the full source. Fix a simulator error with "
     "`edit_draft` (replace the exact failing lines) instead of resubmitting the "
     "whole file; once it passes, call "
-    "`compile_and_simulate` on the same source. Use the exact `catalog=` "
+    "`compile_and_simulate` on the same source. When it passes, call "
+    "`check_in_fluentcontrol`: FluentControl opens the script and reports what "
+    "the real instrument software rejects (arm reach, labware that does not fit "
+    "a site, duplicate names); fix each finding at the Python line it names and "
+    "check again until it is clean. Use the exact `catalog=` "
     "names and `python_class` values listed below. If the request needs "
     "labware not in this list, say so explicitly and stop rather than "
     "substituting.\n\n"

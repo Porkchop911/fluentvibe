@@ -96,6 +96,8 @@ class GraphState(TypedDict, total=False):
     adherence_nudges: int
     # Tip-hygiene / off-deck findings nudges (see QUALITY_NUDGE_BUDGET).
     quality_nudges: int
+    # FluentControl InfoPad repair rounds (see fc_feedback.FC_CHECK_BUDGET).
+    fc_rounds: int
     # Last draft that compiled+simulated cleanly, captured before an adherence
     # nudge, as a ready success result. Used as the accept-with-gaps fallback if
     # the model cannot produce another compiling draft after being nudged.
@@ -239,6 +241,7 @@ def run_graph(
             prompt=prompt,
             adherence_nudges=0,
             quality_nudges=0,
+            fc_rounds=0,
             fallback_result=None,
         )
 
@@ -441,6 +444,7 @@ class _Nodes:
         last_accepted_source_hash = state.get("last_accepted_source_hash")
         adherence_nudges = state.get("adherence_nudges", 0)
         quality_nudges = state.get("quality_nudges", 0)
+        fc_rounds = state.get("fc_rounds", 0)
         fallback_result = state.get("fallback_result")
 
         for _enum_idx, call in enumerate(tool_calls):
@@ -759,6 +763,19 @@ class _Nodes:
                             )
                             appended.append(_quality_nudge_message(concerns))
                             continue
+                        fc_message = self._fluentcontrol_findings(compile_result, best_code, fc_rounds)
+                        if fc_message is not None:
+                            # The draft passed fluentvibe's gate; keep it as the
+                            # fallback and give the model a turn to fix what
+                            # FluentControl's context check rejects.
+                            fc_rounds += 1
+                            fallback_result = _build_success(
+                                registry=self.registry, state=state, code=best_code,
+                                tool_result=compile_result, last_validation=last_validation,
+                                coverage_gaps=gaps,
+                            )
+                            appended.append(fc_message)
+                            continue
                         return Command(
                             update={
                                 "tool_call_count": tool_call_count,
@@ -800,10 +817,42 @@ class _Nodes:
                 "last_accepted_source_hash": last_accepted_source_hash,
                 "adherence_nudges": adherence_nudges,
                 "quality_nudges": quality_nudges,
+                "fc_rounds": fc_rounds,
                 "fallback_result": fallback_result,
             },
             goto="model_call",
         )
+
+    def _fluentcontrol_findings(self, compile_result: dict[str, Any], source: str | None,
+                                rounds: int) -> HumanMessage | None:
+        """With FLUENTVIBE_FC_CHECK=1: open the accepted draft in FluentControl.
+
+        Returns a repair request when the InfoPad reports errors and repair
+        rounds are left; None when FluentControl is clean, not available, or
+        the budget is spent (the draft is then accepted as it is, with the
+        verdict recorded in ``fluentcontrol_check.json``).
+        """
+        from .fc_feedback import (
+            FC_CHECK_BUDGET,
+            check_in_fluentcontrol,
+            fc_check_enabled,
+            fc_findings_message,
+        )
+
+        if not fc_check_enabled() or not compile_result.get("xscr_path"):
+            return None
+        check = check_in_fluentcontrol(
+            Path(compile_result["xscr_path"]),
+            source=compile_result.get("source") or source,
+            source_file=compile_result.get("python_path"),
+        )
+        record = getattr(self.registry, "record_fc_check", None)
+        if callable(record):
+            record(check)
+        print(f"[fluentcontrol] {check.get('message')}", flush=True)
+        if check.get("ok") is False and check.get("findings") and rounds < FC_CHECK_BUDGET:
+            return HumanMessage(content=fc_findings_message(check))
+        return None
 
     # ── extract_python (no-tool branch) ──────────────────────────
 
