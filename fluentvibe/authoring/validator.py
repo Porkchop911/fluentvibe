@@ -12,6 +12,8 @@ from .models import FailureCategory, IntentSpec, ValidationReport
 from .repair_policy import resolve_repair_policy
 from .workspace_modules import WorkspaceModule, copy_workspace_modules
 
+_BLOCK_LIQUID_CALL = re.compile(r"\b(?:spri_cleanup|stamp|add_reagent|pool_columns)\(")
+
 
 class AuthoringValidator:
     def __init__(self, *, workspace_modules: tuple[WorkspaceModule, ...] = ()) -> None:
@@ -199,6 +201,8 @@ class AuthoringValidator:
             return None
         if ".worklist(" in source or ".load_worklist(" in source:
             return None
+        if _BLOCK_LIQUID_CALL.search(source):
+            return None  # fluentvibe.blocks stages aspirate and dispense internally
         if ".aspirate(" not in source or ".dispense(" not in source:
             return (
                 "Prompt asks for liquid handling, but generated source does not contain both "

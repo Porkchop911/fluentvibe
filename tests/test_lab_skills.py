@@ -115,6 +115,7 @@ def test_shipped_catalog_is_well_formed():
     )
     always = {s.name for s in catalog if s.always_on}
     assert always == {
+        "api-blocks",
         "core-worktable-api",
         "labware-and-liquid-classes",
     }

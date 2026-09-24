@@ -10,6 +10,15 @@ select_when:
   - magnetic
   - magnet
 ---
+## USE THE BLOCK FIRST
+
+Write the cleanup as **one call** to `spri_cleanup(...)` from `fluentvibe.blocks`
+(see the api-blocks skill). It already satisfies every invariant below: tagged
+roles are checked, elution happens off the magnet, the eluate is recovered onto
+a clean plate with its own tip box, and no tip touches two samples. Only write
+the stage by hand if the block cannot express the request (e.g. partial plates
+or LiHa-only decks), and then follow the invariants and workflow below exactly.
+
 ## REQUIRED INVARIANTS — a bead cleanup is INVALID otherwise
 
 A cleanup that adds beads but never gets the product back off them is wrong even

@@ -8,6 +8,14 @@ select_when:
   - pooled
   - pooling
 ---
+## USE THE BLOCK FIRST
+
+For 96-well column pooling call `pool_columns(...)` from `fluentvibe.blocks`
+(fresh tips per column, 8 row pools in one destination column). If the protocol
+needs a single tube pool, follow it with `offdeck_step(...)` telling the
+operator to combine the row pools. Never "pool" by carrying each well forward
+unchanged and calling that pooling.
+
 ## Canonical workflow: pooling (fixed-volume skeleton)
 
 Combine liquid from multiple source wells into a single destination well or tube.

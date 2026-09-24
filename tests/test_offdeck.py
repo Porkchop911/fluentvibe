@@ -64,3 +64,21 @@ def test_integrated_thermal_cycler_counts_as_handled():
         '    wt.odtc_execute_method("TAG_30C_80C")'
     )
     assert offdeck_findings(src) == []
+
+
+def test_offdeck_step_block_counts_as_handled_and_blocks_count_as_liquid():
+    src = _source('offdeck_step(wt, "Run TAG on the thermal cycler.", labware=dst, handoff=("Nest61mm_Pos", 10))')
+    assert offdeck_findings(src) == []
+    # A block call is liquid handling: an unprompted off-deck step between two
+    # block calls is still flagged.
+    blocks_only = '''
+def build_worktable():
+    wt.group("Barcode")
+    stamp(wt, source=bc, dest=samples, volume_ul=1.0, tips=t, liquid_class="x")
+    wt.group("Tagmentation")
+    wt.add_comment("Incubate on a thermal cycler.")
+    wt.wait(duration_seconds=240)
+    wt.group("Cleanup")
+    spri_cleanup(wt, sample_plate=samples)
+'''
+    assert [f.group for f in offdeck_findings(blocks_only)] == ["Tagmentation"]
