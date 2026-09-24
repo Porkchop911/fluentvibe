@@ -1553,7 +1553,10 @@ class Renderer:
                 params.update({
                     "Prompt": step.prompt,
                     "AutoClose": str(step.timeout > 0),
-                    "Timeout": str(step.timeout),
+                    # FC's range is 1-7200 even with AutoClose off; FC-authored
+                    # prompts without auto-close carry Timeout 1 (InfoPad
+                    # rejects 0: "'Close prompt after' exceeds lower range limit").
+                    "Timeout": str(step.timeout if step.timeout > 0 else 1),
                 })
 
             case StepType.START_TIMER:
