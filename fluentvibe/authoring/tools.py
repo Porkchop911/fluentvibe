@@ -4158,10 +4158,12 @@ def _simulation_failure(report: Any) -> dict[str, Any] | None:
 
 
 _OFFDECK_HINT = (
-    "A step that happens off the deck (thermal cycler, centrifuge, Qubit, ice) "
-    "must pause the run: call wt.user_prompt('<what the operator does>') in that "
-    "functional group, moving the plate to a hand-off position with the gripper "
-    "if needed. A wt.wait() leaves the plate on the deck and does not model it."
+    "A wt.wait() leaves the plate where it is and does not model a device step. "
+    "If the deck has an integrated device for it (e.g. the Inheco ODTC thermal "
+    "cycler), move the plate there with the gripper and drive it with wt.odtc_* "
+    "(see the device-odtc skill). Otherwise the step happens off the deck "
+    "(centrifuge, Qubit, ice, external thermal cycler): pause the run with "
+    "wt.user_prompt('<what the operator does>') in that functional group."
 )
 
 
