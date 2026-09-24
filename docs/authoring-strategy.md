@@ -288,6 +288,10 @@ Rubric on attempt 4 is now **0.818** (was 1.0), with the two failures above. Sti
 
 New findings from the checks: the shipped `examples/ampure_cleanup.py` reuses MCA tips from sample supernatant into the elution-buffer trough (96 `sample_carryover_into_reagent` warnings). Tip-hygiene and off-deck findings are warnings for the model, not blocking gates. Making them blocking is a decision for after the first live runs.
 
+### Overnight 24 September: W1 blocks, W2 Bench Spec, W4 `edit_draft`, first live results
+
+Details and numbers: [`overnight-2026-09-24.md`](overnight-2026-09-24.md). In short: with an approved Bench Spec, local models (Qwen3.8-27B on NInfer twice, Flash Next once) produced ONT protocols that pass every rubric check, including real pooling and spec conformance, and compile to `.xscr`. Without the spec, runs cleaned up per well instead of pooling first. Tip-hygiene findings stay warnings (user decision, 24 Sep).
+
 ## 5. Roadmap
 
 | Phase | Content | Exit criterion |
