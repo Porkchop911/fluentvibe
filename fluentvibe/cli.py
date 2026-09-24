@@ -214,6 +214,24 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_skeleton.add_argument("--output", "-o", type=Path, default=None)
     p_skeleton.set_defaults(func=_cmd_skeleton)
 
+    p_fc_open = sub.add_parser(
+        "fc-open",
+        help="compile a draft and open it in FluentControl (shell script) for checking and editing",
+    )
+    p_fc_open.add_argument("draft", type=Path, help="fluentvibe Python protocol")
+    p_fc_open.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir (deck rules)")
+    p_fc_open.set_defaults(func=_cmd_fc_open)
+
+    p_fc_pull = sub.add_parser(
+        "fc-pull",
+        help="list what was changed in FluentControl since fc-open, with the Python lines to change",
+    )
+    p_fc_pull.add_argument("draft", type=Path, help="the draft passed to fc-open")
+    p_fc_pull.add_argument("--base", type=Path, default=None, help="compiled script (default <draft>.fc-base.xscr)")
+    p_fc_pull.add_argument("--edited", type=Path, default=None, help="script saved in FluentControl (default: the shell)")
+    p_fc_pull.add_argument("--profile", type=Path, default=None)
+    p_fc_pull.set_defaults(func=_cmd_fc_pull)
+
     p_chat = sub.add_parser("chat", help="start an interactive protocol-authoring chat")
     p_chat.add_argument("--output-dir", type=Path, default=Path("build") / "chat_authoring")
     p_chat.add_argument("--retry-budget", type=int, default=8)
@@ -774,6 +792,66 @@ def _cmd_spec(args) -> int:
         print(f"Wrote {args.output} and {args.output.with_suffix('.md')}")
     print(table)
     return 0 if not problems else 2
+
+
+def _fc_draft_worktable(draft: Path, profile: Path | None):
+    import os
+
+    from .authoring.eval_rubric import build_worktable_from_source
+    from .authoring.profile import PROFILE_DIR_ENV
+
+    if profile is not None:
+        os.environ[PROFILE_DIR_ENV] = str(profile)
+    source = draft.read_text(encoding="utf-8")
+    return source, build_worktable_from_source(source, str(draft.resolve()))
+
+
+def _cmd_fc_open(args) -> int:
+    from .authoring.fc_feedback import explain_infopad
+    from .authoring.fluentcontrol_shell import (
+        open_shell_and_read_infopad,
+        patch_shell_xscr_from_generated,
+    )
+
+    _source, wt = _fc_draft_worktable(args.draft, args.profile)
+    base = args.draft.with_suffix(".fc-base.xscr")
+    wt.compile(base)
+    patch_shell_xscr_from_generated(base)
+    ui = open_shell_and_read_infopad(close_before_open=True, close_after_read=False)
+    findings = explain_infopad(list(ui.error_lines or []), wt)
+    print(f"Opened {args.draft.name} in FluentControl (script 'shell'); compiled copy: {base}")
+    if findings:
+        print(f"InfoPad: {len(findings)} finding(s):")
+        for f in findings:
+            d = f.to_dict()
+            print(f"  [{d['kind']}] {d['message']} (lines {d['python_lines']}) -> {d['hint']}")
+    else:
+        print("InfoPad: no errors.")
+    print(f"Edit and save in FluentControl, then: fluentvibe fc-pull {args.draft}")
+    return 0
+
+
+def _cmd_fc_pull(args) -> int:
+    from .authoring.fc_roundtrip import (
+        diff_scripts,
+        locate_variables,
+        roundtrip_message,
+        write_report,
+    )
+    from .authoring.fluentcontrol_shell import DEFAULT_SHELL_XSCR
+
+    source, wt = _fc_draft_worktable(args.draft, args.profile)
+    base = args.base or args.draft.with_suffix(".fc-base.xscr")
+    if not base.exists():
+        print(f"error: {base} not found; run fluentvibe fc-open {args.draft} first", file=sys.stderr)
+        return 1
+    edited = args.edited or DEFAULT_SHELL_XSCR
+    changes = locate_variables(diff_scripts(base, edited, wt=wt), source)
+    report = args.draft.with_suffix(".fc-changes.json")
+    write_report(changes, report)
+    print(roundtrip_message(changes))
+    print(f"\nWrote {report}")
+    return 0
 
 
 def _cmd_skeleton(args) -> int:

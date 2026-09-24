@@ -171,6 +171,7 @@ def test_skills_load_shares_enforce_posture():
         "lookup_api",
         "edit_draft",
         "check_in_fluentcontrol",
+        "pull_fluentcontrol_edits",
     }
     assert scope.denied_tools() == enforce.denied_tools()
 
