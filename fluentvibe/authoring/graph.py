@@ -94,6 +94,8 @@ class GraphState(TypedDict, total=False):
     result: AuthoringResult | None
     prompt: str
     adherence_nudges: int
+    # Tip-hygiene / off-deck findings nudges (see QUALITY_NUDGE_BUDGET).
+    quality_nudges: int
     # Last draft that compiled+simulated cleanly, captured before an adherence
     # nudge, as a ready success result. Used as the accept-with-gaps fallback if
     # the model cannot produce another compiling draft after being nudged.
@@ -236,6 +238,7 @@ def run_graph(
             result=None,
             prompt=prompt,
             adherence_nudges=0,
+            quality_nudges=0,
             fallback_result=None,
         )
 
@@ -436,6 +439,7 @@ class _Nodes:
         current_group_index = state.get("current_group_index", 0)
         last_accepted_source_hash = state.get("last_accepted_source_hash")
         adherence_nudges = state.get("adherence_nudges", 0)
+        quality_nudges = state.get("quality_nudges", 0)
         fallback_result = state.get("fallback_result")
 
         for _enum_idx, call in enumerate(tool_calls):
@@ -724,6 +728,19 @@ class _Nodes:
                             )
                             appended.append(_adherence_nudge_message(gaps))
                             continue
+                        concerns = _quality_concerns(result)
+                        if concerns and quality_nudges < QUALITY_NUDGE_BUDGET:
+                            # Keep the passing draft as the fallback, but give the
+                            # model one turn to fix tip reuse / unpaused off-deck
+                            # steps the simulator found.
+                            quality_nudges += 1
+                            fallback_result = _build_success(
+                                registry=self.registry, state=state, code=best_code,
+                                tool_result=compile_result, last_validation=last_validation,
+                                coverage_gaps=gaps,
+                            )
+                            appended.append(_quality_nudge_message(concerns))
+                            continue
                         return Command(
                             update={
                                 "tool_call_count": tool_call_count,
@@ -764,6 +781,7 @@ class _Nodes:
                 "current_group_index": current_group_index,
                 "last_accepted_source_hash": last_accepted_source_hash,
                 "adherence_nudges": adherence_nudges,
+                "quality_nudges": quality_nudges,
                 "fallback_result": fallback_result,
             },
             goto="model_call",
@@ -1224,6 +1242,45 @@ def _coverage_gaps_for_source(prompt: str, code: str | None) -> list[dict[str, A
     return coverage_gaps(report)
 
 
+QUALITY_NUDGE_BUDGET = 1
+
+
+def _quality_concerns(result: dict[str, Any]) -> dict[str, Any]:
+    """Non-blocking simulator findings worth one repair turn."""
+    return {
+        key: result[key]
+        for key in ("tip_hygiene", "offdeck_steps")
+        if isinstance(result, dict) and result.get(key)
+    }
+
+
+def _quality_nudge_message(concerns: dict[str, Any]) -> HumanMessage:
+    parts = []
+    hygiene = concerns.get("tip_hygiene")
+    if hygiene:
+        examples = "; ".join(
+            f"line {e.get('line', '?')}: {e.get('operation')} {e.get('labware')}:{e.get('well')}"
+            for e in hygiene.get("examples", [])[:3]
+        )
+        parts.append(
+            f"Tips touch more than one sample ({hygiene.get('counts')}), e.g. {examples}. "
+            f"{hygiene.get('hint', '')}"
+        )
+    offdeck = concerns.get("offdeck_steps")
+    if offdeck:
+        steps = "; ".join(
+            f"line {s.get('line')} in {s.get('group')!r}" for s in offdeck.get("steps", [])[:3]
+        )
+        parts.append(f"Off-deck steps are not paused for the operator ({steps}). {offdeck.get('hint', '')}")
+    return HumanMessage(content=(
+        "The draft compiles and simulates, but the simulator found problems a "
+        "bench scientist would reject:\n- " + "\n- ".join(parts) + "\n\n"
+        "Fix them (the fluentvibe.blocks helpers already follow these rules) and "
+        "call simulate_python_draft again with the corrected full source. If you "
+        "cannot fix them, the current draft is kept."
+    ))
+
+
 def _adherence_nudge_message(gaps: list[dict[str, Any]]) -> HumanMessage:
     lines = "\n".join(
         f"- {gap.get('message') or gap.get('code')}" for gap in gaps
@@ -1232,10 +1289,11 @@ def _adherence_nudge_message(gaps: list[dict[str, Any]]) -> HumanMessage:
         "The protocol simulates, but it does not cover every stage the source "
         "document describes. Each of these library-prep stages is missing:\n"
         f"{lines}\n\n"
-        "Cover each one — either author it on-deck where the deck allows, or add "
-        "an explicit `wt.add_comment(...)` stating that stage is performed "
-        "manually/off-deck. Do not silently drop any stage. Then re-run "
-        "compile_and_simulate."
+        "Cover each one — either author it on-deck where the deck allows, or, for "
+        "a stage done away from the deck, pause the run for the operator with "
+        "`offdeck_step(...)` (fluentvibe.blocks) or `wt.user_prompt(...)`. A "
+        "comment alone does not cover a stage. Do not silently drop any stage. "
+        "Then re-run compile_and_simulate."
     ))
 
 
