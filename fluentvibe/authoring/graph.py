@@ -1838,6 +1838,11 @@ class LegacyClientAdapter:
             return LegacyClientAdapter(self._legacy)
         return LegacyClientAdapter(self._legacy, bound_names=frozenset(names))
 
+    def without_tools(self) -> "LegacyClientAdapter":
+        """A sibling adapter that sends no tools at all, for plain-text side
+        calls (e.g. skill selection) that must not be answered with a tool call."""
+        return LegacyClientAdapter(self._legacy, bound_names=frozenset())
+
     def invoke(self, messages: list[BaseMessage]) -> AIMessage:
         from .tools import tool_definitions
         defs = tool_definitions()

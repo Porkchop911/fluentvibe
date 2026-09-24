@@ -267,6 +267,12 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
 
     optional_names = {s.name for s in optional}
     chosen: set[str] | None = None
+    # Selection wants a plain JSON answer. With the authoring tools attached,
+    # models answered with a tool call instead and selection fell back to
+    # loading every skill.
+    without_tools = getattr(client, "without_tools", None)
+    if callable(without_tools):
+        client = without_tools()
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
 
