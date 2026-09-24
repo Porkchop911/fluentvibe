@@ -202,6 +202,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_spec.add_argument("--request-timeout", type=float, default=None)
     p_spec.set_defaults(func=_cmd_spec)
 
+    p_skeleton = sub.add_parser(
+        "skeleton",
+        help="write a first protocol draft from an approved Bench Spec and a deck profile",
+    )
+    p_skeleton.add_argument("spec", type=Path, help="Bench Spec JSON")
+    p_skeleton.add_argument("--profile", type=Path, required=True,
+                            help="workspace-app profile dir (build/workspaces/<name>)")
+    p_skeleton.add_argument("--output", "-o", type=Path, default=None)
+    p_skeleton.set_defaults(func=_cmd_skeleton)
+
     p_chat = sub.add_parser("chat", help="start an interactive protocol-authoring chat")
     p_chat.add_argument("--output-dir", type=Path, default=Path("build") / "chat_authoring")
     p_chat.add_argument("--retry-budget", type=int, default=8)
@@ -757,6 +767,30 @@ def _cmd_spec(args) -> int:
         print(f"Wrote {args.output} and {args.output.with_suffix('.md')}")
     print(table)
     return 0 if not problems else 2
+
+
+def _cmd_skeleton(args) -> int:
+    import json as _json
+
+    from .authoring.bench_spec import validate_bench_spec
+    from .authoring.skeleton import build_skeleton, load_deck
+
+    spec, problems = validate_bench_spec(_json.loads(args.spec.read_text(encoding="utf-8")))
+    if spec is None:
+        for problem in problems:
+            print(f"error: {args.spec}: {problem.where}: {problem.message}", file=sys.stderr)
+        return 1
+    try:
+        source = build_skeleton(spec, load_deck(args.profile))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.output is not None:
+        args.output.write_text(source, encoding="utf-8")
+        print(f"Wrote {args.output}")
+    else:
+        print(source)
+    return 0
 
 
 def _cmd_chat(args) -> int:
