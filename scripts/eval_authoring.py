@@ -302,6 +302,11 @@ def main() -> int:
             row["status"] = result.status.value
             if result.failure_category is not None:
                 row["error"] = result.failure_category.value
+            if result.clarification_questions:
+                # Keep the model's question so a follow-up run can answer it.
+                (run_dir / "clarification.json").write_text(json.dumps(
+                    [q.__dict__ for q in result.clarification_questions], indent=2), encoding="utf-8")
+                print(f"        clarification: {result.clarification_questions[0].question[:300]}")
             if py_path is not None and py_path.exists():
                 dest = out / f"run-{i:02d}.py"
                 dest.write_text(py_path.read_text(encoding="utf-8"), encoding="utf-8")
