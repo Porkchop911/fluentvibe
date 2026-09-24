@@ -1,0 +1,114 @@
+<title>Overnight Run Report</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#f4f6f3;--surface:#fff;--sunk:#eaeee9;--ink:#1b2420;--muted:#56625c;--rule:#d8ded7;
+  --accent:#1f5f8b;--accent-soft:#e3edf5;--ok:#2f7d4f;--ok-soft:#e2f1e7;--warn:#9a5f0c;--warn-soft:#f8ecd6;
+  --crit:#b3261e;--crit-soft:#f8e1df;--code-bg:#eef1ed;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;
+  --ground:#111614;--surface:#181e1b;--sunk:#1f2622;--ink:#e4eae6;--muted:#9aa69f;--rule:#2c3531;
+  --accent:#86b8e0;--accent-soft:#1b2b38;--ok:#7cc79a;--ok-soft:#18291f;--warn:#e0a955;--warn-soft:#2e2414;
+  --crit:#f08a80;--crit-soft:#341b19;--code-bg:#1d2421;}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --ground:#111614;--surface:#181e1b;--sunk:#1f2622;--ink:#e4eae6;--muted:#9aa69f;--rule:#2c3531;
+  --accent:#86b8e0;--accent-soft:#1b2b38;--ok:#7cc79a;--ok-soft:#18291f;--warn:#e0a955;--warn-soft:#2e2414;
+  --crit:#f08a80;--crit-soft:#341b19;--code-bg:#1d2421;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 var(--sans);padding-inline:16px;padding-block:0 64px}
+main{max-width:980px;margin:0 auto;padding-top:36px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(28px,5vw,40px)/1.1 var(--cond);margin:10px 0 12px;text-wrap:balance}
+h2{font:700 23px/1.25 var(--cond);margin:44px 0 12px;text-wrap:balance}
+p,li{max-width:72ch}
+p{margin:0 0 12px}
+ul,ol{padding-left:22px;margin:0 0 12px}
+li{margin:4px 0}
+code{font:13px var(--mono);background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.meta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px}
+.meta b{color:var(--ink);font-weight:600}
+.headline{border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:16px 18px;margin:22px 0;font-size:16.5px;line-height:1.55}
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface);margin:0 0 16px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--rule)}
+th{font:600 12px var(--sans);text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--sunk)}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font:600 12px/1 var(--mono);padding:4px 8px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)}.p-warn{background:var(--warn-soft);color:var(--warn)}.p-crit{background:var(--crit-soft);color:var(--crit)}
+tr.spec td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+.cards{display:grid;grid-template-columns:1fr;gap:12px;margin:12px 0 16px}
+@media (min-width:720px){.cards{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 16px}
+.card h3{margin:0 0 6px;font:600 16px/1.3 var(--cond)}
+.card p{margin:0;font-size:14px;color:var(--muted)}
+.card.warn{border-color:var(--warn)}
+footer{margin-top:44px;padding-top:14px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--muted)}
+</style>
+
+<main>
+<div class="eyebrow">fluentvibe · overnight run · 24 Sep 2026</div>
+<h1>Overnight run report</h1>
+<div class="meta"><span><b>Branch</b> review/authoring-quality-experiment (not pushed)</span><span><b>Tests</b> 760 passed, 1 skipped</span><span><b>Restore</b> <code>overnight/start</code>, <code>restore/pre-authoring-strategy-2026-09-24</code></span></div>
+
+<div class="headline"><b>With an approved Bench Spec, both local models produced a complete, correct ONT protocol: 3 of 3 runs</b> (27B twice, Flash Next once). Each one compiled to <code>.xscr</code>, in 26–51 minutes. <b>Without the spec, no run passed</b> (0.62–0.77).</div>
+
+<h2>Runs</h2>
+<p>All scores come from the same rubric, the same PDF text and the gold spec (<code>examples/ont_rbk114_spec.json</code>), via <code>scripts/rescore_eval.py</code>. Deck: <code>sat_1080_test</code>, skills mode. <code>n27b</code> = Qwen3.8-27B on NInfer.</p>
+<div class="tw"><table>
+<thead><tr><th>Run</th><th>Input</th><th>Result</th><th>Score</th><th class="num">Time</th><th class="num">Turns</th></tr></thead>
+<tbody>
+<tr><td>Flash Next, 23 Sep (before)</td><td>document</td><td>"success"; no pooling, tip reuse, off-deck steps written as waits</td><td><span class="pill p-crit">0.69</span></td><td class="num">49 min</td><td class="num">5</td></tr>
+<tr><td><code>n27b-baseline-phase1</code></td><td>document</td><td>failed: output-token cap hit in turn 1</td><td>–</td><td class="num">14 min</td><td class="num">1</td></tr>
+<tr><td><code>n27b-blocks-medium-stopped</code></td><td>document</td><td>stopped: bug in my blocks (mix liquid class)</td><td><span class="pill p-crit">0.62</span></td><td class="num">–</td><td class="num">8</td></tr>
+<tr><td><code>n27b-blocks-doc</code></td><td>document</td><td>"success"; per-well clean-up instead of pooling, tip reuse</td><td><span class="pill p-crit">0.69</span></td><td class="num">39 min</td><td class="num">4</td></tr>
+<tr><td><code>flash-blocks-doc</code></td><td>document</td><td>"success"; pooled, but off-deck steps written as waits and reagent carryover</td><td><span class="pill p-warn">0.77</span></td><td class="num">48 min</td><td class="num">7</td></tr>
+<tr class="spec"><td><code>n27b-spec-only</code></td><td>approved spec only</td><td>success, compiled</td><td><span class="pill p-ok">1.00</span></td><td class="num">51 min</td><td class="num">8</td></tr>
+<tr class="spec"><td><code>n27b-spec-doc</code></td><td>document + approved spec</td><td>success, compiled</td><td><span class="pill p-ok">1.00</span></td><td class="num">26 min</td><td class="num">4</td></tr>
+<tr class="spec"><td><code>flash-spec-doc</code></td><td>document + approved spec</td><td>success, compiled</td><td><span class="pill p-ok">1.00</span></td><td class="num">27 min</td><td class="num">4</td></tr>
+</tbody></table></div>
+<p>The 1.00 protocols pass every check: tagged roles, derived volumes, magnet round trip, eluate recovery, no analyte in waste, no tip touching two samples, real pooling (12 samples per row pool), operator pauses for off-deck steps, and the spec's step order.</p>
+
+<h2>What the runs taught</h2>
+<ol>
+  <li><b>The bottleneck was understanding the protocol, not writing code.</b> The blocks removed most hand-written errors. Without the spec, though, each model improvised its own deck adaptation: the 27B cleaned up per well, and Flash wrote an on-deck clean-up of the row pools. The tip and off-deck errors came back in the parts they wrote by hand. With the spec, both models followed the document's order and used only blocks.</li>
+  <li><b><code>edit_draft</code> works.</b> Repairs took 9 seconds to 4 minutes, instead of 6–10 minutes per full resubmission.</li>
+  <li><b>Spec extraction is realistic, but needs your checkpoint.</b> A live 27B run took about 5 minutes and extracted 31 steps in order, with honest notes on what the document leaves open. It marked the tube-scale pooled clean-up as on-deck. The checks flagged the "spin down / on ice" steps it had marked as on-deck, and one number the document doesn't contain ("720 min" for "12 h").</li>
+  <li><b>Speed at long context is similar on both servers.</b> NInfer drops to about 20 tok/s decode and 205 tok/s prefill at ~45K tokens, which is roughly Flash's speed. The plan turn is still the slowest: 10–20 minutes of reasoning.</li>
+</ol>
+
+<h2>Needs your attention</h2>
+<div class="cards">
+  <div class="card warn"><h3>Profile trough rule vs. suggested waste position</h3><p><code>sat_1080_test</code> suggests the waste reservoir at <code>Nest7mm_Pos 4</code>, but its deck rule allows troughs only on <code>WS_100ml_*</code> sites. Every model run lost a turn to this. I didn't edit the profile.</p></div>
+  <div class="card warn"><h3>Only one transfer liquid class</h3><p>The profile allows only <code>Water Free Single</code> (plus <code>Water Mix</code> for mixing), so "one class for ethanol, beads and eluate" is forced by the profile, not a model error.</p></div>
+  <div class="card warn"><h3>Reagent budget isn't checked</h3><p>One no-spec draft added 1.5 µl of RA to every well: 144 µl for 96 wells, from a kit that ships 15 µl.</p></div>
+  <div class="card"><h3>Tip-hygiene findings stay warnings</h3><p>As you decided. The model gets one nudge, then the draft is accepted with the warnings attached.</p></div>
+</div>
+
+<h2>What changed</h2>
+<ul>
+  <li><b><code>fluentvibe/blocks/</code>:</b> <code>spri_cleanup</code>, <code>stamp</code>, <code>add_reagent</code>, <code>pool_columns</code>, <code>offdeck_step</code>, plus a gold ONT protocol built from them.</li>
+  <li><b>Bench Spec:</b> schema, number and location checks, <code>fluentvibe spec</code>, <code>author --spec</code>, gold spec, and eval options <code>--spec</code> / <code>--spec-only</code>.</li>
+  <li><b>Rubric:</b> new <code>pooling_performed</code> (backed by liquid lineage in the simulator) and <code>spec_conformance</code> checks; a re-scoring script.</li>
+  <li><b>Harness:</b> one repair turn for simulator findings; <code>edit_draft</code>; a <code>max_tokens</code> setting; the plan turn also offers <code>lookup_api</code>.</li>
+  <li><b>Bugs fixed:</b> skill selection was sent with every tool attached; my blocks mixed with a liquid class FluentControl rejects (found by a live run and now covered by compile tests).</li>
+</ul>
+
+<h2>Suggested next steps</h2>
+<ol>
+  <li><b>Spec checkpoint in the web UI</b> (authoring tab only): extract → review the flagged rows → approve → author against the spec.</li>
+  <li><b>Reagent-budget check</b> against the kit volume table.</li>
+  <li><b>Profile:</b> decide whether the trough rule or the suggested waste position is right.</li>
+  <li><b>Shorter plan turn:</b> low reasoning effort for the plan turn only, now that the spec carries the understanding.</li>
+  <li><b>More protocol families</b> (normalisation, PCR set-up, ELISA), each with a gold spec and gold protocol.</li>
+</ol>
+
+<footer>Full details: <code>docs/overnight-2026-09-24.md</code> · runs in <code>build/eval/</code> · Flash Next (120K MTP) left running on :8080; NInfer stopped.</footer>
+</main>
