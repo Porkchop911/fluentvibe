@@ -173,6 +173,28 @@ local model can act on:
   each one. When FluentControl is not running the check says "unavailable"
   and never fails a draft.
 
+## Path D — edits made in FluentControl flow back into the Python
+
+The Python stays the source of truth; changes made by hand in FluentControl
+are carried back instead of being overwritten by the next compile:
+
+```
+fluentvibe fc-open draft.py --profile build/workspaces/<deck>   # compile, open as 'shell', show InfoPad
+# edit in FluentControl, save
+fluentvibe fc-pull draft.py --profile build/workspaces/<deck>   # list the edits with Python lines
+```
+
+`fc_roundtrip.diff_scripts` parses both scripts with the same parser, aligns
+commands, ignores instrument binding (`AvailableID`, `DeviceAlias`, which
+FluentControl rewrites on every save), groups one edit on many commands of a
+block into one line, and maps block variables to the argument to set
+(`PCR_CLEAN_UP_WASH_LIQUID_CLASS` → `spri_cleanup(..., wash_liquid_class=`) or
+marks them derived. Note: FluentControl does not recompute derived values
+(supernatant, mix volumes) when an input variable is edited there; the
+Python block does. The `pull_fluentcontrol_edits` tool gives the model the
+same list; `scripts/fc_roundtrip_eval.py` measures how completely a model
+carries the edits over (first 27B run: 0 missed edits, 3 min).
+
 Deck facts found this way are enforced at compile time so models do not need
 FluentControl to avoid them: MCA96 never in slim troughs, positions the arm
 cannot reach (`scripts/probe_deck_reach.py` → `<profile>/reach.json`), unique
