@@ -188,6 +188,18 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_render_trace.add_argument("--output", "-o", type=Path, default=None)
     p_render_trace.set_defaults(func=_cmd_render_trace)
 
+    p_spec = sub.add_parser(
+        "spec",
+        help="extract a Bench Spec (what the protocol does, step by step) from a document",
+    )
+    p_spec.add_argument("document", type=Path, help="protocol document (PDF, DOCX, text)")
+    p_spec.add_argument("--output", "-o", type=Path, default=None,
+                        help="write the spec JSON here (a .md review table is written beside it)")
+    p_spec.add_argument("--endpoint", default=None)
+    p_spec.add_argument("--model", default=None)
+    p_spec.add_argument("--request-timeout", type=float, default=None)
+    p_spec.set_defaults(func=_cmd_spec)
+
     p_chat = sub.add_parser("chat", help="start an interactive protocol-authoring chat")
     p_chat.add_argument("--output-dir", type=Path, default=Path("build") / "chat_authoring")
     p_chat.add_argument("--retry-budget", type=int, default=8)
@@ -701,6 +713,37 @@ def _cmd_render_trace(args) -> int:
     path = render_model_trace_file(args.input, args.output)
     print(f"Rendered {path}")
     return 0
+
+
+def _cmd_spec(args) -> int:
+    import json as _json
+
+    from .authoring.attachments import extract_file_text
+    from .authoring.bench_spec import extract_bench_spec, spec_to_markdown
+    from .authoring.lm_client import LMStudioChatClient
+
+    text, _method, _pages, warnings = extract_file_text(args.document)
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    kwargs: dict[str, Any] = {}
+    if args.endpoint:
+        kwargs["endpoint"] = args.endpoint
+    if args.model:
+        kwargs["model"] = args.model
+    if args.request_timeout is not None:
+        kwargs["request_timeout_s"] = args.request_timeout
+    spec, problems, raw = extract_bench_spec(LMStudioChatClient(**kwargs), text)
+    if spec is None:
+        for problem in problems:
+            print(f"error: {problem.where}: {problem.message}", file=sys.stderr)
+        return 1
+    table = spec_to_markdown(spec, problems)
+    if args.output is not None:
+        args.output.write_text(_json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        args.output.with_suffix(".md").write_text(table, encoding="utf-8")
+        print(f"Wrote {args.output} and {args.output.with_suffix('.md')}")
+    print(table)
+    return 0 if not problems else 2
 
 
 def _cmd_chat(args) -> int:
