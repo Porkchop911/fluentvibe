@@ -33,17 +33,23 @@ from typing import Any
 
 # Fields that differ between two saves of the same command without meaning
 # anything for the protocol (identifiers, UI state, serialisation details).
+# AvailableID / DeviceAlias bind a command to an instrument: FluentControl
+# rebinds them to the connected (or simulated) instrument on every save.
 _NOISE = {
     "Guid", "Id", "ID", "InternalID", "ObjectID", "TemplateGuid", "IsExpanded", "IsSelected",
-    "ShowLabel", "Checksum", "LastModified", "ModifiedBy", "Timestamp",
+    "ShowLabel", "Checksum", "LastModified", "ModifiedBy", "Timestamp", "AvailableID", "DeviceAlias",
 }
-_SKIP_MODEL_FIELDS = {"line_number", "source_pos", "step_type", "parameters", "stack_onto"}
+_SKIP_MODEL_FIELDS = {"line_number", "source_pos", "step_type", "parameters", "stack_onto",
+                      "available_id", "device_alias"}
 
 
 @dataclass
 class Change:
     kind: str  # changed | added | removed | variable
     command: str
+    # For block variables: the block argument to change, or "derived" when the
+    # block computes the value from its other arguments.
+    argument: str | None = None
     subject: str | None = None
     fields: dict[str, tuple[Any, Any]] = field(default_factory=dict)
     fc_line: int | None = None
@@ -59,6 +65,7 @@ class Change:
             "fc_line": self.fc_line,
             "python_line": self.python_line,
             "group": self.group,
+            "argument": self.argument,
         }
 
     def describe(self) -> str:
@@ -68,6 +75,11 @@ class Change:
         if self.kind == "variable":
             (before, after), = self.fields.values()
             origin = f" ({where}{group})" if self.python_line else ""
+            if self.argument == "derived":
+                return (f"variable {self.command}: {before!r} -> {after!r}{origin} — derived by the block from "
+                        f"its other arguments; do not set it (the compile recomputes it)")
+            if self.argument:
+                return f"variable {self.command}: default {before!r} -> {after!r} — set {self.argument}={after!r}{origin}"
             return f"variable {self.command}: default {before!r} -> {after!r}{origin}"
         if self.kind == "added":
             return f"added in FluentControl: {what}{group} (after {where}) {self._field_text(after_only=True)}"
@@ -218,10 +230,43 @@ def roundtrip_message(changes: list[Change]) -> str:
         "wt.place position/catalog, a variable default), not the generated command itself. Then run "
         "simulate_python_draft. Changes:",
     ]
-    lines += [f"- {c.describe()}" for c in changes[:25]]
-    if len(changes) > 25:
-        lines.append(f"- ... and {len(changes) - 25} more")
+    summary = summarize(changes)
+    lines += [f"- {text}" for text in summary[:25]]
+    if len(summary) > 25:
+        lines.append(f"- ... and {len(summary) - 25} more")
     return "\n".join(lines)
+
+
+def summarize(changes: list[Change]) -> list[str]:
+    """One line per edit: the same field change on many commands from one
+    Python line (a block call) is one edit in the Python."""
+    grouped: dict[tuple, list[Change]] = {}
+    order: list[tuple] = []
+    for change in changes:
+        if change.kind == "changed":
+            key = ("changed", change.python_line, tuple(sorted((k, repr(v)) for k, v in change.fields.items())))
+        else:
+            key = (id(change),)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(change)
+    out = []
+    for key in order:
+        members = grouped[key]
+        first = members[0]
+        if len(members) == 1:
+            out.append(first.describe())
+            continue
+        where = f"line {first.python_line}" if first.python_line else "no Python line"
+        commands = sorted({f"{m.command} {m.subject!r}" if m.subject else m.command for m in members})
+        groups = sorted({m.group for m in members if m.group})
+        out.append(
+            f"{where}: {first._field_text()} on {len(members)} commands "
+            f"({', '.join(commands[:4])}{'...' if len(commands) > 4 else ''}"
+            f"{'; in ' + ', '.join(repr(g) for g in groups[:4]) if groups else ''})"
+        )
+    return out
 
 
 def write_report(changes: list[Change], path: Path) -> None:
@@ -263,5 +308,29 @@ def locate_variables(changes: list[Change], source: str | None) -> list[Change]:
             while start > 1 and "(" not in lines[start - 1]:
                 start -= 1
             change.python_line = start
-            change.group = f"block variable of name={change.command[:len(owner[1])]!r}"
+            change.group = f"declared by the block call with name → {owner[1]}_*"
+            change.argument = _block_argument(lines, start, change.command[len(owner[1]) + 1:])
     return changes
+
+
+def _block_argument(lines: list[str], call_line: int, suffix: str) -> str | None:
+    """The block parameter a variable suffix stands for (``WASH_LIQUID_CLASS`` →
+    ``spri_cleanup(..., wash_liquid_class=...)``), or "derived"."""
+    import inspect
+    import re
+
+    from .. import blocks
+
+    match = re.search(r"\b([a-z_]+)\(", lines[call_line - 1]) if 0 < call_line <= len(lines) else None
+    func = getattr(blocks, match.group(1), None) if match else None
+    if func is None:
+        return None
+    params = inspect.signature(func).parameters
+    name = suffix.lower()
+    if name in params:
+        return f"{func.__name__}(..., {name}"
+    # Per-trip variables stand for the whole volume argument.
+    base = re.sub(r"_(fca_)?trip_ul$", "_volume_ul", name)
+    if base in params:
+        return f"{func.__name__}(..., {base}"
+    return "derived"

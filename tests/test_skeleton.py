@@ -76,7 +76,7 @@ def test_other_step_types_map_to_blocks_and_waits(profile, tmp_path):
         ],
     }
     source = build_skeleton(_spec(raw), load_deck(profile))
-    assert "add_reagent(" in source and "wt.wait(duration_seconds=300)" in source
+    assert "distribute_reagent(" in source and "wt.wait(duration_seconds=300)" in source  # master mix: FCA
     assert "stamp(" in source and "offdeck_step(" in source
     path = tmp_path / "s.py"
     path.write_text(source, encoding="utf-8")

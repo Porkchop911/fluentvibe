@@ -485,3 +485,25 @@ def test_gripper_cannot_move_onto_an_occupied_nest_but_can_stack_onto_labware():
     ok.wt.gripper.move(ok.samples, onto=ok.magnet)  # stacking is explicit
     ok.wt.gripper.move(ok.samples, to=(NEST, 1))
     ok.wt.simulate(strict=True)
+
+
+def test_cleanup_adds_beads_and_elution_buffer_with_the_fca_from_slim_troughs(tmp_path, monkeypatch):
+    """Reagents come from slim troughs via the FCA; the MCA keeps ethanol and sample work."""
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE.parent))
+    deck = Deck()
+    beads = deck.wt.place(Trough25mL("SlimBeads", catalog="25ml_short"), "WS_100ml_1", 2)
+    eb = deck.wt.place(Trough25mL("SlimEB", catalog="25ml_short"), "WS_100ml_1", 3)
+    beads.fill_all(Reagent("AMPure XP", role="bead_carrier"), 8000.0)
+    eb.fill_all(Reagent("EB", role="eluent"), 4000.0)
+    deck.cleanup(bead_source=beads, elution_source=eb, fca_tips=deck.fca_tips, name="PCR clean-up")
+    deck.wt.simulate(strict=True)
+    statuses = {inv.key: inv.status for inv in score_semantic(deck.wt)}
+    assert statuses["eluate_recovered"] == "pass" and statuses["no_cross_contamination"] == "pass"
+    steps = [s for g in deck.wt.to_protocol().groups for s in g.steps]
+    mca_sources = {s.labware_name for s in steps if type(s).__name__ == "AspirateStep"}
+    liha_sources = {s.labware_name for s in steps if type(s).__name__ == "LihaAspirateStep"}
+    assert liha_sources == {"SlimBeads", "SlimEB"} and "Ethanol" in mca_sources
+    assert not mca_sources & liha_sources
+    deck.wt.compile(tmp_path / "fca.xscr")  # the MCA never touches a slim trough

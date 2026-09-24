@@ -7,7 +7,13 @@ always_on: false
 ## Canonical workflow: reagent distribution / plate filling
 
 Fill a plate from a single reservoir with a fixed per-well volume. Pick the head
-by throughput; adapt the volume and well count to the request.
+by what the liquid costs, then by throughput: **reagents** (kit reagents,
+master mixes, buffers, enzymes) go through the **FCA/LiHa** from tubes or a
+slim trough (`25ml_short`, `100ml`) — little dead volume — ideally with the
+`distribute_reagent` block; only **cheap bulk liquids** (water, ethanol, wash
+buffer, media in bulk) go through the **MCA96**, and then from an SBS reservoir
+(`60ml SBS MCA96`, `300ml SBS`), never a slim trough. Adapt the volume and well
+count to the request.
 
 1. **Variables** (top-level): `DISPENSE_VOLUME_UL` (per well) and one
    liquid-class variable (`LIQUID_CLASS_REAGENT`), default + sim value

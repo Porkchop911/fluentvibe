@@ -50,15 +50,18 @@ required eluate recovery from invariants 2–5 — they are not optional.
    per role (default `"Water Free Single"`), `TARGET_VOLUME_UL`, bead/wash/
    elution volumes.
 2. **Labware Placement** group: sample `Plate96`, elution `Plate96`,
-   `MagnetRack`, MCA tip box, FCA tip box, bead/elution reservoir
-   (`25ml_short`), ethanol reservoir (`100ml`), `300ml SBS` waste.
+   `MagnetRack`, MCA tip boxes, FCA tip box, bead and elution troughs
+   (`25ml_short`, dispensed by the FCA), ethanol in an SBS reservoir for the
+   MCA96 (`60ml SBS MCA96` on a 61 mm nest, or `300ml SBS` on a reachable 7 mm
+   nest for > ~55 mL), `300ml SBS` waste.
 3. **Add beads** (FCA from `25ml_short`): ~1.8× sample volume; pipette-mix;
    incubate.
 4. **Bind**: `wt.gripper.move(plate, onto=magnet)` — this *is* the
    magnetization; no separate engage step. Wait for clear.
 5. **Remove supernatant** (MCA, plate still on magnet): aspirate to `300ml
    SBS` waste, leave a few µL behind.
-6. **Ethanol washes ×2** (FCA from `100ml`): dispense ~200 µL,
+6. **Ethanol washes ×2** (MCA96 from the SBS ethanol reservoir — ethanol is
+   cheap bulk liquid): dispense ~200 µL,
    short incubate, aspirate to waste. The magnet retains the beads (and
    bound DNA) in the well — all wash liquid still aspirates normally.
 7. **Elute**: `wt.gripper.move(plate, to=("Nest61mm_Pos", 1))` off the

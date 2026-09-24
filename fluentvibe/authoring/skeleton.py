@@ -56,6 +56,10 @@ class _Deck:
     free_large_sites: list[tuple[str, int]] = field(default_factory=list)
     reservoir_small: str = "60ml SBS MCA96"
     reservoir_large: str = "300ml SBS"
+    # Reagents (beads, buffers, master mixes) come from slim troughs via the
+    # FCA; the MCA only takes cheap bulk liquids (ethanol, wash, water).
+    slim_small: str = "25ml_short"
+    slim_large: str = "100ml"
     liquid_class: str = _DEFAULT_LC
 
 
@@ -156,6 +160,8 @@ class _Writer:
     swaps: int = 0
     # Labware placed mid-run (after a swap): its fills follow its placement.
     placed_in_body: set[str] = field(default_factory=set)
+    fca_boxes: list[str] = field(default_factory=list)
+    fca_tip_uses: int = 0
 
     def var(self, base: str) -> str:
         name = _ident(base)
@@ -225,6 +231,25 @@ class _Writer:
         catalog, cls = self.deck.fca_tips
         return self._put(label, f'{cls}("{label}", catalog="{catalog}")')
 
+    def slim_trough(self, label: str, need_ul: float) -> str:
+        """A slim trough on a trough site, for reagents the FCA dispenses."""
+        if not self.deck.free_trough_sites:
+            raise ValueError("skeleton: the deck has no free trough site left for an FCA reagent")
+        loc, pos = self.deck.free_trough_sites.pop(0)
+        var = self.var(label)
+        big = need_ul > _SLIM_TROUGH_FILL_UL
+        cls, catalog = ("Trough100mL", self.deck.slim_large) if big else ("Trough25mL", self.deck.slim_small)
+        self.placements.append(f'    {var} = wt.place({cls}("{label}", catalog="{catalog}"), "{loc}", {pos})')
+        self.labels[var] = label
+        return var
+
+    def fca_reagent_tips(self) -> str:
+        """The FCA tip box for reagent dispensing; 8 tips per distribution, a new box every 12."""
+        if self.fca_tip_uses % 12 == 0:
+            self.fca_boxes.append(self.fca_box(f"FcaReagentTips{len(self.fca_boxes) + 1}"))
+        self.fca_tip_uses += 1
+        return self.fca_boxes[-1]
+
     def trough(self, label: str, *, large: bool) -> str:
         """An MCA-compatible SBS reservoir: large ones on a 7 mm nest, small on a plate nest."""
         if large and self.deck.free_large_sites:
@@ -239,6 +264,8 @@ class _Writer:
 
 # What a skeleton 96-well plate can hold during a clean-up (sample + beads).
 _PLATE_WORKING_UL = 180.0
+# Most a slim 25 ml trough is filled with before the 100 ml one is used.
+_SLIM_TROUGH_FILL_UL = 22000.0
 # Most one MCA reservoir ("60ml SBS MCA96") is filled with; more need opens another.
 _RESERVOIR_FILL_UL = 55000.0
 # ... and a "300ml SBS" on a 7 mm nest.
@@ -298,6 +325,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     trough_vars: dict[str, list[str]] = {}
     fill_estimate: dict[str, float] = {}
     large_troughs: set[str] = set()
+    reagent_of: dict[str, SpecReagent] = {}
     assumed_reagents: dict[str, SpecReagent] = {}
     shared_tips: dict[str, str] = {}
     # Eluate tips of the last clean-up and the plate they served: on the MCA96
@@ -321,7 +349,18 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             reagent_vars[reagent.id] = var
         return reagent_vars[reagent.id]
 
+    def fca_trough_for(reagent: SpecReagent, need_ul: float) -> str:
+        """Slim trough for a reagent the FCA dispenses (one per reagent)."""
+        key = f"fca:{reagent.id}"
+        if key not in trough_vars:
+            trough_vars[key] = [w.slim_trough(f"{reagent.id}_trough", need_ul)]
+            fill_estimate[trough_vars[key][0]] = 0.0
+            reagent_of[key] = reagent
+        fill_estimate[trough_vars[key][0]] += need_ul
+        return trough_vars[key][0]
+
     def trough_for(reagent: SpecReagent, need_ul: float) -> str:
+        reagent_of[reagent.id] = reagent
         troughs = trough_vars.setdefault(reagent.id, [])
         large = (reagent.liquid_type or "") == "ethanol" or reagent.role == "wash"
         cap = _LARGE_RESERVOIR_FILL_UL if troughs and troughs[-1] in large_troughs else _RESERVOIR_FILL_UL
@@ -448,9 +487,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             bead_ul = float(step.volume_ul) if bead_given else ratio * well_ul
             fits(step, well_ul + bead_ul)
             bead_arg = f"bead_volume_ul={bead_ul:g}" if bead_given else f"bead_ratio={ratio:g}"
-            bead_trough = trough_for(beads, bead_ul * n * 1.15 + 500)
+            # Beads and elution buffer: FCA from slim troughs; ethanol: MCA.
+            bead_trough = fca_trough_for(beads, bead_ul * n * 1.1 + 2000)
             wash_trough = trough_for(wash, wash_ul * washes * n * 1.1 + 2000)
-            eluent_trough = trough_for(eluent, elute_ul * n * 1.15 + 500)
+            eluent_trough = fca_trough_for(eluent, elute_ul * n * 1.1 + 2000)
+            fca_tips = w.fca_reagent_tips()
+            w.fca_tip_uses += 1  # beads and elution buffer: two distributions
             eluate = w.plate(f"{step.id}_Eluate")
             if "reagent" not in shared_tips:
                 shared_tips["reagent"] = w.mca_box("ReagentTips")
@@ -465,7 +507,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"        eluate_plate={eluate}, reagent_tips={tips[0]}, sample_tips={tips[1]},\n"
                 f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, {bead_arg},\n"
                 f"        elution_volume_ul={elute_ul:g}, wash_volume_ul={wash_ul:g}, wash_count={washes},\n"
-                f"        liquid_class={json.dumps(lc)}, name={label},\n"
+                f"        liquid_class={json.dumps(lc)}, fca_tips={fca_tips}, name={label},\n"
                 f"    ){comment}"
             )
             w.retire(current, sample_tips)
@@ -509,15 +551,23 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
 
         if step.op == "add" and reagent is not None:
             vol = step.volume_ul if step.volume_ul is not None else 5.0
-            trough = trough_for(reagent, vol * n * 1.15 + 500)
-            # Reagent tips only meet reagent and dispense from above: one shared box.
-            if "reagent" not in shared_tips:
-                shared_tips["reagent"] = w.mca_box("ReagentTips")
-            tips = shared_tips["reagent"]
-            w.body.append(
-                f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
-                f"                reagent_tips={tips}, liquid_class={json.dumps(lc)}, name={label})"
-            )
+            cheap = (reagent.liquid_type or "") in {"ethanol", "water"} or reagent.role == "wash"
+            if cheap:
+                # Cheap bulk liquid: MCA96 from an SBS reservoir, one shared box.
+                trough = trough_for(reagent, vol * n * 1.15 + 500)
+                if "reagent" not in shared_tips:
+                    shared_tips["reagent"] = w.mca_box("ReagentTips")
+                w.body.append(
+                    f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
+                    f"                reagent_tips={shared_tips['reagent']}, liquid_class={json.dumps(lc)}, name={label})"
+                )
+            else:
+                # Reagents: the FCA from a slim trough (little dead volume).
+                trough = fca_trough_for(reagent, vol * n * 1.1 + 2000)
+                w.body.append(
+                    f"    distribute_reagent(wt, source={trough}, plate={current}, volume_ul={vol:g},\n"
+                    f"                       tips={w.fca_reagent_tips()}, liquid_class={json.dumps(lc)}, name={label})"
+                )
             well_ul += vol
             fits(step, well_ul)
             continue
@@ -554,7 +604,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
 
     # Fills for troughs, now that every step's need is known.
     for reagent_id, troughs in trough_vars.items():
-        reagent = next((r for r in spec.reagents if r.id == reagent_id), None) or assumed_reagents[reagent_id]
+        reagent = reagent_of[reagent_id]
         supply = _supply(reagent)
         for trough in troughs:
             need = fill_estimate[trough]
@@ -575,7 +625,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         cls for line in w.placements + w.body
         for cls in re.findall(r"wt\.place\((\w+)\(", line)
     } | {"Reagent", "Worktable"})
-    used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step")
+    used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns",
+                                      "offdeck_step")
                           if any(f"{b}(" in line for line in w.body)})
     header = [
         SKELETON_MARKER,
