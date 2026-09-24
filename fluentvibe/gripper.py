@@ -51,5 +51,6 @@ class Gripper:
             labware_name=labware_name,
             destination_location=dest_loc,
             destination_site=dest_pos,
+            stack_onto=onto.label if onto is not None else None,
         ))
         self._wt._emit(CgaDropFingersStep())

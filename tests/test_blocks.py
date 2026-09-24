@@ -204,7 +204,7 @@ def test_pool_columns_builds_eight_row_pools_without_contamination():
 def test_offdeck_step_hands_off_and_returns_the_plate():
     deck = Deck()
     offdeck_step(deck.wt, "Run TAG (30 C 2 min, 80 C 2 min) on the thermal cycler.",
-                 labware=deck.samples, handoff=(NEST, 10), name="Tagmentation")
+                 labware=deck.samples, handoff=(NEST, 12), name="Tagmentation")
     deck.wt.simulate(strict=True)
     kinds = [type(s.step).__name__ for s in deck.wt.snapshots]
     assert "UserPromptStep" in kinds
@@ -410,7 +410,7 @@ def test_thermal_step_uses_the_odtc_or_hands_off():
 
     deck = Deck()
     thermal_step(deck.wt, deck.samples, "30 C 2 min, 80 C 2 min",
-                 odtc_position=(NEST, 10), method_name="TAG", name="Tagmentation")
+                 odtc_position=(NEST, 12), method_name="TAG", name="Tagmentation")
     deck.wt.simulate(strict=True)
     kinds = [type(s.step).__name__ for s in deck.wt.snapshots]
     assert kinds.count("LegacyDriverMacroStep") >= 4  # open, close, execute, open, close
@@ -418,12 +418,12 @@ def test_thermal_step_uses_the_odtc_or_hands_off():
 
     manual = Deck()
     thermal_step(manual.wt, manual.samples, "30 C 2 min, 80 C 2 min",
-                 handoff=(NEST, 10), name="Tagmentation")
+                 handoff=(NEST, 12), name="Tagmentation")
     manual.wt.simulate(strict=True)
     assert "UserPromptStep" in [type(s.step).__name__ for s in manual.wt.snapshots]
 
     with pytest.raises(BlockError, match="method_name"):
-        thermal_step(manual.wt, manual.samples, "x", odtc_position=(NEST, 10))
+        thermal_step(manual.wt, manual.samples, "x", odtc_position=(NEST, 12))
 
 
 def test_user_prompt_without_auto_close_renders_a_valid_timeout():
@@ -470,3 +470,18 @@ def test_positions_fluentcontrol_flagged_as_unreachable_are_refused(tmp_path, mo
     stamp(deck.wt, source=far, dest=deck.pool, volume_ul=10.0, tips=deck.reagent_tips, liquid_class=LC)
     with pytest.raises(InvalidSlotError, match="cannot reach"):
         deck.wt.compile(tmp_path / "x.xscr")
+
+
+def test_gripper_cannot_move_onto_an_occupied_nest_but_can_stack_onto_labware():
+    """FluentControl: 'Destination location ... is occupied' for a move to a taken site."""
+    from fluentvibe.simulator.invariants import OccupiedSlotError
+
+    deck = Deck()
+    deck.wt.gripper.move(deck.samples, to=(NEST, 10))  # the ethanol reservoir is there
+    with pytest.raises(OccupiedSlotError, match="Free Nest61mm_Pos positions now"):
+        deck.wt.simulate(strict=True)
+
+    ok = Deck()
+    ok.wt.gripper.move(ok.samples, onto=ok.magnet)  # stacking is explicit
+    ok.wt.gripper.move(ok.samples, to=(NEST, 1))
+    ok.wt.simulate(strict=True)
