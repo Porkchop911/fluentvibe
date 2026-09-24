@@ -4,6 +4,15 @@ axis: family
 description: Next-generation sequencing library preparation — tagmentation, amplification, and bead-based size selection/cleanup of DNA libraries. Select for NGS library prep, Illumina Nextera XT, Illumina DNA Prep, tagmentation, amplicon library construction, or bead cleanup of sequencing libraries.
 always_on: false
 ---
+## USE THE BLOCKS FIRST
+
+Build the library prep from `fluentvibe.blocks` (see the api-blocks skill):
+`stamp(...)` for barcode/index plates, `add_reagent(...)` for trough reagents,
+`spri_cleanup(...)` for every bead cleanup, `pool_columns(...)` for pooling, and
+`offdeck_step(...)` for every step that happens away from the deck (external
+thermal cycler, centrifuge, Qubit, flow-cell loading). Keep the document's order:
+if it pools before a cleanup, pool first.
+
 ## Canonical workflow: NGS library prep (liquid-handling skeleton)
 
 Multi-step workflow covering tagmentation (fragmentation + adapter tagging),

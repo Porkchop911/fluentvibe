@@ -29,7 +29,11 @@ OFF_DECK_PATTERN = re.compile(
 
 _LIQUID_METHODS = frozenset({
     "aspirate", "dispense", "mix", "pick_up", "get_tips", "empty_tips",
+    # fluentvibe.blocks stages that handle liquid
+    "spri_cleanup", "stamp", "add_reagent", "pool_columns",
 })
+# Calls that pause for the operator or hand the step to an on-deck device.
+_HANDLED_CALLS = frozenset({"user_prompt", "offdeck_step"})
 
 
 @dataclass(frozen=True)
@@ -60,7 +64,10 @@ def offdeck_findings(source: str) -> list[OffDeckFinding]:
     except SyntaxError:
         return []
     calls = sorted(
-        (n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)),
+        (
+            n for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, (ast.Attribute, ast.Name))
+        ),
         key=lambda n: (n.lineno, n.col_offset),
     )
     group = ""
@@ -70,7 +77,7 @@ def offdeck_findings(source: str) -> list[OffDeckFinding]:
     first_liquid_line = 0
     last_liquid_line = 0
     for call in calls:
-        method = call.func.attr
+        method = call.func.attr if isinstance(call.func, ast.Attribute) else call.func.id
         if method == "group":
             group = _string_arg(call) or ""
             if OFF_DECK_PATTERN.search(group) and group not in mentions:
@@ -79,7 +86,7 @@ def offdeck_findings(source: str) -> list[OffDeckFinding]:
             text = _string_arg(call) or ""
             if OFF_DECK_PATTERN.search(text) and group not in mentions:
                 mentions[group] = (call.lineno, text)
-        elif method == "user_prompt" or method.startswith(("odtc_", "inheco_")):
+        elif method in _HANDLED_CALLS or method.startswith(("odtc_", "inheco_")):
             # Paused for the operator, or handled by an integrated device.
             prompted.add(group)
         elif method in _LIQUID_METHODS:
