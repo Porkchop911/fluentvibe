@@ -4107,6 +4107,7 @@ def _normalize_api_lookup(value: str) -> str:
         "add_reagent": "blocks",
         "pool_columns": "blocks",
         "offdeck_step": "blocks",
+        "thermal_step": "blocks",
     }
     return aliases.get(cleaned, cleaned)
 
@@ -4119,7 +4120,7 @@ def _blocks_api_entry() -> dict[str, Any]:
     from .. import blocks
 
     methods = []
-    for name in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step"):
+    for name in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step", "thermal_step"):
         fn = getattr(blocks, name)
         doc = inspect.getdoc(fn) or ""
         methods.append({

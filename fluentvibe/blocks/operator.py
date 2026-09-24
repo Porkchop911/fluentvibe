@@ -43,3 +43,58 @@ def offdeck_step(
     wt.user_prompt(str(instruction))
     if labware is not None:
         wt.gripper.move(labware, to=home)
+
+
+def thermal_step(
+    wt,
+    plate,
+    program: str,
+    *,
+    odtc_position: tuple[str, int] | None = None,
+    method_file: str | None = None,
+    method_name: str | None = None,
+    handoff: tuple[str, int] | None = None,
+    name: str | None = None,
+) -> None:
+    """Run a thermal program on ``plate``: on the deck's ODTC, or via the operator.
+
+    With ``odtc_position`` (the deck position the Inheco ODTC occupies) and a
+    ``method_name`` (a program authored in the Inheco Script Editor; optional
+    ``method_file`` to load first), the block opens the door, moves the plate
+    in with the gripper, closes the door, runs the method, and moves the plate
+    back to its home slot. Without an ODTC it pauses the run so the operator
+    runs ``program`` on an external thermal cycler (see :func:`offdeck_step`;
+    pass ``handoff`` to move the plate to a reachable slot first).
+
+    Never model a thermal program as ``wt.wait`` — the plate would stay on the
+    deck at room temperature.
+    """
+    if not str(program).strip():
+        raise BlockError("thermal_step: program must describe the temperatures and times.")
+    if odtc_position is None:
+        offdeck_step(
+            wt,
+            f"Run on the thermal cycler: {program}. Return the plate afterwards.",
+            labware=plate if handoff is not None else None,
+            handoff=handoff,
+            name=name,
+        )
+        return
+    if not method_name:
+        raise BlockError(
+            "thermal_step: with an ODTC, give method_name (the program stored on the ODTC)."
+        )
+    home = plate.slot
+    if home is None:
+        raise BlockError("thermal_step: place the plate with wt.place(...) first.")
+    if name:
+        wt.group(name)
+    wt.odtc_open_door()
+    wt.gripper.move(plate, to=tuple(odtc_position))
+    wt.odtc_close_door()
+    if method_file:
+        wt.odtc_set_parameters(method_file)
+    wt.odtc_execute_method(method_name)
+    wt.odtc_open_door()
+    wt.gripper.move(plate, to=home)
+    wt.odtc_close_door()

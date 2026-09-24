@@ -13,7 +13,7 @@ reused across samples, eluate never recovered, thermal-cycler steps written as
 waits). Import at the top of the file:
 
 ```python
-from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step
+from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step, thermal_step
 ```
 
 Blocks take plain numbers for volumes (not variable names) and declare them as
@@ -74,3 +74,10 @@ instruction, then the plate goes home. Use for every step that happens away from
 the deck (external thermal cycler, centrifuge, Qubit, ice, flow cell). Never
 model such a step as `wt.wait(...)`. If the deck has an integrated ODTC, drive it
 with `wt.odtc_*` instead.
+
+### `thermal_step` — thermal program (ODTC or operator)
+
+`thermal_step(wt, plate, "30 C 2 min, 80 C 2 min", odtc_position=("Inheco_Pos", 4), method_name="TAG", name="Tagmentation")`
+— on a deck with an Inheco ODTC: door, gripper in, run the stored method, gripper
+out. Without `odtc_position` it becomes an operator hand-off (`offdeck_step`).
+Use it for every thermal-cycler step; never `wt.wait`.
