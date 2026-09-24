@@ -154,7 +154,7 @@ def _run_once(service, prompt: str, source_text: str, run_dir: Path, ws_name: st
 
 
 def _write_reports(out: Path, rows: list[dict]) -> None:
-    fields = ["run", "status", "score", *ALL_KEYS, "python", "error"]
+    fields = ["run", "status", "score", *ALL_KEYS, "fluentcontrol", "python", "error"]
     with (out / "scores.csv").open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
