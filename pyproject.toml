@@ -57,6 +57,7 @@ fluentvibe = [
   "_assets/config/*.yaml",
   "_assets/config/*.md",
   "_assets/config/skills/*/*.md",
+  "authoring/spec_corpus.json",
   "catalog/*.db",
   "workspace_app/static/*.html",
 ]
