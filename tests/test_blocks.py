@@ -142,6 +142,31 @@ def test_spri_cleanup_requires_tagged_roles():
         Deck(eluent=False).cleanup()
 
 
+def test_second_cleanup_runs_on_the_eluate_of_the_first():
+    deck = Deck()
+    deck.eb.fill_all(Reagent("EB", role="eluent"), 15000.0)  # two elutions
+    deck.cleanup(sample_volume_ul=20.0, elution_volume_ul=40.0, name="Cleanup 1")
+    # The eluate plate was filled by the protocol, not authored: still accepted.
+    deck.cleanup(sample_plate=deck.eluate, eluate_plate=deck.pool, sample_tips=deck.eluate_tips,
+                 eluate_tips=deck.sample_tips,
+                 sample_volume_ul=38.0, bead_ratio=1.0, elution_volume_ul=15.0, name="Cleanup 2")
+    deck.wt.simulate(strict=True)
+    statuses = {inv.key: inv.status for inv in score_semantic(deck.wt)}
+    assert statuses["eluate_recovered"] == "pass"
+    assert statuses["analyte_not_in_waste"] == "pass"
+    assert _final(deck.wt, "Pool").wells["A1"].volume_ul == pytest.approx(13.0)
+
+
+def test_large_volumes_go_in_trips():
+    deck = Deck()
+    deck.barcodes.fill_all(Reagent("Buffer"), 300.0)
+    stamp(deck.wt, source=deck.barcodes, dest=deck.pool, volume_ul=300.0,
+          tips=deck.reagent_tips, liquid_class=LC, name="Big")
+    deck.wt.simulate(strict=True)
+    assert _final(deck.wt, "Pool").wells["A1"].volume_ul == pytest.approx(300.0)
+    assert deck.wt.protocol_variables["BIG_TRIP_VOLUME_UL"] == pytest.approx(150.0)
+
+
 def test_stamp_moves_each_well_to_the_same_well():
     deck = Deck()
     stamp(deck.wt, source=deck.barcodes, dest=deck.samples, volume_ul=1.0,

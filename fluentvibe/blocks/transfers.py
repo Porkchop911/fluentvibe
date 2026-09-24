@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Iterable
 
 from .common import (
@@ -42,18 +43,24 @@ def stamp(
     (``<NAME>_VOLUME_UL`` …) unless ``variables=False``.
     """
     require_positive("stamp", volume_ul=volume_ul)
+    # More than the tips hold: equal trips with the same tips.
+    capacity = float(getattr(tips, "capacity_ul", 0.0) or 0.0)
+    trips = math.ceil(float(volume_ul) / capacity) if capacity else 1
     if mix_cycles and mix_volume_ul is None:
         mix_volume_ul = 0.8 * float(volume_ul)
+    if mix_cycles and capacity:
+        mix_volume_ul = min(float(mix_volume_ul), 0.9 * capacity)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="stamp")
-    volume = v.ref("VOLUME_UL", float(volume_ul))
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
     head.pick_up(tips)
-    head.aspirate(source, volume, liquid_class=lc)
-    head.dispense(dest, volume, liquid_class=lc)
+    for _ in range(trips):
+        head.aspirate(source, volume, liquid_class=lc)
+        head.dispense(dest, volume, liquid_class=lc)
     if mix_cycles:
         head.mix(dest, v.ref("MIX_UL", float(mix_volume_ul)), cycles=mix_cycles,
                  liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class))

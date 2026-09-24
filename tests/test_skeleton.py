@@ -84,6 +84,28 @@ def test_other_step_types_map_to_blocks_and_waits(profile, tmp_path):
     assert result.get("spec_conformance").status == "pass"
 
 
+def test_reagentless_multi_cleanup_spec_gets_assumed_reagents_and_chains(profile, tmp_path):
+    """Corpus drafts name no reagents; three chained clean-ups must still run."""
+    raw = {
+        "title": "Three clean-ups",
+        "sample_count": 24,
+        "reagents": [],
+        "steps": [
+            {"id": f"s{i}", "op": "bead_cleanup", "text": "Clean-up", "location": "deck",
+             "volume_ul": 36.0 if i == 1 else None, "elute_ul": 30.0}
+            for i in (1, 2, 3)
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert source.count("spri_cleanup(\n") == 3
+    assert "ASSUMED (lab stock)" in source and "bead_volume_ul=36" in source
+    assert source.count("MCA200Box(") <= 5  # shared reagent box, carried eluate tips
+    path = tmp_path / "s.py"
+    path.write_text(source, encoding="utf-8")
+    result = score_protocol(source, filename=str(path), spec=_spec(raw))
+    assert result.failed == 0, [i for i in result.invariants if i.status == "fail"]
+
+
 def test_graph_offers_the_skeleton_as_the_current_draft(profile, tmp_path):
     from fluentvibe.authoring.graph import _declare_workflow_from_spec
     from fluentvibe.authoring.lab_scope import LabScope

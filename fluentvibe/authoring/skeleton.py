@@ -181,6 +181,11 @@ class _Writer:
         return var
 
 
+# What a skeleton 96-well plate can hold during a clean-up (sample + beads).
+_PLATE_WORKING_UL = 180.0
+# What one pool well receives at most (12 columns into one).
+_POOL_WELL_UL = 300.0
+
 _ROLE_FOR_SIM = {"sample": "analyte", "bead_carrier": "bead_carrier", "eluent": "eluent"}
 
 
@@ -216,11 +221,24 @@ def _is_cleanup(step: SpecStep, spec: BenchSpec) -> bool:
 def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     """Python source for a first, runnable protocol draft."""
     w = _Writer(deck=deck)
-    n = spec.sample_count
+    # MCA96 blocks address the whole plate: every channel draws reagent.
+    n = 96
     lc = deck.liquid_class
     reagent_vars: dict[str, str] = {}
     trough_vars: dict[str, str] = {}
     fill_estimate: dict[str, float] = {}
+    assumed_reagents: dict[str, SpecReagent] = {}
+    shared_tips: dict[str, str] = {}
+    # Eluate tips of the last clean-up and the plate they served: on the MCA96
+    # channel i only ever meets sample i, so they can be the next clean-up's
+    # sample tips on that plate.
+    carry: tuple[str, str] | None = None
+
+    def assumed(role: str, reagent_id: str, name: str, liquid_type: str | None = None) -> SpecReagent:
+        if reagent_id not in assumed_reagents:
+            assumed_reagents[reagent_id] = SpecReagent(reagent_id, name, role=role, liquid_type=liquid_type)
+            w.notes.append(f"the spec names no {role} reagent; {name} is ASSUMED (lab stock)")
+        return assumed_reagents[reagent_id]
 
     def reagent_var(reagent: SpecReagent) -> str:
         if reagent.id not in reagent_vars:
@@ -242,7 +260,13 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     # Samples.
     sample_reagent = _pick(spec, "sample")
     samples = w.plate("Samples")
-    sample_ul = float(spec.sample_volume_ul or 10.0)
+    if spec.sample_volume_ul:
+        sample_ul = float(spec.sample_volume_ul)
+    else:
+        # Enough for the largest volume a step takes from the samples.
+        drawn = [s.volume_ul for s in spec.steps if s.op == "transfer" and s.volume_ul]
+        sample_ul = round(max([10.0, *(v * 1.1 for v in drawn)]), 1)
+        w.notes.append(f"no sample volume in the spec; {sample_ul:g} ul per well is ASSUMED")
     current = samples
     if sample_reagent is not None:
         w.fills.append(f"    {samples}.fill_all({reagent_var(sample_reagent)}, {sample_ul:g})")
@@ -306,28 +330,38 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             lab = _is_lab_stock(beads) if beads else True
             wash = _pick(spec, "wash")
             eluent = _pick(spec, "eluent", lab_stock=lab) or _pick(spec, "eluent")
+            bead_given = step.ratio is None and step.volume_ul is not None
+            if bead_given and float(step.volume_ul) + well_ul > _PLATE_WORKING_UL:
+                w.notes.append(f"{step.id}: {step.volume_ul:g} ul beads do not fit a 96-well plate with "
+                               f"{well_ul:g} ul sample (deep-well protocol?); a 1.8x ratio is ASSUMED")
+                bead_given = False
             ratio = step.ratio if step.ratio is not None else 1.8
             washes = step.washes if step.washes is not None else 2
             wash_ul = step.wash_ul if step.wash_ul is not None and step.wash_ul <= 190 else 150.0
             elute_ul = step.elute_ul if step.elute_ul is not None else 15.0
-            assumed = [k for k, v in (("ratio", step.ratio), ("washes", step.washes),
-                                       ("elute_ul", step.elute_ul)) if v is None]
-            if beads is None or wash is None or eluent is None:
-                w.notes.append(f"{step.id}: bead clean-up needs bead, wash and eluent reagents in the spec")
-                continue
-            bead_ul = ratio * well_ul
+            guessed = [k for k, v in (("ratio", step.ratio if not bead_given else step.volume_ul),
+                                      ("washes", step.washes), ("elute_ul", step.elute_ul)) if v is None]
+            beads = beads or assumed("bead_carrier", "ASSUMED_BEADS", "SPRI beads")
+            wash = wash or assumed("wash", "ASSUMED_ETOH", "80% ethanol", "ethanol")
+            eluent = eluent or assumed("eluent", "ASSUMED_EB", "Elution buffer")
+            bead_ul = float(step.volume_ul) if bead_given else ratio * well_ul
+            bead_arg = f"bead_volume_ul={bead_ul:g}" if bead_given else f"bead_ratio={ratio:g}"
             bead_trough = trough_for(beads, bead_ul * n * 1.15 + 500)
             wash_trough = trough_for(wash, wash_ul * washes * n * 1.1 + 2000)
             eluent_trough = trough_for(eluent, elute_ul * n * 1.15 + 500)
             eluate = w.plate(f"{step.id}_Eluate")
-            tips = [w.mca_box(f"{step.id}_{kind}Tips") for kind in ("Reagent", "Sample", "Eluate")]
-            comment = f"  # ASSUMED: {', '.join(assumed)}" if assumed else ""
+            if "reagent" not in shared_tips:
+                shared_tips["reagent"] = w.mca_box("ReagentTips")
+            sample_tips = carry[0] if carry and carry[1] == current else w.mca_box(f"{step.id}_SampleTips")
+            tips = [shared_tips["reagent"], sample_tips, w.mca_box(f"{step.id}_EluateTips")]
+            carry = (tips[2], eluate)
+            comment = f"  # ASSUMED: {', '.join(guessed)}" if guessed else ""
             w.body.append(
                 f"    spri_cleanup(\n"
                 f"        wt, sample_plate={current}, magnet={magnet}, bead_source={bead_trough},\n"
                 f"        wash_source={wash_trough}, elution_source={eluent_trough}, waste={waste},\n"
                 f"        eluate_plate={eluate}, reagent_tips={tips[0]}, sample_tips={tips[1]},\n"
-                f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, bead_ratio={ratio:g},\n"
+                f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, {bead_arg},\n"
                 f"        elution_volume_ul={elute_ul:g}, wash_volume_ul={wash_ul:g}, wash_count={washes},\n"
                 f"        liquid_class={json.dumps(lc)}, name={label},\n"
                 f"    ){comment}"
@@ -339,6 +373,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             pool = w.plate(f"{step.id}_Pool")
             tips = w.fca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else min(10.0, well_ul)
+            if vol > well_ul - 1.0:
+                w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; pooling {well_ul - 1.0:g} ul")
+                vol = well_ul - 1.0
+            if vol * 12 > _POOL_WELL_UL:
+                w.notes.append(f"{step.id}: 12 x {vol:g} ul overflows one pool well; pooling {_POOL_WELL_UL / 12:g} ul per column")
+                vol = _POOL_WELL_UL / 12
             w.body.append(
                 f"    pool_columns(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
                 f"                 liquid_class={json.dumps(lc)}, dest_column=1, name={label})"
@@ -375,6 +415,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             dest = w.plate(f"{step.id}_Plate")
             tips = w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else well_ul
+            if vol > well_ul - 1.0:
+                w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; moving {well_ul - 1.0:g} ul")
+                vol = well_ul - 1.0
             w.body.append(
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
                 f"          liquid_class={json.dumps(lc)}, name={label})"
@@ -396,7 +439,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
 
     # Fills for troughs, now that every step's need is known.
     for reagent_id, trough in trough_vars.items():
-        reagent = next(r for r in spec.reagents if r.id == reagent_id)
+        reagent = next((r for r in spec.reagents if r.id == reagent_id), None) or assumed_reagents[reagent_id]
         supply = _supply(reagent)
         need = fill_estimate[reagent_id]
         amount = min(need, supply) if supply is not None else need
