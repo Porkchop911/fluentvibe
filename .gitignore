@@ -51,3 +51,6 @@ current_worktable.py
 # Review/build artifacts
 htmlcov/
 .coverage
+
+# Isolated environment for the Opentrons simulator (corpus conversion)
+.venv-opentrons/
