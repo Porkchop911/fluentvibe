@@ -24,10 +24,18 @@ def roles_in(labware) -> set[str]:
 
 def require_role(labware, role: str, *, param: str, block: str) -> None:
     if role not in roles_in(labware):
+        present = sorted({
+            f"{layer.reagent.name!r} (role={getattr(layer.reagent, 'role', 'plain')!r})"
+            for well in getattr(labware, "wells", {}).values()
+            for layer in well.layers
+        })
+        contents = ", ".join(present) if present else "nothing"
         raise BlockError(
             f"{block}: {param} ({getattr(labware, 'label', labware)!r}) must be filled "
-            f"with a Reagent(..., role={role!r}) before calling {block}(); "
-            f"e.g. {param}.fill_all(Reagent('...', role={role!r}), <volume>)."
+            f"with a Reagent(..., role={role!r}) before calling {block}(), but it holds "
+            f"{contents}. Fill it with the {role} reagent itself, e.g. "
+            f"`{param}.fill_all(Reagent('<name>', role={role!r}), <volume>)`; the block "
+            f"handles marker/matrix bookkeeping, so no separate plain 'matrix' fill is needed."
         )
 
 
