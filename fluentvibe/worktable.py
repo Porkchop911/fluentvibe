@@ -1073,9 +1073,10 @@ class Worktable:
             raise TroughPlacementError(
                 f"The MCA96 pipettes in slim trough {labware.label!r} ({labware.catalog_name!r}); "
                 f"MCA heads and slim troughs are incompatible (FluentControl: 'out of range'). "
-                f"Use an SBS reservoir on a plate nest, e.g. "
-                f"`wt.place(Trough100mL({labware.label!r}, catalog='MCA96 200ml'), 'Nest61mm_Pos', <n>)` "
-                f"or catalog='60ml SBS MCA96'."
+                f"Use an SBS reservoir: `wt.place(Trough100mL({labware.label!r}, catalog='60ml SBS MCA96'), "
+                f"'Nest61mm_Pos', <free n>)` (up to ~55 ml), or for large volumes "
+                f"`Trough25mL(..., catalog='300ml SBS')` on a Nest7mm_Pos the MCA reaches. "
+                f"('MCA96 200ml' does not fit a 61 mm nest.)"
             )
 
     def _validate_empty_tip_liquid_classes(self) -> None:
