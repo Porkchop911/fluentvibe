@@ -100,22 +100,167 @@ def _commented_defaults(source: str) -> dict:
     return defaults
 
 
-def _simulate(protocol: Path):
+# OT-2 protocols on older API levels simulate against a virtual robot; without
+# attached modules every load_module() fails. Attach one of each generation.
+_OT2_MODULES = {
+    "magdeck": ["magneticModuleV1", "magneticModuleV2"],
+    "tempdeck": ["temperatureModuleV1", "temperatureModuleV2", "temperatureModuleV2"],
+    "thermocycler": ["thermocyclerModuleV1", "thermocyclerModuleV2"],
+    "heatershaker": ["heaterShakerModuleV1"],
+}
+
+
+def _ot2_hardware_file(out_dir: Path) -> Path:
+    path = out_dir / "_ot2_simulator_setup.json"
+    if not path.exists():
+        setup = {
+            "machine": "OT-2 Standard",
+            "strict_attached_instruments": False,
+            "attached_modules": {
+                kind: [{"serial_number": f"fv-{model}-{i}", "model": model, "calls": []}
+                       for i, model in enumerate(models)]
+                for kind, models in _OT2_MODULES.items()
+            },
+        }
+        path.write_text(json.dumps(setup), encoding="utf-8")
+    return path
+
+
+def _usage_defaults(source: str) -> dict:
+    """Guess each get_values() parameter from how the protocol uses it.
+
+    Looks, in order of confidence, for comparisons with a literal
+    (``if mode == "x"``), dict-literal lookups (``table[mode]``), and the call
+    it is passed to (``load_labware`` / ``load_module`` / ``load_instrument``),
+    then string methods called on it.
+    """
+    import ast
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                and getattr(node.value.func, "id", None) == "get_values"):
+            target = node.targets[0]
+            elts = target.elts if isinstance(target, (ast.List, ast.Tuple)) else [target]
+            names += [e.id for e in elts if isinstance(e, ast.Name)]
+    dict_literals = {
+        t.id: node.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+        for t in node.targets if isinstance(t, ast.Name) and isinstance(node.value, ast.Dict)
+    }
+    guesses: dict[str, tuple[int, object]] = {}
+
+    def offer(name: str, rank: int, value) -> None:
+        if name in names and (name not in guesses or rank < guesses[name][0]):
+            guesses[name] = (rank, value)
+
+    def const(node):
+        return node.value if isinstance(node, ast.Constant) else None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare) and isinstance(node.left, ast.Name):
+            for comp in node.comparators:
+                if const(comp) is not None:
+                    offer(node.left.id, 0, const(comp))
+                elif isinstance(comp, (ast.List, ast.Tuple, ast.Set)) and comp.elts and const(comp.elts[0]) is not None:
+                    offer(node.left.id, 0, const(comp.elts[0]))
+        elif isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Name) and isinstance(node.value, ast.Name):
+            table = dict_literals.get(node.value.id)
+            if table is not None and table.keys and const(table.keys[0]) is not None:
+                offer(node.slice.id, 0, const(table.keys[0]))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            method = node.func.attr
+            first = node.args[:1] + [kw.value for kw in node.keywords
+                                     if kw.arg in ("load_name", "module_name", "instrument_name")]
+            if method == "load_instrument":
+                mount_args = node.args[1:2] + [kw.value for kw in node.keywords if kw.arg == "mount"]
+                for arg in mount_args:
+                    if isinstance(arg, ast.Name):
+                        offer(arg.id, 1, "left" if "20" in arg.id or "left" in arg.id.lower() else "right")
+            for arg in first:
+                if not isinstance(arg, ast.Name):
+                    continue
+                low = arg.id.lower()
+                if method == "load_labware":
+                    value = ("opentrons_96_tiprack_300ul" if "tip" in low else
+                             "nest_12_reservoir_15ml" if "res" in low or "trough" in low else
+                             "opentrons_24_tuberack_nest_1.5ml_snapcap" if "tube" in low or "rack" in low else
+                             "nest_96_wellplate_100ul_pcr_full_skirt")
+                    offer(arg.id, 1, value)
+                elif method == "load_module":
+                    offer(arg.id, 1, "magnetic module gen2" if "mag" in low else
+                          "thermocycler" if "tc" in low or "thermo" in low else "temperature module gen2")
+                elif method == "load_instrument":
+                    offer(arg.id, 1, "p20_single_gen2" if "20" in low else
+                          "p300_multi_gen2" if "multi" in low or "m300" in low or "8" in low else "p300_single_gen2")
+            if isinstance(node.func.value, ast.Name) and method in ("split", "lower", "upper", "strip", "startswith", "endswith"):
+                offer(node.func.value.id, 2, "A1")
+    return {name: value for name, (rank, value) in guesses.items()}
+
+
+def _simulate(protocol: Path, hardware_dir: Path | None = None):
     from opentrons import simulate
 
     source = protocol.read_text(encoding="utf-8")
     if "get_values(" in source and "def get_values" not in source:
-        stub = _GET_VALUES_STUB.format(defaults=_commented_defaults(source))
+        stub = _GET_VALUES_STUB.format(defaults={**_usage_defaults(source), **_commented_defaults(source)})
         # Keep `from __future__` imports first.
         lines = source.splitlines(keepends=True)
         head = [line for line in lines if line.startswith("from __future__")]
         rest = [line for line in lines if not line.startswith("from __future__")]
         source = "".join(head) + stub + "".join(rest)
-    with contextlib.redirect_stdout(io.StringIO()) as captured:
-        runlog, _bundle = simulate.simulate(
-            io.StringIO(source), file_name=protocol.name, custom_labware_paths=[str(protocol.parent)],
-        )
-    return runlog, captured.getvalue()
+    labware_dirs = [str(protocol.parent)] + [str(d) for d in protocol.parent.rglob("*") if d.is_dir()]
+    stub_dir = (hardware_dir / "_stub_labware") if hardware_dir is not None else None
+    if stub_dir is not None and stub_dir.exists():
+        labware_dirs.append(str(stub_dir))
+    flex = bool(re.search(r"robotType['\"]?\s*[:=]\s*['\"](Flex|OT-3)", source))
+    hardware = None if flex or hardware_dir is None else str(_ot2_hardware_file(hardware_dir))
+    # Missing custom labware: write a stand-in (a standard definition of the
+    # same kind, renamed) and retry. Geometry is approximate; volumes and wells
+    # are what the spec needs.
+    for _attempt in range(6):
+        try:
+            with contextlib.redirect_stdout(io.StringIO()) as captured:
+                runlog, _bundle = simulate.simulate(
+                    io.StringIO(source), file_name=protocol.name, custom_labware_paths=labware_dirs,
+                    hardware_simulator_file_path=hardware,
+                )
+            return runlog, captured.getvalue()
+        except Exception as exc:  # noqa: BLE001
+            missing = (re.search(r'labware\s+definition for\s+"([^"]+)"', str(exc))
+                       or re.search(r'Labware \\?"([^"\\]+)\\?" not found', str(exc)))
+            if missing is None or stub_dir is None:
+                raise
+            _write_stub_labware(missing.group(1), stub_dir)
+            if str(stub_dir) not in labware_dirs:
+                labware_dirs.append(str(stub_dir))
+    raise RuntimeError("too many missing labware definitions")
+
+
+_STUB_TEMPLATES = (
+    (r"tip", "opentrons_96_tiprack_300ul"),
+    (r"reservoir|trough", "nest_12_reservoir_15ml"),
+    (r"tube|rack|vial|falcon|eppendorf_1", "opentrons_24_tuberack_nest_1.5ml_snapcap"),
+    (r"384", "corning_384_wellplate_112ul_flat"),
+    (r"deep|dwp|2ml|2000", "nest_96_wellplate_2ml_deep"),
+)
+
+
+def _write_stub_labware(load_name: str, stub_dir: Path) -> None:
+    from opentrons.protocols.labware import get_labware_definition
+
+    template = next((t for pattern, t in _STUB_TEMPLATES if re.search(pattern, load_name, re.I)),
+                    "nest_96_wellplate_100ul_pcr_full_skirt")
+    definition = json.loads(json.dumps(get_labware_definition(template)))
+    definition["parameters"]["loadName"] = load_name
+    definition["namespace"] = "custom_beta"
+    definition["version"] = 1
+    definition["metadata"]["displayName"] = f"{load_name} (stand-in: {template})"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    (stub_dir / f"{load_name}.json").write_text(json.dumps(definition), encoding="utf-8")
 
 
 def _flatten(entries, out=None):
@@ -293,11 +438,11 @@ def _merge(steps: list[dict]) -> list[dict]:
     return merged
 
 
-def convert(protocol_dir: Path) -> dict:
+def convert(protocol_dir: Path, hardware_dir: Path | None = None) -> dict:
     protocol = next((p for p in sorted(protocol_dir.glob("*.py"))), None)
     if protocol is None:
         raise FileNotFoundError(f"no .py protocol in {protocol_dir}")
-    runlog, printed = _simulate(protocol)
+    runlog, printed = _simulate(protocol, hardware_dir)
     events = [_event(e) for e in _flatten(runlog)]
     # Classify sections, then re-classify runs of adjacent sections that are the
     # same kind of step (e.g. a clean-up split over beads / wash / elution
@@ -342,7 +487,7 @@ def convert(protocol_dir: Path) -> dict:
 def _convert_one(directory: Path, out: Path) -> dict:
     row = {"protocol": directory.name}
     try:
-        spec = convert(directory)
+        spec = convert(directory, out)
         (out / f"{directory.name}.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
         row.update(status="ok", steps=len(spec["steps"]),
                    ops=dict(Counter(s["op"] for s in spec["steps"])))
