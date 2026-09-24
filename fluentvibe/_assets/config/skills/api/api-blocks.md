@@ -75,6 +75,10 @@ the deck (external thermal cycler, centrifuge, Qubit, ice, flow cell). Never
 model such a step as `wt.wait(...)`. If the deck has an integrated ODTC, drive it
 with `wt.odtc_*` instead.
 
+`labware`/`handoff` are optional: `offdeck_step(wt, "Replace the tip racks.", name="Operator: s3")`
+just pauses the run with the instruction (tip-rack swaps, reagent top-ups).
+`wt.add_comment(...)` + `wt.wait(...)` does **not** stop for the operator.
+
 ### `thermal_step` — thermal program (ODTC or operator)
 
 `thermal_step(wt, plate, "30 C 2 min, 80 C 2 min", odtc_position=("Inheco_Pos", 4), method_name="TAG", name="Tagmentation")`
