@@ -1490,7 +1490,9 @@ def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistr
     # before planning even when it was withheld (and the skills header lists it).
     plan_tools = [
         t for t in lc_tools or ()
-        if getattr(t, "name", None) in {"declare_protocol_workflow", "lookup_api"}
+        # ask_user belongs here too: open protocol numbers are settled before
+        # the plan (skill core-clarify-open-parameters), not invented in it.
+        if getattr(t, "name", None) in {"declare_protocol_workflow", "lookup_api", "ask_user"}
     ]
     if not any(getattr(t, "name", None) == "declare_protocol_workflow" for t in plan_tools):
         return None
