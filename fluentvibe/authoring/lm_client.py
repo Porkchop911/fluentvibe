@@ -101,6 +101,16 @@ def _reasoning_only(message: dict[str, Any]) -> bool:
     return any(str(value).strip() for value in fields.values())
 
 
+def _temperature_from_env() -> float:
+    raw = os.environ.get("FLUENTVIBE_LM_TEMPERATURE")
+    if raw is None or not raw.strip():
+        return 0.2
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError("FLUENTVIBE_LM_TEMPERATURE must be a number") from exc
+
+
 def _loop_guard_enabled() -> bool:
     return os.environ.get("FLUENTVIBE_LM_LOOP_GUARD", "1").strip().lower() not in {"0", "false", "no", "off"}
 
@@ -157,7 +167,7 @@ class LMStudioChatClient:
         api_key: str | None = None,
         reasoning_effort: str | None = None,
         max_tokens: int | None = None,
-        temperature: float = 0.2,
+        temperature: float | None = None,
         top_p: float | None = None,
         top_k: int | None = None,
         min_p: float | None = None,
@@ -182,7 +192,8 @@ class LMStudioChatClient:
         # a small default when it is omitted, which cuts long reasoning turns
         # off before any tool call. FLUENTVIBE_LM_MAX_TOKENS sets it globally.
         self.max_tokens = max_tokens if max_tokens is not None else _max_tokens_from_env()
-        self.temperature = float(temperature)
+        # FLUENTVIBE_LM_TEMPERATURE sets it globally (benchmarks); 0.2 otherwise.
+        self.temperature = float(temperature) if temperature is not None else _temperature_from_env()
         self.top_p = None if top_p is None else float(top_p)
         self.top_k = None if top_k is None else int(top_k)
         self.min_p = None if min_p is None else float(min_p)
