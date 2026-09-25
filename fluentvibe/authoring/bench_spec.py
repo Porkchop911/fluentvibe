@@ -395,7 +395,9 @@ def spec_context_block(spec: BenchSpec) -> str:
     return (
         f"{SPEC_MARKER} (authoritative; implement these steps in this order; "
         "deck steps on the deck, off_deck/manual steps as operator pauses; never "
-        "load more of a kit reagent than its supply_ul × supply_count):\n"
+        "load more of a kit reagent than its supply_ul × supply_count). Spec roles are not "
+        "Python roles: in code use Reagent(role='analyte') for sample/product, 'bead_carrier' "
+        "and 'eluent' as is, and the default role for wash/reagent/per_sample:\n"
         + spec.to_json()
     )
 

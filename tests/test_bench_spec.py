@@ -142,3 +142,14 @@ def test_extraction_reports_missing_or_bad_tool_call():
     assert spec is None and "did not call" in problems[0].message
     spec, problems, _ = extract_bench_spec(_FakeClient("{not json"), DOC)
     assert spec is None and "not valid JSON" in problems[0].message
+
+
+def test_spec_role_names_are_accepted_by_reagent_and_explained():
+    from fluentvibe import Reagent
+    from fluentvibe.authoring.bench_spec import spec_context_block
+
+    assert Reagent("80% ethanol", role="wash").role == "plain"
+    assert Reagent("DNA", role="sample").role == "analyte"
+    assert Reagent("Master mix", role="reagent").role == "plain"
+    spec, _ = validate_bench_spec(_spec())
+    assert "Spec roles are not Python roles" in spec_context_block(spec)
