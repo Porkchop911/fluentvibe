@@ -19,6 +19,7 @@ from fluentvibe import (  # noqa: E402
     MCA100Box,
     Plate96,
     Reagent,
+    SimulationError,
     Worktable,
 )
 from fluentvibe.reagent import ROLES  # noqa: E402
@@ -143,3 +144,31 @@ def test_off_magnet_aspirate_entrains_beads_silently():
     # The bound analyte was carried into the tip along with the liquid.
     tip_reagents = {l.reagent.name for l in asp.mca_tips[0].layers}
     assert "DNA" in tip_reagents
+
+
+def test_bulk_analyte_liquid_fails_at_binding_mix_with_actionable_details():
+    wt, src, plate, _eb, _final, _rack, tips = _rig()
+    dna_solution = Reagent("BiotinDNA", role="analyte")
+    beads = Reagent("Streptavidin beads", role="bead_carrier")
+    plate.fill_all(dna_solution, 40.0)
+    src.fill_all(beads, 40.0)
+
+    head = wt.mca96
+    head.mount_adapter()
+    head.pick_up(tips)
+    head.aspirate(src, 40.0, liquid_class="Water Free Single")
+    head.dispense(plate, 40.0, liquid_class="Water Free Single")
+    head.mix(plate, 30.0, liquid_class="Water Free Single")
+
+    with pytest.raises(SimulationError, match="small captured-species marker"):
+        wt.simulate()
+
+    failure = wt.simulation_report.failure
+    assert failure is not None
+    assert failure.category == "analyte_representation"
+    assert failure.details["analyte_volume_ul"] == pytest.approx(40.0)
+    assert failure.details["free_volume_ul"] == pytest.approx(80.0)
+    assert failure.repair_options == [
+        "split_bulk_carrier_from_analyte_marker",
+        "use_ensure_analyte_marker",
+    ]

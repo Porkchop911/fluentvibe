@@ -38,7 +38,7 @@ def test_model_trace_recorder_writes_jsonl(tmp_path: Path) -> None:
     assert "## Request" in readable.read_text(encoding="utf-8")
 
 
-def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -> None:
+def test_lmstudio_stream_trace_records_raw_lines_when_opted_in(monkeypatch, tmp_path: Path) -> None:
     class FakeHeaders:
         def get(self, name, default=None):
             return "text/event-stream" if name == "Content-Type" else default
@@ -91,7 +91,12 @@ def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -
 
     monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=None: FakeResponse())
     recorder = ModelTraceRecorder(
-        ModelTraceConfig(enabled=True, output_dir=tmp_path, session_id="lmstudio")
+        ModelTraceConfig(
+            enabled=True,
+            raw_stream=True,
+            output_dir=tmp_path,
+            session_id="lmstudio",
+        )
     )
     recorder.start_turn(1)
     recorder.begin_request(model="test-model")
@@ -108,7 +113,7 @@ def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -
     events = _events(next((tmp_path / "model_traces").glob("*.jsonl")))
     assert "request_payload" in [event["event"] for event in events]
     assert [event["raw_line"] for event in events if event["event"] == "raw_stream_line"]
-    assert [event["chunk"] for event in events if event["event"] == "raw_stream_chunk"]
+    assert not [event for event in events if event["event"] == "raw_stream_chunk"]
     final = [event for event in events if event["event"] == "response_final"][-1]
     assert final["finish_reason"] == "tool_calls"
     assert final["reasoning_fields"]["reasoning_content"] == "visible reasoning"
@@ -117,6 +122,13 @@ def test_lmstudio_stream_trace_records_raw_chunks(monkeypatch, tmp_path: Path) -
     assert "Provider-Exposed Reasoning" in rendered
     assert "visible reasoning" in rendered
     assert "`lookup_workspace`" in rendered
+
+
+def test_raw_stream_trace_is_off_by_default(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("FLUENTVIBE_MODEL_TRACE_RAW_STREAM", raising=False)
+    config = ModelTraceConfig.from_env(output_dir=tmp_path, enabled=True)
+    assert config.enabled is True
+    assert config.raw_stream is False
 
 
 def test_reasoning_fields_round_trip_through_langchain_adapter() -> None:
@@ -148,6 +160,53 @@ def test_lmstudio_reasoning_effort_is_opt_in(monkeypatch) -> None:
     client = LMStudioChatClient(reasoning_effort="medium")
     client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])
     assert seen["reasoning_effort"] == "medium"
+
+
+def test_lmstudio_sampling_controls_are_explicit_and_opt_in(monkeypatch) -> None:
+    seen: dict = {}
+    body = b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+    monkeypatch.setattr("urllib.request.urlopen", _json_response(body, seen))
+
+    LMStudioChatClient(
+        temperature=1.0,
+        top_p=0.95,
+        top_k=20,
+        min_p=0.0,
+        presence_penalty=0.0,
+        repetition_penalty=1.0,
+    ).complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    assert seen["temperature"] == 1.0
+    assert seen["top_p"] == 0.95
+    assert seen["top_k"] == 20
+    assert seen["min_p"] == 0.0
+    assert seen["presence_penalty"] == 0.0
+    assert seen["repetition_penalty"] == 1.0
+
+    seen.clear()
+    LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert seen["temperature"] == 0.2
+    assert "top_p" not in seen
+    assert "top_k" not in seen
+    assert "min_p" not in seen
+    assert "presence_penalty" not in seen
+    assert "repetition_penalty" not in seen
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"temperature": -0.1}, "temperature"),
+        ({"top_p": 1.1}, "top_p"),
+        ({"top_k": -1}, "top_k"),
+        ({"min_p": -0.1}, "min_p"),
+        ({"presence_penalty": 2.1}, "presence_penalty"),
+        ({"repetition_penalty": 0}, "repetition_penalty"),
+    ],
+)
+def test_lmstudio_rejects_invalid_sampling_controls(kwargs, message) -> None:
+    with pytest.raises(ValueError, match=message):
+        LMStudioChatClient(**kwargs)
 
 
 def test_lmstudio_request_timeout_is_bounded_and_traced(monkeypatch, tmp_path: Path) -> None:

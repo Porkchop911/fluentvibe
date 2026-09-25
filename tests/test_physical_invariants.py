@@ -82,6 +82,16 @@ def test_insufficient_volume_raises() -> None:
     with pytest.raises(InsufficientVolumeError):
         wt.simulate()
 
+    failure = wt.simulation_report.failure
+    assert failure is not None
+    assert failure.details["current_volume_ul"] == pytest.approx(5.0)
+    assert failure.details["available_before_ul"] == pytest.approx(5.0)
+    # The failed full-plate operation is atomic: A1 and its tip were not
+    # partially drained before the shortage was reported.
+    source_state = wt.simulation_report.state_summary["labware_volumes"]["Source"]
+    assert source_state["min_volume_ul"] == pytest.approx(5.0)
+    assert wt.simulation_report.state_summary["tip_state"]["mca96"]["total_volume_ul"] == pytest.approx(0.0)
+
 
 def test_dispense_more_than_tip_holds_raises() -> None:
     wt, src, dst, tips = _build_minimal_worktable()
@@ -123,3 +133,10 @@ def test_magnet_never_withholds_liquid_and_retains_beads() -> None:
     a1 = wt.snapshots[-1].labware("Plate").well("A1")
     assert a1.volume_ul == pytest.approx(0.0)          # liquid all drawn
     assert a1.bead_phase is not None and a1.bead_phase.present  # beads retained
+
+
+def test_tip_capacity_error_explains_the_arithmetic_through_the_preflight():
+    from fluentvibe.simulator.walk import _tip_capacity_message
+
+    message = _tip_capacity_message(150.0, 100.0, 200.0)
+    assert "tips already held 150.00 uL" in message and "at most 50.00 uL" in message

@@ -123,7 +123,7 @@ def test_liha_get_tips_prefers_sbs_fca_tip_variant(tmp_path: Path) -> None:
     assert "TOOLNAME:FCA, 1000ul SBS" in xml
 
 
-def test_liha_mix_validation_and_empty_tips() -> None:
+def test_liha_mix_validation_and_empty_tips(monkeypatch) -> None:
     """LiHa mix validates volume availability; empty tips deposits into wells."""
     wt = Worktable(name="liha mix+empty")
     wt.group("Setup")
@@ -151,6 +151,23 @@ def test_liha_mix_validation_and_empty_tips() -> None:
     # Mix is validation_only; aspirate/dispense/empty are fully simulated
     assert report.validation_only_steps >= 1  # mix step
     assert report.fully_simulated_steps >= 3  # get_tips, aspirate, empty_tips
+    assert any(
+        "mixes only the first eight wells" in warning
+        and "well_offset=(col-1)*8" in warning
+        for warning in report.warnings
+    )
+
+    # Strict authoring promotes the ambiguity to a repairable failure. Bypass
+    # workspace/catalog preflight here so this unit test remains portable.
+    from fluentvibe.simulator.walk import Simulator
+
+    monkeypatch.setattr(Simulator, "_preflight_strict", lambda self: None)
+    with pytest.raises(SimulationError, match="mixes only the first eight wells"):
+        wt.simulate(strict=True)
+    failure = wt.simulation_report.failure
+    assert failure is not None
+    assert failure.category == "well_coverage"
+    assert failure.details["populated_unaddressed_well_count"] == 88
 
 
 def test_liha_errors_missing_tip_and_invalid_well_index() -> None:

@@ -7,9 +7,20 @@ from dataclasses import dataclass
 from typing import Any
 
 _CATEGORY_ALLOWED_TOOLS: dict[str, set[str]] = {
-    "source_volume_short": {"plan_protocol_resources", "simulate_python_draft", "compile_and_simulate"},
-    "well_overflow": {"plan_protocol_resources", "simulate_python_draft", "compile_and_simulate"},
+    "source_volume_short": {
+        "edit_draft", "plan_protocol_resources", "simulate_python_draft", "compile_and_simulate",
+    },
+    "well_overflow": {
+        "edit_draft", "plan_protocol_resources", "simulate_python_draft", "compile_and_simulate",
+    },
+    "analyte_representation": {
+        "edit_draft", "simulate_python_draft", "compile_and_simulate",
+    },
+    "well_coverage": {
+        "edit_draft", "simulate_python_draft", "compile_and_simulate",
+    },
     "tip_capacity": {
+        "edit_draft",
         "plan_protocol_resources",
         "search_labware",
         "get_labware",
@@ -29,15 +40,32 @@ class RepairLockState:
     last_tool_failure_key: str | None = None
     repeated_tool_failure_count: int = 0
 
-    def block_reason(self, tool_name: str) -> str | None:
+    def block_reason(
+        self,
+        tool_name: str,
+        *,
+        available_tools: set[str] | frozenset[str] | None = None,
+    ) -> str | None:
         if self.category is None:
             return None
         allowed = _CATEGORY_ALLOWED_TOOLS.get(self.category)
         if allowed is None or tool_name in allowed:
             return None
+        choices = allowed
+        if available_tools is not None:
+            choices = allowed.intersection(available_tools)
+        if "edit_draft" in choices:
+            recommendation = (
+                "edit_draft with the exact failing text as `old` and its replacement as `new`"
+            )
+            remaining = sorted(choices - {"edit_draft"})
+            if remaining:
+                recommendation += "; then use " + ", ".join(remaining)
+        else:
+            recommendation = ", ".join(sorted(choices)) or "one of the currently offered repair tools"
         return (
             f"Repair lock is active for `{self.category}`. Do not call `{tool_name}` now. "
-            f"Use one of: {', '.join(sorted(allowed))}."
+            f"Use one of: {recommendation}."
         )
 
     def observe_tool_result(self, tool_name: str, arguments: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:

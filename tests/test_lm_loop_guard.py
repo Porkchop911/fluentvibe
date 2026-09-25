@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 
 from fluentvibe.authoring import lm_client
-from fluentvibe.authoring.lm_client import LMRepetitionError, LMStudioChatClient, _RepetitionWatch
+from fluentvibe.authoring.lm_client import (
+    LMReasoningOnlyError,
+    LMRepetitionError,
+    LMStudioChatClient,
+    _RepetitionWatch,
+)
 
 
 def test_watch_spots_a_looping_line_but_not_varied_reasoning():
@@ -64,6 +69,27 @@ def test_a_reply_that_ends_inside_its_reasoning_is_retried(monkeypatch):
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
     message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=[{"type": "function"}])
     assert message["tool_calls"] and "ended inside your reasoning" in calls[1][-1]["content"]
+
+
+def test_a_second_reasoning_only_reply_fails_immediately(monkeypatch):
+    calls = []
+
+    def fake_once(self, *, messages, tools):
+        calls.append(messages)
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [],
+            "reasoning_fields": {"reasoning_content": "Still thinking about the same repair."},
+        }
+
+    monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
+    with pytest.raises(LMReasoningOnlyError, match="twice"):
+        _client().complete(
+            messages=[{"role": "user", "content": "go"}],
+            tools=[{"type": "function", "function": {"name": "edit_draft"}}],
+        )
+    assert len(calls) == 2
 
 
 def test_no_tool_fields_are_sent_without_tools(monkeypatch):

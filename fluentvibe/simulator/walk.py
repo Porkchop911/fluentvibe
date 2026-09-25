@@ -665,11 +665,15 @@ class Simulator:
         # Auto-parallel over wells: aspirate `volume` from each addressed well.
         wells = self._iter_aspirate_wells(target)
         if len(wells) == 1 and target.category == "trough":
-            for tip in self._mca_tips:
-                self._aspirate_one(target, wells[0], volume, tip)
+            pairs = [(wells[0], tip) for tip in self._mca_tips]
+            self._preflight_aspirates(target, pairs, volume)
+            for well, tip in pairs:
+                self._aspirate_one(target, well, volume, tip)
             return
         wells = self._select_mca_columns(wells, getattr(step, "columns", None))
-        for tip, well in zip(self._mca_tips, wells):
+        pairs = [(well, tip) for tip, well in zip(self._mca_tips, wells)]
+        self._preflight_aspirates(target, pairs, volume)
+        for well, tip in pairs:
             self._aspirate_one(target, well, volume, tip)
 
     def _on_dispense(self, step: DispenseStep) -> None:
@@ -765,8 +769,12 @@ class Simulator:
         target = self._require_labware(step.labware_name, "LiHa aspirate")
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
         wells = self._liha_wells(target, step.well_offset, step.selection)
+        pairs: list[tuple[object, Tip]] = []
         for ch, well in wells:
             tip = self._require_liha_tip(ch, "Aspirate")
+            pairs.append((well, tip))
+        self._preflight_aspirates(target, pairs, volume)
+        for well, tip in pairs:
             self._aspirate_one(target, well, volume, tip)
 
     def _on_liha_dispense(self, step: LihaDispenseStep) -> None:
@@ -783,6 +791,30 @@ class Simulator:
         cycles = int(step.cycles) if not isinstance(step.cycles, str) else int(self._resolve_sim_number(step.cycles))
         if cycles <= 0:
             return
+        if len(target.wells) > 8 and step.well_offset is None and not step.selection:
+            coverage_message = (
+                f"LiHa/FCA mix on {target.label!r} has no well_offset or selection and therefore "
+                "mixes only the first eight wells (plate column 1). Use a 12-column loop with "
+                "well_offset=(col-1)*8, use an MCA full-plate mix, or set well_offset=0 "
+                "explicitly when column 1 alone is intentional."
+            )
+            unaddressed = list(target.wells.values())[8:]
+            populated_unaddressed = [
+                well.address for well in unaddressed
+                if well.volume_ul > 1e-9
+                or (well.bead_phase is not None and well.bead_phase.present)
+            ]
+            if self._strict and populated_unaddressed:
+                raise _with_sim_details(
+                    SimulationError(coverage_message),
+                    category="well_coverage",
+                    operation="Mix",
+                    labware=target.label,
+                    addressed_wells=[well.address for well in list(target.wells.values())[:8]],
+                    populated_unaddressed_wells=populated_unaddressed[:12],
+                    populated_unaddressed_well_count=len(populated_unaddressed),
+                )
+            self._warn(coverage_message)
         for ch, well in self._liha_wells(target, step.well_offset, step.selection):
             tip = self._require_liha_tip(ch, "Mix")
             self._validate_mix_one(target, well, volume, tip)
@@ -1009,13 +1041,6 @@ class Simulator:
         remaining = volume_ul
         if remaining <= 0:
             return
-        # Tally the request before drawing — counts intent, not delivery,
-        # so the running total is meaningful even on failed aspirates.
-        self._source_requested_ul[labware.label] = (
-            self._source_requested_ul.get(labware.label, 0.0) + volume_ul
-        )
-        well_map = self._source_requested_by_well_ul.setdefault(labware.label, {})
-        well_map[well.address] = well_map.get(well.address, 0.0) + volume_ul
         self._contamination.on_contact(
             labware, well, tip, operation="Aspirate",
             step=self._current_step, step_index=self._step_index,
@@ -1065,25 +1090,77 @@ class Simulator:
                 requested_volume_ul=volume_ul,
                 short_by_ul=remaining,
                 current_volume_ul=well.volume_ul,
+                available_before_ul=free_before,
             )
         if tip.volume_ul > tip.capacity_ul + 1e-6:
             before = tip.volume_ul - volume_ul
             raise _with_sim_details(
-                OverdrawError(
-                    f"Aspirate: tip would hold {tip.volume_ul:.2f} uL but capacity is "
-                    f"{tip.capacity_ul:.2f} uL "
-                    + (f"(the tips already held {before:.2f} uL - not yet dispensed or emptied - plus "
-                       f"this {volume_ul:.2f} uL aspirate). Dispense or empty the tips first, or "
-                       if before > 1e-6 else f"(this aspirate alone is {volume_ul:.2f} uL). ")
-                    + f"aspirate at most {max(tip.capacity_ul - max(before, 0.0), 0.0):.2f} uL per trip "
-                    f"(split larger volumes into trips) or use larger tips."
-                ),
+                OverdrawError(_tip_capacity_message(before, volume_ul, tip.capacity_ul)),
                 category="tip_capacity",
                 operation="Aspirate",
                 requested_volume_ul=volume_ul,
                 current_volume_ul=tip.volume_ul,
                 capacity_ul=tip.capacity_ul,
             )
+
+    def _preflight_aspirates(
+        self,
+        labware: Labware,
+        pairs: list[tuple[object, Tip]],
+        volume_ul: float,
+    ) -> None:
+        """Validate a parallel aspirate without mutating wells or tips.
+
+        MCA and LiHa operations may address many wells, or many channels may
+        share one trough well. Validate the entire operation first so a late
+        shortage cannot leave a half-drained plate. Request tallies still
+        reflect attempted channels, including the channel that failed.
+        """
+        if volume_ul <= 0:
+            return
+        available_by_well: dict[int, float] = {}
+        volume_by_tip: dict[int, float] = {}
+        for well, tip in pairs:
+            self._source_requested_ul[labware.label] = (
+                self._source_requested_ul.get(labware.label, 0.0) + volume_ul
+            )
+            well_map = self._source_requested_by_well_ul.setdefault(labware.label, {})
+            well_map[well.address] = well_map.get(well.address, 0.0) + volume_ul
+
+            well_key = id(well)
+            available = available_by_well.get(well_key, well.volume_ul)
+            if volume_ul > available + 1e-6:
+                short_by = volume_ul - available
+                raise _with_sim_details(
+                    InsufficientVolumeError(
+                        f"Aspirate: well {well.address!r} on {labware.label!r} short by "
+                        f"{short_by:.2f} uL"
+                    ),
+                    category="source_volume_short",
+                    operation="Aspirate",
+                    labware=labware.label,
+                    well=well.address,
+                    requested_volume_ul=volume_ul,
+                    short_by_ul=short_by,
+                    current_volume_ul=well.volume_ul,
+                    available_before_ul=available,
+                )
+            available_by_well[well_key] = available - volume_ul
+
+            tip_key = id(tip)
+            tip_before = volume_by_tip.get(tip_key, tip.volume_ul)
+            projected = tip_before + volume_ul
+            if projected > tip.capacity_ul + 1e-6:
+                raise _with_sim_details(
+                    OverdrawError(_tip_capacity_message(tip_before, volume_ul, tip.capacity_ul)),
+                    category="tip_capacity",
+                    operation="Aspirate",
+                    requested_volume_ul=volume_ul,
+                    current_volume_ul=tip_before,
+                    projected_volume_ul=projected,
+                    capacity_ul=tip.capacity_ul,
+                )
+            volume_by_tip[tip_key] = projected
 
     def _dispense_one(self, labware: Labware, well, volume_ul: float, tip: Tip) -> None:
         if volume_ul <= 0:
@@ -1209,6 +1286,28 @@ class Simulator:
         bp.suspended = True
         free_analyte = [layer for layer in well.layers if layer.reagent.is_analyte]
         if free_analyte:
+            analyte_ul = sum(layer.volume_ul for layer in free_analyte)
+            free_ul = well.volume_ul
+            marker_limit_ul = min(2.0, free_ul * 0.1)
+            if analyte_ul > marker_limit_ul + 1e-6:
+                names = sorted({layer.reagent.name for layer in free_analyte})
+                raise _with_sim_details(
+                    SimulationError(
+                        f"Mix: well {well.address!r} on {labware.label!r} represents "
+                        f"{analyte_ul:.2f} uL of {free_ul:.2f} uL as role='analyte'. "
+                        "The analyte role is a small captured-species marker, not the bulk carrier "
+                        "liquid. Represent the carrier as a plain '<analyte> matrix' reagent and "
+                        f"keep the analyte marker at or below {marker_limit_ul:.2f} uL."
+                    ),
+                    category="analyte_representation",
+                    operation="Mix",
+                    labware=labware.label,
+                    well=well.address,
+                    analyte_reagents=names,
+                    analyte_volume_ul=analyte_ul,
+                    free_volume_ul=free_ul,
+                    max_marker_volume_ul=marker_limit_ul,
+                )
             for layer in free_analyte:
                 bp.bound.append(Layer(reagent=layer.reagent, volume_ul=layer.volume_ul))
                 well.layers.remove(layer)
@@ -1652,11 +1751,29 @@ def _failure_operation(command_id: str | None) -> str | None:
     return command_id
 
 
+def _tip_capacity_message(before_ul: float, volume_ul: float, capacity_ul: float) -> str:
+    """Why an aspirate overfills the tips, with the largest volume that fits.
+
+    Models otherwise re-derive the arithmetic (one looped on it for 32K tokens).
+    """
+    projected = before_ul + volume_ul
+    head = f"Aspirate: tip would hold {projected:.2f} uL but capacity is {capacity_ul:.2f} uL "
+    if before_ul > 1e-6:
+        why = (f"(the tips already held {before_ul:.2f} uL - not yet dispensed or emptied - plus "
+               f"this {volume_ul:.2f} uL aspirate). Dispense or empty the tips first, or ")
+    else:
+        why = f"(this aspirate alone is {volume_ul:.2f} uL). "
+    fits = max(capacity_ul - max(before_ul, 0.0), 0.0)
+    return head + why + f"aspirate at most {fits:.2f} uL per trip (split larger volumes into trips) or use larger tips."
+
+
 def _repair_options(category: str) -> list[str]:
     options = {
         "tip_capacity": ["use_higher_capacity_tips", "split_operation_volume"],
         "tip_box_empty": ["use_fresh_tip_box", "keep_mounted_tips", "return_tips_before_reuse"],
         "source_volume_short": ["increase_source_initial_volume", "reduce_requested_transfer_volume"],
+        "analyte_representation": ["split_bulk_carrier_from_analyte_marker", "use_ensure_analyte_marker"],
+        "well_coverage": ["loop_over_plate_columns", "use_mca_full_plate_mix", "set_explicit_well_offset"],
         "well_overflow": ["aspirate_before_dispensing_more", "split_cycles", "use_higher_capacity_labware"],
         "slot_occupied": ["choose_another_valid_slot", "stack_intentionally_with_gripper_move"],
     }
