@@ -1091,9 +1091,12 @@ class Simulator:
         if tip.volume_ul + 1e-9 < volume_ul:
             raise OverdrawError(
                 f"Dispense: tip holds {tip.volume_ul:.2f} µL but {volume_ul:.2f} µL requested"
-                + (" - the tips are empty: every aspirate must be followed by at most the same total "
-                   "dispensed, and a mix does not load the tips. Aspirate before this dispense (or "
-                   "remove it if the liquid was already delivered)."
+                + (" - the tips are empty"
+                   + (f" (emptied by the {self._last_tip_emptying})" if getattr(self, "_last_tip_emptying", None) else "")
+                   + ": every aspirate must be followed by at most the same total dispensed, and a mix "
+                   f"does not load the tips. Aspirate the liquid you mean to add to {labware.label!r} "
+                   "(e.g. from its reservoir) right before this dispense, or remove the dispense if the "
+                   "liquid was already delivered."
                    if tip.volume_ul <= 1e-6 else
                    f" - dispense at most what the tips hold ({tip.volume_ul:.2f} µL), or aspirate more first.")
             )
@@ -1127,6 +1130,8 @@ class Simulator:
             if layer.volume_ul <= 1e-9:
                 del tip.layers[0]
         self._contamination.after_release(tip)
+        if tip.volume_ul <= 1e-9:
+            self._last_tip_emptying = f"dispense into {labware.label!r}"
         # A bead-carrier reagent landing in a well establishes (or refreshes)
         # the well's bead phase. Suspended unless the plate is magnetized.
         if deposited_bead_carrier:
