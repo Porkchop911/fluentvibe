@@ -162,14 +162,20 @@ def fluentcontrol_available() -> tuple[bool, str]:
         return False, "FluentControl checks need Windows"
     if not DEFAULT_SHELL_XSCR.exists():
         return False, f"shell script not found: {DEFAULT_SHELL_XSCR}"
-    try:
-        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SystemSW.exe", "/NH"],
-                             capture_output=True, text=True, timeout=15).stdout
-    except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"could not list processes: {exc}"
-    if "SystemSW.exe" not in out:
-        return False, "FluentControl (SystemSW.exe) is not running"
-    return True, ""
+    # tasklist can come back empty under memory pressure; look twice before
+    # concluding FluentControl is gone (a false "not running" skipped a check).
+    reason = "FluentControl (SystemSW.exe) is not running"
+    for attempt in range(3):
+        try:
+            out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq SystemSW.exe", "/NH"],
+                                 capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError) as exc:
+            reason = f"could not list processes: {exc}"
+            out = ""
+        if "SystemSW.exe" in out:
+            return True, ""
+        time.sleep(2.0 * (attempt + 1))
+    return False, reason
 
 
 @contextmanager
