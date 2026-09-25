@@ -51,6 +51,17 @@ the 27B ran with a fallback skill set all night; fixed in 46ab900.
 The proposals vary run to run (Flash: 20 µL beads in one run, 50 µL in
 another) — another reason a person should answer the question.
 
+### Retry-fix check (06:57–08:58)
+
+Three more 27B document-only runs with the fix: **3/3 succeeded** (31, 47,
+43 min), all opened in FluentControl with 0 InfoPad errors. In **every one**
+the reply stopped mid-reasoning once and the retry recovered it — without
+the fix all three would have failed. The stop is frequent on this 27B server
+(2–4-bit KV cache); the retry makes it harmless.
+
+**Totals for the night:** 11 of 13 runs succeeded; since the retry fix,
+3 of 3.
+
 ## The questions the models asked
 
 Both asked **one** question listing every open number with a proposal tied to
@@ -108,7 +119,7 @@ limit, not per run).
 
 ## Next
 
-1. More repeats with the retry fix in place, to confirm the 27B failure mode is gone.
+1. Done: the retry fix held in 3/3 27B runs. Consider an f16/int8 KV-cache 27B configuration to remove the mid-reasoning stops at the source.
 2. The answered protocols are slow on the instrument (column-wise FCA);
    a `wash_beads` block (MCA from an SBS reservoir, magnet round trips) would
    make these bead-prep stages one call.
