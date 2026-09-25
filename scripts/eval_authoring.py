@@ -287,6 +287,7 @@ def main() -> int:
             # Generation settings read from the environment by the LM client.
             "max_tokens": os.environ.get("FLUENTVIBE_LM_MAX_TOKENS"),
             "reasoning_effort": os.environ.get("FLUENTVIBE_LM_REASONING_EFFORT"),
+            "temperature": os.environ.get("FLUENTVIBE_LM_TEMPERATURE") or "0.2 (default)",
             "git_commit": _git_commit(),
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }

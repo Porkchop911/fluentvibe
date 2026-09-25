@@ -107,3 +107,10 @@ def test_no_tool_fields_are_sent_without_tools(monkeypatch):
     with pytest.raises(Exception):
         _client()._complete_once(messages=[{"role": "user", "content": "pick skills"}], tools=[])
     assert "tools" not in sent and "tool_choice" not in sent
+
+
+def test_temperature_comes_from_the_environment_when_not_given(monkeypatch):
+    monkeypatch.setenv("FLUENTVIBE_LM_TEMPERATURE", "1.0")
+    assert _client().temperature == 1.0
+    monkeypatch.delenv("FLUENTVIBE_LM_TEMPERATURE")
+    assert _client().temperature == 0.2
