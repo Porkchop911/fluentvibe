@@ -1,0 +1,207 @@
+<title>Dynabeads Night Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+  :root {
+    --paper: #f5f7f6;
+    --panel: #ffffff;
+    --ink: #1b2629;
+    --muted: #5a696d;
+    --line: #d8e0de;
+    --accent: #0e6f69;
+    --accent-soft: #dcefec;
+    --pass: #2d7a4c;
+    --pass-soft: #e0f1e6;
+    --fail: #b2432f;
+    --fail-soft: #f7e3de;
+    --warn: #9a6a12;
+    --warn-soft: #f6ecd6;
+    --bar-bg: #e7ecea;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121a1c; --panel: #1a2427; --ink: #e4ecea; --muted: #9aaaa9; --line: #2c3a3d;
+      --accent: #4fbfb5; --accent-soft: #173634; --pass: #6cc58f; --pass-soft: #183426;
+      --fail: #ec8a74; --fail-soft: #3a211b; --warn: #e2b458; --warn-soft: #362b14; --bar-bg: #243033;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121a1c; --panel: #1a2427; --ink: #e4ecea; --muted: #9aaaa9; --line: #2c3a3d;
+    --accent: #4fbfb5; --accent-soft: #173634; --pass: #6cc58f; --pass-soft: #183426;
+    --fail: #ec8a74; --fail-soft: #3a211b; --warn: #e2b458; --warn-soft: #362b14; --bar-bg: #243033;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--paper); color: var(--ink);
+    font: 15px/1.6 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding-inline: 16px; padding-block: 32px 64px;
+  }
+  main { max-width: 860px; margin: 0 auto; display: grid; gap: 40px; }
+  h1, h2 { font-family: "Newsreader", Georgia, "Times New Roman", serif; text-wrap: balance; margin: 0; line-height: 1.2; }
+  h1 { font-size: 2.1rem; font-weight: 600; }
+  h2 { font-size: 1.45rem; font-weight: 500; }
+  p { margin: 0; max-width: 68ch; }
+  .eyebrow { font: 500 12px/1.4 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  header { display: grid; gap: 12px; }
+  .lede { color: var(--muted); }
+  section { display: grid; gap: 16px; }
+  .verdict {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px;
+    display: grid; gap: 10px;
+  }
+  .verdict strong { color: var(--pass); }
+  code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .88em; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font: 500 11.5px/1.4 "IBM Plex Mono", monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip { display: inline-block; padding: 1px 9px; border-radius: 999px; font: 500 12px/1.6 "IBM Plex Mono", monospace; white-space: nowrap; }
+  .chip.pass { background: var(--pass-soft); color: var(--pass); }
+  .chip.fail { background: var(--fail-soft); color: var(--fail); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  tr.phase-before td:first-child { box-shadow: inset 3px 0 0 var(--fail); }
+  tr.phase-after td:first-child { box-shadow: inset 3px 0 0 var(--pass); }
+  .bars { display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .bar-row { display: grid; grid-template-columns: minmax(150px, 230px) 1fr; gap: 12px; align-items: center; font-size: 13.5px; }
+  .bar-track { background: var(--bar-bg); border-radius: 4px; height: 20px; position: relative; }
+  .bar { height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px;
+         font: 500 12px "IBM Plex Mono", monospace; color: #fff; font-variant-numeric: tabular-nums; }
+  .bar.pass { background: var(--pass); }
+  .bar.fail { background: var(--fail); }
+  .bar .ask { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px 0 0 4px; opacity: .85; }
+  .axis { display: grid; grid-template-columns: minmax(150px, 230px) 1fr; gap: 12px; font: 11px "IBM Plex Mono", monospace; color: var(--muted); }
+  .axis .ticks { display: flex; justify-content: space-between; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .qa { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .qa article { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+  .qa h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .qa ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
+  .qa .slip { background: var(--warn-soft); color: var(--warn); border-radius: 6px; padding: 6px 10px; font-size: 13.5px; }
+  ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 72ch; }
+  .question { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 16px 18px; display: grid; gap: 6px; }
+  .question b { color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; }
+  @media (max-width: 520px) {
+    h1 { font-size: 1.7rem; }
+    .bar-row, .axis { grid-template-columns: 1fr; gap: 4px; }
+    .axis .spacer { display: none; }
+  }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">fluentvibe · overnight · 25 Sep 2026</span>
+    <h1>Both local models now automate the Dynabeads guide</h1>
+    <p class="lede">Benchmark on the <em>Dynabeads™ Streptavidin for Target Enrichment</em> user guide (MAN0028561): a tube-scale protocol with no plate-scale volumes. Qwen3.8-Flash and Qwen3.8-27B, local, FluentControl InfoPad check on every run.</p>
+  </header>
+
+  <div class="verdict">
+    <p><strong>4 of 4 runs on tonight's code succeeded</strong>, both models, with and without the clarification step. Each took 23–32 minutes, and FluentControl opened each protocol with <b>zero InfoPad errors</b>.</p>
+    <p>Before tonight's fixes both models failed on this document, after 54 and 60 minutes, with no protocol. The deciding change: when numbers are open, the model <b>asks once with deck-feasible proposals</b> instead of inventing volumes and fighting the simulator.</p>
+  </div>
+
+  <section aria-labelledby="runs">
+    <h2 id="runs">Runs</h2>
+    <div class="bars" role="img" aria-label="Wall time per run in minutes, up to 60">
+      <div class="bar-row"><span>Flash · document only · before</span><div class="bar-track"><div class="bar fail" style="width:90%">54 fail</div></div></div>
+      <div class="bar-row"><span>27B · document only · before</span><div class="bar-track"><div class="bar fail" style="width:100%">60 fail</div></div></div>
+      <div class="bar-row"><span>Flash · asks → answered</span><div class="bar-track"><div class="bar pass" style="width:48.3%"><span class="ask" style="width:20.7%"></span>29</div></div></div>
+      <div class="bar-row"><span>27B · asks → answered</span><div class="bar-track"><div class="bar pass" style="width:53.3%"><span class="ask" style="width:5.3%"></span>32</div></div></div>
+      <div class="bar-row"><span>Flash · document only · rerun</span><div class="bar-track"><div class="bar pass" style="width:38.3%">23</div></div></div>
+      <div class="bar-row"><span>27B · document only · rerun</span><div class="bar-track"><div class="bar pass" style="width:43.3%">26</div></div></div>
+      <div class="axis"><span class="spacer"></span><div class="ticks"><span>0</span><span>15</span><span>30</span><span>45</span><span>60 min</span></div></div>
+      <div class="legend"><span><i style="background:var(--fail)"></i>failed</span><span><i style="background:var(--pass)"></i>succeeded</span><span><i style="background:var(--accent)"></i>time to ask the question</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Run</th><th>Model</th><th>Result</th><th>Wall time</th><th>FluentControl</th></tr></thead>
+        <tbody>
+          <tr class="phase-before"><td>Document only, first try</td><td>Flash</td><td><span class="chip fail">failed</span> reasoning loop, no protocol</td><td class="num">54 min</td><td>–</td></tr>
+          <tr class="phase-before"><td>Document only, first try</td><td>27B</td><td><span class="chip fail">failed</span> 60-min cap, no passing draft</td><td class="num">60 min</td><td>–</td></tr>
+          <tr class="phase-before"><td>Neutral prompt (could not ask yet)</td><td>27B</td><td><span class="chip pass">success</span> 7 turns</td><td class="num">42 min</td><td>0 errors after the <code>B&amp;W</code> fix</td></tr>
+          <tr class="phase-after"><td>Asks → answered → authors</td><td>Flash</td><td><span class="chip pass">success</span> first draft passed</td><td class="num">6 + 23 min</td><td><span class="chip pass">0 errors</span></td></tr>
+          <tr class="phase-after"><td>Asks → answered → authors</td><td>27B</td><td><span class="chip pass">success</span> 1 draft + 5 small fixes</td><td class="num">1.7 + 30.5 min</td><td><span class="chip pass">0 errors</span></td></tr>
+          <tr class="phase-after"><td>Document only, rerun</td><td>Flash</td><td><span class="chip pass">success</span> first draft passed</td><td class="num">23 min</td><td><span class="chip pass">0 errors</span></td></tr>
+          <tr class="phase-after"><td>Document only, rerun</td><td>27B</td><td><span class="chip pass">success</span> 1 draft + 2 fixes</td><td class="num">26 min</td><td><span class="chip pass">0 errors</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede"><b>n = 1 per condition.</b> Flash failed and then succeeded on the same document-only prompt: these runs show what is possible, not a success rate. Rubric scores (0.50–0.78) are omitted; most rubric checks assume a clean-up with elution, so protocols were checked by hand against the guide.</p>
+  </section>
+
+  <section aria-labelledby="questions">
+    <h2 id="questions">The questions they asked</h2>
+    <p>Each model asked one question, listing every open number with a proposal tied to a step of the guide, and checked deck feasibility itself.</p>
+    <div class="qa">
+      <article>
+        <h3><span>Qwen3.8-27B</span><span class="mono">100 s</span></h3>
+        <ol>
+          <li>Bead slurry 20 µL/well (0.2 mg)</li>
+          <li>Washes 3 × 20 µL 1X B&amp;W (literal "equal volume")</li>
+          <li>2X B&amp;W 40 µL — "twice the original volume"</li>
+          <li>Probe 40 µL, 15 min at room temperature</li>
+        </ol>
+      </article>
+      <article>
+        <h3><span>Qwen3.8-Flash</span><span class="mono">6 min</span></h3>
+        <ol>
+          <li>Bead slurry 20 µL/well (0.2 mg ≈ 100 pmol oligo)</li>
+          <li>Washes 3 × 60 µL ("practical minimum for 96-channel aspiration")</li>
+          <li>Probe 40 µL; coated washes 2 × 80 µL; final 40 µL</li>
+          <li>Totals: 36 mL 1X B&amp;W fits one 60 mL SBS reservoir; 43 mL waste</li>
+        </ol>
+        <p class="slip">Slip: 20 µL 2X B&amp;W instead of 40, and "→ 80 µL total" does not add up. The benchmark auto-answered "yes"; a person answering would catch it. That is what the question step is for.</p>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="quality">
+    <h2 id="quality">Protocol quality</h2>
+    <ul class="plain">
+      <li>Every step of sections 1–2 is present in both answered protocols: resuspend, beads, 3 washes on the magnet, 2X B&amp;W, probe, the 15-minute incubation (operator step, since the deck has no rotator), coated washes, final resuspension.</li>
+      <li><b>Flash</b> follows the reagent rule: beads, 2X B&amp;W and probe by the FCA from slim troughs, 1X B&amp;W by the MCA from an SBS reservoir.</li>
+      <li><b>27B</b> stamps beads and probe with the MCA from 96-well source plates, which someone would have to fill by hand first. The labware skill now says so (<span class="mono">afec83a</span>).</li>
+      <li>Both are valid but slow on the instrument: much column-by-column FCA work. Supernatant tips are reused across columns, which is acceptable because before hybridization every well holds the same beads and probe.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="fixed">
+    <h2 id="fixed">Fixed overnight</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Commit</th><th>Fix</th><th>Found by</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">5581ac2</td><td><b>Loop guard</b>: a reply repeating one line is stopped and the turn retried once with "act now"</td><td>Flash looped on <code>Let me try: 222 = 80 + 60 + 82?</code> for 32K tokens</td></tr>
+          <tr><td class="mono">5581ac2 bcfa904 5dc3a37</td><td>Simulator errors explain the arithmetic: what the tips hold, what the command adds, what emptied them</td><td>both models re-deriving "tip would hold 222 µL"</td></tr>
+          <tr><td class="mono">cde8a84</td><td>Skill <code>core-clarify-open-parameters</code> and <code>ask_user</code> in skills mode</td><td>your request</td></tr>
+          <tr><td class="mono">fb793e7</td><td><code>ask_user</code> offered in the planning turn</td><td>27B could not ask, invented volumes</td></tr>
+          <tr><td class="mono">6d74a64</td><td>"Choose values yourself" requests continue with the model's proposals</td><td>Flash asked anyway</td></tr>
+          <tr><td class="mono">0e72d9d</td><td><b>Renderer escapes free text</b> (<code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>)</td><td>"1X B&amp;W" in a comment: FluentControl could not load the file</td></tr>
+          <tr><td class="mono">afec83a</td><td>Skill: no invented pre-filled reagent plates</td><td>27B stamping beads from a plate</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="next">
+    <h2 id="next">For you</h2>
+    <div class="question">
+      <b>One question</b>
+      <p>Flash placed the bead trough on <code>WS_100ml_1</code> position 1, which the deck profile lists as the FCA thru-deck waste chute. FluentControl did not flag it and neither does fluentvibe. Is that position usable for a trough? If not, I will add a compile check against workspace-occupied positions.</p>
+    </div>
+    <ul class="plain">
+      <li>Repeat each condition 3–5 times for success rates, about 30 min per run and model.</li>
+      <li>A <code>wash_beads</code> block (MCA from an SBS reservoir with magnet round trips) would make bead-prep stages one call and much faster on the instrument.</li>
+      <li>A rubric profile for bead preparation without elution, so scores mean something for protocols like this one.</li>
+    </ul>
+  </section>
+
+  <footer>All fixes committed on <span class="mono">review/authoring-quality-experiment</span>; 799 tests pass. Markdown version: <span class="mono">docs/overnight-2026-09-25.md</span>. The 27B server (vLLM, port 18020) is still running.</footer>
+</main>
