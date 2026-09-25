@@ -75,6 +75,7 @@ def resolve_profile(profile_dir: Path | str) -> ResolvedProfile:
     reach = _read_reach(root, guid)
     if reach:
         deck_rules = {**deck_rules, "reach": reach}
+    deck_rules = {**deck_rules, **_read_site_rules(root, guid)}
     decks = sorted(root.glob("deck-*.md"))
 
     return ResolvedProfile(
@@ -119,6 +120,25 @@ def _read_reach(root: Path, guid: str) -> dict[str, Any]:
     if str((data.get("workspace") or {}).get("guid") or "") != guid:
         return {}  # measured on another workspace: stale
     return data
+
+
+def _read_site_rules(root: Path, guid: str) -> dict[str, Any]:
+    """Hand-written deck rules (``site_rules.json``) that a profile re-save must not drop.
+
+    Facts the workspace file does not carry, e.g. ``position_catalogs``: the
+    trough site next to the FCA waste chute takes only slim 25 ml / 100 ml
+    troughs. Keyed by workspace GUID like ``reach.json``.
+    """
+    path = root / "site_rules.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if str((data.get("workspace") or {}).get("guid") or "") != guid:
+        return {}
+    return {k: v for k, v in data.items() if k != "workspace"}
 
 
 def _read_generation_profile(
