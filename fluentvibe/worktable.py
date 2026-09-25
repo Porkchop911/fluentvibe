@@ -848,7 +848,13 @@ class Worktable:
             try:
                 from .authoring.profile import profile_from_env
                 profile = profile_from_env()
-                if profile is not None and profile.workspace_name == name and profile.deck_rules:
+                # Match by GUID too: renaming a workspace in FluentControl must
+                # not silently drop its deck rules.
+                same_workspace = profile is not None and (
+                    profile.workspace_name == name
+                    or bool(self.workspace_guid and profile.workspace_guid == self.workspace_guid)
+                )
+                if same_workspace and profile.deck_rules:
                     rules = dict(profile.deck_rules)
             except Exception:
                 rules = {}
