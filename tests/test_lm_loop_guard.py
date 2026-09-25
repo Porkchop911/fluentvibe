@@ -49,3 +49,35 @@ def test_the_guard_can_be_turned_off(monkeypatch):
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
     with pytest.raises(lm_client.LMOutputLimitError):
         _client().complete(messages=[], tools=[])
+
+
+def test_a_reply_that_ends_inside_its_reasoning_is_retried(monkeypatch):
+    calls = []
+
+    def fake_once(self, *, messages, tools):
+        calls.append(messages)
+        if len(calls) == 1:
+            return {"role": "assistant", "content": None, "tool_calls": [],
+                    "reasoning_fields": {"reasoning_content": "def build_worktable(): ..."}}
+        return {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "simulate_python_draft"}}]}
+
+    monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
+    message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=[{"type": "function"}])
+    assert message["tool_calls"] and "ended inside your reasoning" in calls[1][-1]["content"]
+
+
+def test_no_tool_fields_are_sent_without_tools(monkeypatch):
+    sent = {}
+
+    class Stop(Exception):
+        pass
+
+    def fake_urlopen(req, timeout):
+        import json
+        sent.update(json.loads(req.data))
+        raise Stop
+
+    monkeypatch.setattr(lm_client.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(Exception):
+        _client()._complete_once(messages=[{"role": "user", "content": "pick skills"}], tools=[])
+    assert "tools" not in sent and "tool_choice" not in sent

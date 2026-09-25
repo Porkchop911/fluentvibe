@@ -84,6 +84,14 @@ class LMRepetitionError(LMStudioError):
         self.line = line
 
 
+def _reasoning_only(message: dict[str, Any]) -> bool:
+    """A reply with reasoning but neither text nor a tool call."""
+    if message.get("tool_calls") or (message.get("content") or "").strip():
+        return False
+    fields = message.get("reasoning_fields") or {}
+    return any(str(value).strip() for value in fields.values())
+
+
 def _loop_guard_enabled() -> bool:
     return os.environ.get("FLUENTVIBE_LM_LOOP_GUARD", "1").strip().lower() not in {"0", "false", "no", "off"}
 
@@ -189,7 +197,19 @@ class LMStudioChatClient:
         output tokens before any tool call, is retried once with a short
         instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
         try:
-            return self._complete_once(messages=messages, tools=tools)
+            message = self._complete_once(messages=messages, tools=tools)
+            if tools and _loop_guard_enabled() and _reasoning_only(message):
+                # The turn ended inside the reasoning (seen with vLLM: the draft
+                # written in reasoning, finish_reason=stop, no text, no tool call).
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record("turn_retry", reason="reasoning_only")
+                print("[lm] reply ended inside its reasoning without a tool call -- retrying the turn once",
+                      flush=True)
+                return self._complete_once(messages=[*messages, {"role": "user", "content": (
+                    "Your previous reply ended inside your reasoning, without a tool call or any text. "
+                    "Make the tool call now (e.g. simulate_python_draft with the full source)."
+                )}], tools=tools)
+            return message
         except (LMRepetitionError, LMOutputLimitError) as exc:
             if not _loop_guard_enabled():
                 raise
@@ -219,12 +239,12 @@ class LMStudioChatClient:
         payload = {
             "model": self.model,
             "messages": messages,
-            "tools": request_tools,
-            "tool_choice": "auto",
-            "parallel_tool_calls": True,
             "stream": True,
             "temperature": 0.2,
         }
+        if request_tools:
+            # vLLM rejects `tools: []` (HTTP 400); omit tool fields when none are offered.
+            payload.update({"tools": request_tools, "tool_choice": "auto", "parallel_tool_calls": True})
         # Qwen-compatible servers accept this optional control. Omit it by
         # default so other OpenAI-compatible providers retain their behavior.
         if self.reasoning_effort is not None:
