@@ -1922,10 +1922,19 @@ class Renderer:
         return xml
 
     def _fill_template(self, template: str, params: dict) -> str:
-        """Fill in {{placeholder}} values in template."""
+        """Fill in {{placeholder}} values in template.
+
+        Plain-text values are XML-escaped here (``1X B&W`` in a comment,
+        prompt or label made FluentControl reject the whole file as not
+        well-formed). Escaping is idempotent — existing entities stay — and
+        values that are XML fragments (starting with ``<``) are left as built.
+        """
         result = template
         for key, value in params.items():
-            result = result.replace(f"{{{{{key}}}}}", str(value))
+            text = str(value)
+            if not text.lstrip().startswith("<"):
+                text = _escape_text(text)
+            result = result.replace(f"{{{{{key}}}}}", text)
         return result
 
     # ------------------------------------------------------------------
@@ -2322,3 +2331,11 @@ class Renderer:
         rewrite_checksum_in_place(output_path)
 
         return output_path
+
+
+_BARE_AMPERSAND = re.compile(r"&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)")
+
+
+def _escape_text(text: str) -> str:
+    """XML-escape free text; existing entities are kept (idempotent)."""
+    return _BARE_AMPERSAND.sub("&amp;", text).replace("<", "&lt;").replace(">", "&gt;")

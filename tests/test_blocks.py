@@ -507,3 +507,18 @@ def test_cleanup_adds_beads_and_elution_buffer_with_the_fca_from_slim_troughs(tm
     assert liha_sources == {"SlimBeads", "SlimEB"} and "Ethanol" in mca_sources
     assert not mca_sources & liha_sources
     deck.wt.compile(tmp_path / "fca.xscr")  # the MCA never touches a slim trough
+
+
+def test_free_text_with_xml_characters_renders_well_formed(tmp_path):
+    """'1X B&W' in a comment or prompt made FluentControl reject the whole script."""
+    import xml.etree.ElementTree as ET
+
+    from fluentvibe.compiler import render_protocol
+
+    deck = Deck()
+    deck.wt.group("Wash in 1X B&W <3x>")
+    deck.wt.add_comment("Beads resuspended in 1X B&W; ready if A < B & C > D.")
+    deck.wt.user_prompt("Check the B&W buffer (&amp; already escaped stays single).")
+    xml = render_protocol(deck.wt.to_protocol())
+    ET.fromstring(xml.encode("utf-8"))  # well-formed
+    assert "1X B&amp;W" in xml and "&amp;amp;" not in xml
