@@ -77,6 +77,21 @@ def test_repeated_real_draft_failure_still_gives_up():
     assert stop is not None and stop["category"] == "strict_simulation"
 
 
+def test_repair_lock_allows_edits_and_only_recommends_offered_tools():
+    lock = RepairLockState(category="source_volume_short")
+
+    assert lock.block_reason("edit_draft", available_tools={"edit_draft"}) is None
+    reason = lock.block_reason(
+        "lookup_api",
+        available_tools={"edit_draft", "simulate_python_draft", "lookup_api"},
+    )
+
+    assert reason is not None
+    assert "edit_draft" in reason
+    assert "simulate_python_draft" in reason
+    assert "plan_protocol_resources" not in reason
+
+
 # ── catalog name suggestion ───────────────────────────────────────────
 
 @pytest.mark.skipif(not index_exists(), reason="requires FC catalog index")

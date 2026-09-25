@@ -168,6 +168,10 @@ def build_authoring_graph(
         helpers=helpers,
         concurrency=concurrency or AuthoringConcurrencyConfig(),
         trace_recorder=trace_recorder,
+        offered_tool_names=frozenset(
+            name for name in (getattr(tool, "name", None) for tool in lc_tools)
+            if isinstance(name, str) and name
+        ),
     )
 
     builder = StateGraph(GraphState)
@@ -273,6 +277,7 @@ class _Nodes:
     helpers: Any
     concurrency: AuthoringConcurrencyConfig = field(default_factory=AuthoringConcurrencyConfig)
     trace_recorder: ModelTraceRecorder | None = None
+    offered_tool_names: frozenset[str] = frozenset()
     # Skills mode: until a workflow is declared the model is offered ONLY
     # declare_protocol_workflow, so it cannot spend its first (longest) turn
     # on a draft the workflow gate would reject anyway.
@@ -474,6 +479,27 @@ class _Nodes:
             arguments = _tool_call_args(call)
             tool_call_id = _tool_call_id(call) or f"tool-{tool_call_count}"
 
+            # Check the model-facing tool before translating edit_draft into
+            # an internal simulation. This keeps the lock behavior and its
+            # guidance aligned with tools the model can actually call.
+            block_reason = self.repair_lock.block_reason(
+                name,
+                available_tools=self.offered_tool_names or None,
+            )
+            if block_reason is not None:
+                appended.append(ToolMessage(
+                    content=json.dumps({
+                        "ok": False,
+                        "category": "repair_lock_violation",
+                        "message": block_reason,
+                        "active_failure_category": self.repair_lock.category,
+                    }, default=str),
+                    tool_call_id=tool_call_id,
+                    name=name,
+                ))
+                appended.append(HumanMessage(content=block_reason))
+                continue
+
             if name == "edit_draft":
                 # A small fix to the last draft: apply it here and handle the
                 # result exactly like a simulate_python_draft of the full text.
@@ -490,21 +516,6 @@ class _Nodes:
                     continue
                 name = "simulate_python_draft"
                 arguments = {"source": edited}
-
-            block_reason = self.repair_lock.block_reason(name)
-            if block_reason is not None:
-                appended.append(ToolMessage(
-                    content=json.dumps({
-                        "ok": False,
-                        "category": "repair_lock_violation",
-                        "message": block_reason,
-                        "active_failure_category": self.repair_lock.category,
-                    }, default=str),
-                    tool_call_id=tool_call_id,
-                    name=name,
-                ))
-                appended.append(HumanMessage(content=block_reason))
-                continue
 
             approval_block = _approval_stage_block(
                 registry=self.registry,

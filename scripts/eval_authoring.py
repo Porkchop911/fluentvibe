@@ -64,9 +64,15 @@ def _git_commit() -> str | None:
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=REPO, capture_output=True, text=True, timeout=10, check=False,
         )
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=REPO, capture_output=True, text=True, timeout=10, check=False,
+        ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return None
-    return out.stdout.strip() or None
+    commit = out.stdout.strip() or None
+    # A run on uncommitted changes must not claim the bare commit.
+    return f"{commit}+dirty" if commit and dirty else commit
 
 
 def _fc_verdict(run_dir: Path) -> str:

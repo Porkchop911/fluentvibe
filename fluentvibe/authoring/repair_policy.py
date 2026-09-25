@@ -59,6 +59,24 @@ _REPAIR_POLICIES: dict[str, RepairPolicy] = {
             "or reduce the per-well transfer volume."
         ),
     ),
+    "analyte_representation": RepairPolicy(
+        category="analyte_representation",
+        options=("split_bulk_carrier_from_analyte_marker", "use_ensure_analyte_marker"),
+        guidance=(
+            "A bulk liquid volume was tagged entirely as role='analyte'. Keep the carrier liquid "
+            "as a plain reagent and represent the captured species with a small analyte marker "
+            "layer (normally no more than 2 uL or 10% of the well volume)."
+        ),
+    ),
+    "well_coverage": RepairPolicy(
+        category="well_coverage",
+        options=("loop_over_plate_columns", "use_mca_full_plate_mix", "set_explicit_well_offset"),
+        guidance=(
+            "A LiHa/FCA operation without a well offset covers only plate column 1 while later "
+            "columns are populated. Loop over all columns with well_offset=(col-1)*8, use an MCA "
+            "full-plate operation, or set well_offset=0 explicitly if column 1 alone is intended."
+        ),
+    ),
     "well_overflow": RepairPolicy(
         category="well_overflow",
         options=("aspirate_before_dispensing_more", "split_cycles", "use_higher_capacity_labware"),

@@ -22,6 +22,7 @@ def _truthy(value: str | None) -> bool:
 class ModelTraceConfig:
     enabled: bool = False
     live: bool = False
+    raw_stream: bool = False
     output_dir: Path = Path("build")
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 
@@ -36,6 +37,7 @@ class ModelTraceConfig:
     ) -> "ModelTraceConfig":
         env_enabled = _truthy(os.environ.get("FLUENTVIBE_MODEL_TRACE"))
         env_live = _truthy(os.environ.get("FLUENTVIBE_MODEL_TRACE_LIVE"))
+        env_raw_stream = _truthy(os.environ.get("FLUENTVIBE_MODEL_TRACE_RAW_STREAM"))
         resolved_live = env_live if live is None else live
         resolved_enabled = env_enabled if enabled is None else enabled
         if resolved_live:
@@ -43,6 +45,7 @@ class ModelTraceConfig:
         return cls(
             enabled=resolved_enabled,
             live=resolved_live,
+            raw_stream=env_raw_stream,
             output_dir=output_dir,
             session_id=session_id or uuid.uuid4().hex[:12],
         )
@@ -62,6 +65,11 @@ class ModelTraceRecorder:
     @property
     def enabled(self) -> bool:
         return self.config.enabled
+
+    @property
+    def raw_stream_enabled(self) -> bool:
+        """Whether to retain every SSE line in addition to the final response."""
+        return self.config.raw_stream
 
     @property
     def trace_dir(self) -> Path:

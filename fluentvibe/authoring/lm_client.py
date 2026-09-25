@@ -84,6 +84,10 @@ class LMRepetitionError(LMStudioError):
         self.line = line
 
 
+class LMReasoningOnlyError(LMStudioError):
+    """Both the original turn and its single retry ended without an action."""
+
+
 def _tool_names(tools: list[dict[str, Any]]) -> str:
     names = [str((t.get("function") or {}).get("name") or t.get("name") or "") for t in tools or ()]
     return ", ".join(n for n in names if n) or "the next tool call"
@@ -153,6 +157,12 @@ class LMStudioChatClient:
         api_key: str | None = None,
         reasoning_effort: str | None = None,
         max_tokens: int | None = None,
+        temperature: float = 0.2,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
+        presence_penalty: float | None = None,
+        repetition_penalty: float | None = None,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
@@ -172,6 +182,28 @@ class LMStudioChatClient:
         # a small default when it is omitted, which cuts long reasoning turns
         # off before any tool call. FLUENTVIBE_LM_MAX_TOKENS sets it globally.
         self.max_tokens = max_tokens if max_tokens is not None else _max_tokens_from_env()
+        self.temperature = float(temperature)
+        self.top_p = None if top_p is None else float(top_p)
+        self.top_k = None if top_k is None else int(top_k)
+        self.min_p = None if min_p is None else float(min_p)
+        self.presence_penalty = (
+            None if presence_penalty is None else float(presence_penalty)
+        )
+        self.repetition_penalty = (
+            None if repetition_penalty is None else float(repetition_penalty)
+        )
+        if self.temperature < 0:
+            raise ValueError("temperature must be non-negative")
+        if self.top_p is not None and not 0 <= self.top_p <= 1:
+            raise ValueError("top_p must be between 0 and 1")
+        if self.top_k is not None and self.top_k < 0:
+            raise ValueError("top_k must be non-negative")
+        if self.min_p is not None and not 0 <= self.min_p <= 1:
+            raise ValueError("min_p must be between 0 and 1")
+        if self.presence_penalty is not None and not -2 <= self.presence_penalty <= 2:
+            raise ValueError("presence_penalty must be between -2 and 2")
+        if self.repetition_penalty is not None and self.repetition_penalty <= 0:
+            raise ValueError("repetition_penalty must be positive")
         self.trace_recorder = trace_recorder
         self.request_timeout_s = (
             _request_timeout_from_env()
@@ -210,10 +242,15 @@ class LMStudioChatClient:
                     self.trace_recorder.record("turn_retry", reason="reasoning_only")
                 print("[lm] reply ended inside its reasoning without a tool call -- retrying the turn once",
                       flush=True)
-                return self._complete_once(messages=[*messages, {"role": "user", "content": (
+                retry = self._complete_once(messages=[*messages, {"role": "user", "content": (
                     "Your previous reply ended inside your reasoning, without a tool call or any text. "
                     f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
                 )}], tools=tools)
+                if _reasoning_only(retry):
+                    raise LMReasoningOnlyError(
+                        "Model ended inside reasoning twice without text or a tool call."
+                    )
+                return retry
             return message
         except (LMRepetitionError, LMOutputLimitError) as exc:
             if not _loop_guard_enabled():
@@ -245,8 +282,18 @@ class LMStudioChatClient:
             "model": self.model,
             "messages": messages,
             "stream": True,
-            "temperature": 0.2,
+            "temperature": self.temperature,
         }
+        for name in (
+            "top_p",
+            "top_k",
+            "min_p",
+            "presence_penalty",
+            "repetition_penalty",
+        ):
+            value = getattr(self, name)
+            if value is not None:
+                payload[name] = value
         if request_tools:
             # vLLM rejects `tools: []` (HTTP 400); omit tool fields when none are offered.
             payload.update({"tools": request_tools, "tool_choice": "auto", "parallel_tool_calls": True})
@@ -370,7 +417,10 @@ class LMStudioChatClient:
             data_text = line[5:].strip()
             if data_text == "[DONE]":
                 break
-            if self.trace_recorder is not None:
+            if (
+                self.trace_recorder is not None
+                and self.trace_recorder.raw_stream_enabled
+            ):
                 self.trace_recorder.record("raw_stream_line", raw_line=data_text)
             try:
                 chunk = json.loads(data_text)
@@ -388,8 +438,6 @@ class LMStudioChatClient:
                         response=chunk,
                     )
                 raise LMStudioError(f"LM Studio provider error: {provider_error}")
-            if self.trace_recorder is not None:
-                self.trace_recorder.record("raw_stream_chunk", chunk=chunk)
             choice = (chunk.get("choices") or [{}])[0]
             finish_reason = choice.get("finish_reason") or finish_reason
             delta = choice.get("delta") or {}
