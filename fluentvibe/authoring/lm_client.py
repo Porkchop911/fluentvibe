@@ -84,6 +84,11 @@ class LMRepetitionError(LMStudioError):
         self.line = line
 
 
+def _tool_names(tools: list[dict[str, Any]]) -> str:
+    names = [str((t.get("function") or {}).get("name") or t.get("name") or "") for t in tools or ()]
+    return ", ".join(n for n in names if n) or "the next tool call"
+
+
 def _reasoning_only(message: dict[str, Any]) -> bool:
     """A reply with reasoning but neither text nor a tool call."""
     if message.get("tool_calls") or (message.get("content") or "").strip():
@@ -207,7 +212,7 @@ class LMStudioChatClient:
                       flush=True)
                 return self._complete_once(messages=[*messages, {"role": "user", "content": (
                     "Your previous reply ended inside your reasoning, without a tool call or any text. "
-                    "Make the tool call now (e.g. simulate_python_draft with the full source)."
+                    f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
                 )}], tools=tools)
             return message
         except (LMRepetitionError, LMOutputLimitError) as exc:
@@ -219,13 +224,13 @@ class LMStudioChatClient:
             if isinstance(exc, LMRepetitionError):
                 nudge = (
                     f"Your previous reply got stuck repeating the same line ({exc.line[:120]!r}) and was "
-                    "stopped. Do not re-derive it. Decide now and make the tool call: the smallest fix "
-                    "with edit_draft, or the next simulate_python_draft."
+                    "stopped. Do not re-derive it. Decide now and make one of the offered tool calls: "
+                    f"{_tool_names(tools)}."
                 )
             else:
                 nudge = (
                     "Your previous reply ran out of output tokens before any tool call. Keep the "
-                    "reasoning short and make the tool call now."
+                    f"reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
                 )
             return self._complete_once(messages=[*messages, {"role": "user", "content": nudge}], tools=tools)
 
