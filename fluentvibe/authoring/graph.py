@@ -647,6 +647,17 @@ class _Nodes:
             if repair_guidance is not None:
                 appended.append(HumanMessage(content=repair_guidance["message"]))
 
+            if result.get("status") == "needs_user" and _request_says_choose_yourself(self.registry):
+                # Unattended request: nobody will answer. Keep the proposals
+                # the model wrote and let it continue with them as ASSUMED.
+                appended.append(HumanMessage(content=(
+                    "The request tells you to choose these values yourself, so nobody will answer. "
+                    "Use exactly the values you just proposed, declare each as a FluentControl variable "
+                    "marked # ASSUMED, list them in your final message, and continue: "
+                    "declare_protocol_workflow, then the draft."
+                )))
+                continue
+
             if result.get("status") == "needs_user":
                 question = str(result.get("question") or "The model needs more information.")
                 return Command(
@@ -1474,6 +1485,22 @@ def _skeleton_for(spec) -> str | None:
         return build_skeleton(spec, load_deck(profile.root))
     except Exception:
         return None
+
+
+_CHOOSE_YOURSELF = re.compile(
+    r"choose (?:sensible|reasonable|suitable|appropriate)|choose (?:them|values|volumes)[^.]{0,40}yourself|"
+    r"use (?:your own|sensible|reasonable) (?:defaults|values|volumes)|unattended|batch run|"
+    r"(?:do not|don't|without) ask",
+    re.IGNORECASE,
+)
+
+
+def _request_says_choose_yourself(registry: AuthoringToolRegistry) -> bool:
+    """The request tells the model to pick open values itself (no one to answer)."""
+    prompt = getattr(registry, "original_prompt", "") or getattr(registry, "current_prompt", "") or ""
+    # Only the user's own words, not an attached document.
+    head = prompt.split("Attached file context:", 1)[0]
+    return bool(_CHOOSE_YOURSELF.search(head))
 
 
 def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:

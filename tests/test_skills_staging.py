@@ -468,3 +468,20 @@ def test_spec_run_drafts_without_a_planning_turn(tmp_path):
     final = graph.invoke(state)
     assert final["result"].status == AuthoringStatus.SUCCESS
     assert final["iterations"] == 1  # the first model turn already drafted
+
+
+def test_ask_user_is_answered_by_the_request_when_it_says_choose_yourself():
+    from types import SimpleNamespace
+
+    from fluentvibe.authoring.graph import _request_says_choose_yourself
+
+    def reg(prompt):
+        return SimpleNamespace(original_prompt=prompt, current_prompt=prompt)
+
+    assert _request_says_choose_yourself(reg(
+        "Automate it. Where the guide leaves volumes open, choose sensible values and declare them."))
+    assert _request_says_choose_yourself(reg("Unattended run: do not ask questions."))
+    assert not _request_says_choose_yourself(reg("Automate the bead preparation for 96 samples."))
+    # Words in an attached document do not count as the user's instruction.
+    assert not _request_says_choose_yourself(reg(
+        "Automate this.\n\nAttached file context:\n... choose sensible values ..."))
