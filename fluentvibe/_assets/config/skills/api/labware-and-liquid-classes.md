@@ -44,6 +44,11 @@ always_on: true
 - Choose by volume and number of wells: a few wells or small volumes → FCA
   from tubes; a full plate of an expensive reagent → FCA from a slim trough; a
   full plate of ethanol/water → MCA96 from an SBS reservoir.
+- Do not invent a pre-filled 96-well "reagent plate" to stamp a common reagent
+  from: someone would have to aliquot 96 wells by hand first. Put the reagent
+  in a trough or tubes and let the FCA distribute it. Stamp from a plate only
+  when the reagent really differs per well (barcodes, indexes, samples) or the
+  kit ships it plated.
 
 **Deck placement — trough rules (avoid FC "out of range" / "cannot reach
 Z-Max" / "No connector for this rotation" errors):**
