@@ -8,9 +8,10 @@ temperature, wash 2–3×, resuspend for hybridization. **No plate-scale volumes
 
 ## Headline
 
-**4 of 4 runs on tonight's code succeeded** (both models, with and without
-the clarification step), each in 23–32 minutes, each opened in FluentControl
-with zero InfoPad errors. Before tonight's fixes both models failed on this
+**8 of 10 runs on tonight's code succeeded** (4 of 4 in the first round, 4 of
+6 in the repeats below), both models, with and without the clarification step.
+Successful runs took 11–53 minutes; FluentControl opened every one with zero
+InfoPad errors. Before tonight's fixes both models failed on this
 document (54 and 60 minutes, no protocol).
 
 Both local models now produce a Dynabeads protocol that FluentControl opens
@@ -32,8 +33,23 @@ Rubric scores (0.5–0.71) are not meaningful here: most rubric checks are
 built for bead clean-ups with elution. Protocols were checked by hand against
 the guide instead (below).
 
-**Caveat — n = 1 per condition.** Flash failed and then succeeded on the same
-document-only prompt; single runs show what is possible, not a success rate.
+### Repeats (04:26–06:44, same code)
+
+| Condition | Flash | 27B |
+|---|---|---|
+| Asks → answered → authors | **2/2** (29, 53 min) | **2/3** (32, 22 min; 1 failure) |
+| Document only | **2/2** (23, 31 min) | **2/3** (26, 11 min; 1 failure) |
+| FluentControl, every success | 0 InfoPad errors | 0 InfoPad errors |
+
+**8 of 10 runs succeeded.** Both failures are the same 27B server fault: a
+reply that ends mid-reasoning (`finish_reason=stop`, no text, no tool call),
+likely from its 2–4-bit KV cache. Fixed during the repeats (46ab900, 63c7c6b):
+such a reply is retried once with a message naming the tools offered in that
+turn. Also found: vLLM rejected the skill-selection request (`tools: []`), so
+the 27B ran with a fallback skill set all night; fixed in 46ab900.
+
+The proposals vary run to run (Flash: 20 µL beads in one run, 50 µL in
+another) — another reason a person should answer the question.
 
 ## The questions the models asked
 
@@ -85,13 +101,14 @@ a guide step, and checked deck feasibility themselves.
 | 0e72d9d | **Renderer escapes free text** (`&`, `<`, `>`) in every template value. | the 27B protocol with "1X B&W" in a comment: FluentControl could not load the file |
 | a7ad3d8 | eval saves the model's clarification question. | harness |
 | afec83a | Skill: no invented pre-filled reagent plates; troughs/tubes via the FCA. | 27B stamped beads/probe from 96-well plates |
+| 46ab900, 63c7c6b | Retry a turn that ends inside its reasoning, naming the offered tools; omit `tools` when empty. | 27B repeat failures; vLLM HTTP 400 on skill selection |
 
 Also raised the output cap to 64K tokens per reply for these runs (per-reply
 limit, not per run).
 
 ## Next
 
-1. Repeat each condition 3–5× for success rates (≈ 30 min per run per model).
+1. More repeats with the retry fix in place, to confirm the 27B failure mode is gone.
 2. The answered protocols are slow on the instrument (column-wise FCA);
    a `wash_beads` block (MCA from an SBS reservoir, magnet round trips) would
    make these bead-prep stages one call.

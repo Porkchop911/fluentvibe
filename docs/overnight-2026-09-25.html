@@ -102,7 +102,7 @@
   </header>
 
   <div class="verdict">
-    <p><strong>4 of 4 runs on tonight's code succeeded</strong>, both models, with and without the clarification step. Each took 23–32 minutes, and FluentControl opened each protocol with <b>zero InfoPad errors</b>.</p>
+    <p><strong>8 of 10 runs on tonight's code succeeded</strong> (4 of 4 in the first round, 4 of 6 in the repeats), both models, with and without the clarification step. Successful runs took 11–53 minutes, and FluentControl opened every one with <b>zero InfoPad errors</b>.</p>
     <p>Before tonight's fixes both models failed on this document, after 54 and 60 minutes, with no protocol. The deciding change: when numbers are open, the model <b>asks once with deck-feasible proposals</b> instead of inventing volumes and fighting the simulator.</p>
   </div>
 
@@ -133,7 +133,19 @@
         </tbody>
       </table>
     </div>
-    <p class="lede"><b>n = 1 per condition.</b> Flash failed and then succeeded on the same document-only prompt: these runs show what is possible, not a success rate. Rubric scores (0.50–0.78) are omitted; most rubric checks assume a clean-up with elution, so protocols were checked by hand against the guide.</p>
+    <h2 id="repeats" style="font-size:1.2rem">Repeats, same code (04:26–06:44)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Condition</th><th>Flash</th><th>27B</th></tr></thead>
+        <tbody>
+          <tr><td>Asks → answered → authors</td><td><span class="chip pass">2/2</span> 29, 53 min</td><td><span class="chip warn">2/3</span> 32, 22 min; 1 failure</td></tr>
+          <tr><td>Document only</td><td><span class="chip pass">2/2</span> 23, 31 min</td><td><span class="chip warn">2/3</span> 26, 11 min; 1 failure</td></tr>
+          <tr><td>FluentControl, every success</td><td>0 InfoPad errors</td><td>0 InfoPad errors</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><b>8 of 10 runs succeeded.</b> Both failures are the same 27B server fault: a reply that ends mid-reasoning with no text and no tool call, likely from its 2–4-bit KV cache. Fixed during the repeats (<span class="mono">46ab900</span>, <span class="mono">63c7c6b</span>): such a reply is retried once, naming the tools offered in that turn. Also found: vLLM rejected the skill-selection request, so the 27B ran with a fallback skill set all night; fixed. Proposals vary between runs (Flash: 20 µL beads once, 50 µL another time), another reason a person should answer.</p>
+    <p class="lede">Flash failed and then succeeded on the same document-only prompt early in the night. Rubric scores (0.50–0.78) are omitted; most rubric checks assume a clean-up with elution, so protocols were checked by hand against the guide.</p>
   </section>
 
   <section aria-labelledby="questions">
@@ -185,6 +197,7 @@
           <tr><td class="mono">6d74a64</td><td>"Choose values yourself" requests continue with the model's proposals</td><td>Flash asked anyway</td></tr>
           <tr><td class="mono">0e72d9d</td><td><b>Renderer escapes free text</b> (<code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>)</td><td>"1X B&amp;W" in a comment: FluentControl could not load the file</td></tr>
           <tr><td class="mono">afec83a</td><td>Skill: no invented pre-filled reagent plates</td><td>27B stamping beads from a plate</td></tr>
+          <tr><td class="mono">46ab900 63c7c6b</td><td>Retry a turn that ends inside its reasoning, naming the offered tools; omit <code>tools</code> when empty</td><td>27B repeat failures; vLLM HTTP 400</td></tr>
         </tbody>
       </table>
     </div>
@@ -197,7 +210,7 @@
       <p>Flash placed the bead trough on <code>WS_100ml_1</code> position 1, which the deck profile lists as the FCA thru-deck waste chute. FluentControl did not flag it and neither does fluentvibe. Is that position usable for a trough? If not, I will add a compile check against workspace-occupied positions.</p>
     </div>
     <ul class="plain">
-      <li>Repeat each condition 3–5 times for success rates, about 30 min per run and model.</li>
+      <li>More repeats with the retry fix in place, to confirm the 27B failure mode is gone.</li>
       <li>A <code>wash_beads</code> block (MCA from an SBS reservoir with magnet round trips) would make bead-prep stages one call and much faster on the instrument.</li>
       <li>A rubric profile for bead preparation without elution, so scores mean something for protocols like this one.</li>
     </ul>
