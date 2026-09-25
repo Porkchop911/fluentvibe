@@ -61,9 +61,9 @@ a guide step, and checked deck feasibility themselves.
   - **27B** stamps beads and probe with the MCA from **96-well source plates**
     and adds both B&W buffers with the MCA from SBS reservoirs. The buffers
     are fine under the rule; beads/probe from pre-filled plates mean an
-    operator aliquots 96 wells by hand first — debatable. Worth a sentence in
-    the skills ("reagents in troughs/tubes for the FCA, not pre-aliquoted
-    plates, unless the kit ships them in plates").
+    operator aliquots 96 wells by hand first — debatable. The labware skill now
+    says so (afec83a): common reagents from troughs/tubes via the FCA; stamp
+    from a plate only when the reagent differs per well or the kit ships it plated.
 - Weak spots: much column-by-column FCA work (slow on the instrument);
   supernatant tips reused across columns — acceptable here because before
   hybridization every well holds the same beads/probe.
@@ -84,6 +84,7 @@ a guide step, and checked deck feasibility themselves.
 | 6d74a64 | If the request says "choose values yourself", `ask_user` continues with the model's proposals instead of ending the run. | Flash asked despite "choose sensible values" |
 | 0e72d9d | **Renderer escapes free text** (`&`, `<`, `>`) in every template value. | the 27B protocol with "1X B&W" in a comment: FluentControl could not load the file |
 | a7ad3d8 | eval saves the model's clarification question. | harness |
+| afec83a | Skill: no invented pre-filled reagent plates; troughs/tubes via the FCA. | 27B stamped beads/probe from 96-well plates |
 
 Also raised the output cap to 64K tokens per reply for these runs (per-reply
 limit, not per run).
