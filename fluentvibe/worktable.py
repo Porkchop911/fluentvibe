@@ -732,6 +732,23 @@ class Worktable:
                         f"marker if the run actually needs 96 × ≥200 µL wash "
                         f"capacity."
                     )
+        # Positions that take only certain labware (deck rule `position_catalogs`,
+        # {location: {position: [catalog markers]}}), e.g. the trough site next
+        # to the FCA waste chute, which fits only slim 25 ml / 100 ml troughs.
+        allowed = (rules.get("position_catalogs") or {}).get(location) or {}
+        allowed = allowed.get(position, allowed.get(str(position)))
+        if allowed:
+            catalog_l = (getattr(labware, "catalog_name", None) or "").lower()
+            fits = not sbs_footprint and any(
+                re.search(rf"(?<![\d.]){re.escape(str(m).lower())}(?!\d)", catalog_l) for m in allowed
+            )
+            if not fits:
+                from .simulator.invariants import TroughPlacementError
+                raise TroughPlacementError(
+                    f"{location} {position} takes only slim {' / '.join(map(str, allowed))} troughs on "
+                    f"{self.workspace_name}; {labware.label!r} is {labware.catalog_name!r}. Use one of "
+                    f"those troughs there, or another position."
+                )
         existing = self._placed.get(labware.label)
         if existing is not None and existing is not labware:
             raise ValueError(

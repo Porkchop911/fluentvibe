@@ -279,3 +279,38 @@ def test_mix_with_unknown_class_is_not_blocked(tmp_path: Path) -> None:
     wt = _mca_mix(tmp_path, "Totally Made Up Class", as_variable=False)
     out = wt.compile(tmp_path / "out.xscr")
     assert out.exists()
+
+
+# ── Position-restricted sites (FCA waste chute neighbour) ──────────────
+
+
+def test_position_catalogs_allow_only_slim_troughs(tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    import yaml as _yaml
+
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+
+    name = "Profile_Deck_Chute"
+    root = tmp_path / "prof"
+    root.mkdir()
+    (root / "workspace_profile.json").write_text(
+        json.dumps({"workspace": {"name": name, "guid": "11112222-3333-4444-5555-666677779999"}}),
+        encoding="utf-8",
+    )
+    rules = {"trough_locations": ["WS_100ml_"]}
+    (root / "generation.profile.yaml").write_text(_yaml.safe_dump({"deck_rules": {name: rules}}), encoding="utf-8")
+    # Hand-written rules live beside the generated profile so a re-save keeps them.
+    (root / "site_rules.json").write_text(json.dumps({
+        "workspace": {"guid": "11112222-3333-4444-5555-666677779999"},
+        "position_catalogs": {"WS_100ml_1": {"1": ["25ml", "100ml"]}},
+    }), encoding="utf-8")
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(root))
+
+    wt = Worktable(name="chute")
+    wt.workspace_name = name
+    wt.group("Setup")
+    wt.place(Trough("Buffer", catalog="25ml_short"), "WS_100ml_1", 1)
+    wt.place(Trough("Other", catalog="300ml SBS"), "WS_100ml_1", 2)  # other positions unrestricted
+    with pytest.raises(TroughPlacementError, match="WS_100ml_1 1 takes only slim"):
+        wt.place(Trough("Big", catalog="300ml SBS"), "WS_100ml_1", 1)
