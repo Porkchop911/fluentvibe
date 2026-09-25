@@ -27,6 +27,16 @@ from typing import Any
 
 ROLES = ("plain", "bead_carrier", "analyte", "eluent")
 
+# Bench Spec reagent roles (``authoring.bench_spec.ROLES``) -> simulator roles.
+# Models copy the spec's role names into ``Reagent(role=...)``; accept them.
+SPEC_ROLE_ALIASES = {
+    "sample": "analyte",
+    "product": "analyte",
+    "wash": "plain",
+    "reagent": "plain",
+    "per_sample": "plain",
+}
+
 
 @dataclass(frozen=True, eq=False)
 class Reagent:
@@ -46,9 +56,12 @@ class Reagent:
     simulator; not rendered into IR."""
 
     def __post_init__(self) -> None:
+        if self.role in SPEC_ROLE_ALIASES:
+            object.__setattr__(self, "role", SPEC_ROLE_ALIASES[self.role])
         if self.role not in ROLES:
             raise ValueError(
-                f"Reagent role {self.role!r} is not one of {ROLES}."
+                f"Reagent role {self.role!r} is not one of {ROLES} "
+                f"(Bench Spec roles map as {SPEC_ROLE_ALIASES})."
             )
 
     @property
