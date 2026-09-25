@@ -153,10 +153,11 @@ def test_ampure_cleanup_magnet_roundtrip_on_1080() -> None:
     """Bead model on the 1080 deck: the magnet flips, the supernatant draw
     retains beads + bound DNA, and elution recovers the DNA into the eluate."""
     profile = _profile()
-    name, _guid = _require_workspace(profile)
+    _name, guid = _require_workspace(profile)
 
     wt = _build_ampure_1080(profile)
-    assert wt.workspace_name == name
+    # The GUID is the workspace's identity; its name can be changed in FluentControl.
+    assert wt.workspace_guid == guid
     wt.simulate()
 
     def _sample_mag(s):
