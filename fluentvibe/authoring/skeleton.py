@@ -34,7 +34,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .bench_spec import BenchSpec, SpecReagent, SpecStep, open_values
+from .bench_spec import BenchSpec, SpecReagent, SpecStep, expand_repeats, open_values
 
 SKELETON_MARKER = "# BENCH SPEC SKELETON"
 _PLATE_LOCATION = "Nest61mm_Pos"
@@ -360,7 +360,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     Raises :class:`OpenValues` when the spec leaves a number open that the
     physics needs, and :class:`DeckMismatch` when the volumes do not fit.
     """
-    questions = [p.message for p in open_values(spec)]
+    spec, repeat_problems = expand_repeats(spec)
+    questions = [p.message for p in repeat_problems] + [p.message for p in open_values(spec)]
     # Partial plate: the samples fill the first columns; MCA96 steps pipette
     # whole columns, so every well of a used column is addressed.
     sample_n = max(1, min(int(spec.sample_count or 96), 96))
