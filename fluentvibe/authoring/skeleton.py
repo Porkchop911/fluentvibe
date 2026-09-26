@@ -428,6 +428,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         sample_ul = round(max([10.0, *(v * 1.1 for v in drawn)]), 1)
         w.notes.append(f"no sample volume in the spec; {sample_ul:g} ul per well is ASSUMED")
     current = samples
+    marker_ul = 0.0
     if empty_start:
         pass
     else:
@@ -445,6 +446,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
         w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
     well_ul = sample_ul
+    # The analyte marker binds to beads added to its wells and leaves the free
+    # liquid (the simulator counts it as bound), and comes back with an eluent.
+    free_marker_ul, bound_marker_ul = marker_ul, 0.0
     pooled = False
 
     def fits(step: SpecStep, volume: float) -> None:
@@ -699,6 +703,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                     f"                       tips={w.fca_reagent_tips()}, liquid_class={json.dumps(lc)}, name={label})"
                 )
             well_ul += vol
+            if reagent.role == "bead_carrier" and free_marker_ul:
+                well_ul -= free_marker_ul
+                free_marker_ul, bound_marker_ul = 0.0, free_marker_ul
+            elif reagent.role == "eluent" and bound_marker_ul:
+                well_ul += bound_marker_ul
+                free_marker_ul, bound_marker_ul = bound_marker_ul, 0.0
             fits(step, well_ul)
             continue
 

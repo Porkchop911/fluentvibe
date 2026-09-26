@@ -815,6 +815,16 @@ def score_semantic(wt, source_text: str | None = None, spec=None) -> list[Invari
 # ── Combined ─────────────────────────────────────────────────────────────
 
 
+def _spec_elutes(spec) -> bool:
+    """A SPRI-type clean-up: the macro, or an eluent added on the deck (primitives)."""
+    roles = {r.id: r.role for r in spec.reagents}
+    return any(
+        step.op == "bead_cleanup"
+        or (step.location == "deck" and step.op == "add" and roles.get(step.reagent) == "eluent")
+        for step in spec.steps
+    )
+
+
 def score_protocol(
     source: str,
     *,
@@ -837,10 +847,18 @@ def score_protocol(
             invariants.extend(
                 Invariant(k, _NA, f"did not simulate: {exc}") for k in SEMANTIC_KEYS
             )
-    if spec is not None and not any(step.op == "bead_cleanup" for step in spec.steps):
-        # The bead-model checks only mean something for a protocol with a clean-up.
+    if spec is not None and not _spec_elutes(spec):
+        # The bead-model checks only mean something for a protocol that elutes.
         invariants = [
-            Invariant(inv.key, _NA, "the spec has no bead clean-up") if inv.key in CLEANUP_KEYS else inv
+            Invariant(inv.key, _NA, "the spec has no bead clean-up with elution") if inv.key in CLEANUP_KEYS else inv
+            for inv in invariants
+        ]
+    elif spec is not None and not any(step.op == "bead_cleanup" for step in spec.steps):
+        # Elution written as primitives: the simulated checks apply, the
+        # source-text checks look for spri_cleanup's derived variables.
+        invariants = [
+            Invariant(inv.key, _NA, "elution written as primitives; checked in simulation")
+            if inv.key in CLEANUP_KEYS and inv.key in SOURCE_KEYS else inv
             for inv in invariants
         ]
     return RubricResult(tuple(invariants))
