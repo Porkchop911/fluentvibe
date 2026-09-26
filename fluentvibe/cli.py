@@ -225,6 +225,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_author_spec.add_argument("--choose", action="store_true",
                                help="do not ask: the model chooses open values within the deck and kit limits")
     p_author_spec.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
+    p_author_spec.add_argument("--check-instructions", action="store_true",
+                               help="extract the request's instructions (separate model call) and check them on the protocol")
     p_author_spec.add_argument("--endpoint", default=None)
     p_author_spec.add_argument("--model", default=None)
     p_author_spec.add_argument("--request-timeout", type=float, default=1800.0,
@@ -916,6 +918,7 @@ def _cmd_author_spec(args) -> int:
         LMStudioChatClient(**kwargs), text, args.profile, args.output, request=args.request,
         ask=choose_yourself if args.choose else ask_terminal, fluentcontrol=args.fc_check,
         progress=lambda message: print(f"progress: {message}", flush=True),
+        check_requirements=args.check_instructions,
     )
     if result.spec_raw is not None:
         (args.output / "spec.json").write_text(_json.dumps(result.spec_raw, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -923,6 +926,8 @@ def _cmd_author_spec(args) -> int:
         (args.output / "spec.md").write_text(spec_to_markdown(result.spec, result.problems), encoding="utf-8")
     if result.source is not None:
         (args.output / "draft.py").write_text(result.source, encoding="utf-8")
+    if result.requirements_markdown:
+        (args.output / "requirements.md").write_text(result.requirements_markdown, encoding="utf-8")
     (args.output / "result.json").write_text(_json.dumps(result.summary(), indent=2, ensure_ascii=False), encoding="utf-8")
     print(_json.dumps(result.summary(), indent=2, ensure_ascii=False))
     summary = result.summary()
