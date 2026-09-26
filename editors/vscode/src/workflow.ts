@@ -319,3 +319,43 @@ export async function convertOpentrons(): Promise<void> {
     vscode.window.showWarningMessage(`fluentvibe: stopped at ${summary.stage}: ${summary.error ?? ""}`);
   }
 }
+
+export async function setInstructions(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.languageId !== "python") {
+    vscode.window.showWarningMessage("fluentvibe: open a protocol .py first.");
+    return;
+  }
+  const request = await vscode.window.showInputBox({
+    title: "Instructions for this protocol",
+    prompt: "What must this protocol do? They become a checklist, checked on every save.",
+    placeHolder: "e.g. ethanol via the FCA, liquid classes as string variables, 20 ul samples, whole plate",
+    ignoreFocusOut: true,
+  });
+  if (!request) {
+    return;
+  }
+  await editor.document.save();
+  const args = ["requirements", editor.document.uri.fsPath, "--request", request];
+  const profile = settings().get<string>("profile", "");
+  if (profile) {
+    args.push("--profile", resolveInRoot(profile));
+  }
+  const { stdout } = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: turning your instructions into a checklist…" },
+    () => runCli(args, (line) => output.appendLine(line))
+  );
+  const start = stdout.indexOf("{");
+  if (start < 0) {
+    vscode.window.showErrorMessage("fluentvibe: could not build the checklist — see the fluentvibe output.");
+    return;
+  }
+  const result = JSON.parse(stdout.slice(start)) as { verdicts: { status: string }[] };
+  const passed = result.verdicts.filter((v) => v.status === "pass").length;
+  // Saving again makes the language server re-check the file with the new checklist.
+  await editor.document.save();
+  vscode.window.showInformationMessage(
+    `fluentvibe: ${result.verdicts.length} instruction(s) saved beside the protocol; ${passed} met now. ` +
+      "Unmet ones show as errors on save."
+  );
+}

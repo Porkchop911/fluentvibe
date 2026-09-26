@@ -57,6 +57,7 @@ class Verdict:
     id: str
     status: str
     evidence: str
+    line: int | None = None       # the source line of the operation that breaks it
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
@@ -171,7 +172,8 @@ def _check_head(wt, ops: list[_Op], req: Requirement) -> Verdict:
     wrong = [op for op in draws if op.head != head]
     if wrong:
         where = ", ".join(f"line {op.line} ({op.head})" for op in wrong[:5])
-        return Verdict(req.id, FAIL, f"{len(wrong)} of {len(draws)} aspirate(s) of {reagent} use another head: {where}")
+        return Verdict(req.id, FAIL, f"{len(wrong)} of {len(draws)} aspirate(s) of {reagent} use another head: {where}",
+                       wrong[0].line)
     return Verdict(req.id, PASS, f"{len(draws)} aspirate(s) of {reagent} from {sorted(sources)}, all {head.upper()}")
 
 
@@ -212,7 +214,7 @@ def _check_lc_variables(wt, ops: list[_Op], req: Requirement) -> Verdict:
     if wrong_default:
         problems.append(f"default is not {default!r}: {wrong_default}")
     if problems:
-        return Verdict(req.id, FAIL, "; ".join(problems))
+        return Verdict(req.id, FAIL, "; ".join(problems), literal[0].line if literal else None)
     used = sorted({op.step.liquid_class for op in pipetting})
     return Verdict(req.id, PASS, f"{len(pipetting)} pipetting step(s) reference string variables {used}{clarified}")
 
@@ -234,7 +236,7 @@ def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
     total = sum(seconds(op) for op in waits)
     if total + 1e-9 < minimum:
         return Verdict(req.id, FAIL, f"{total:g} s of waiting between line {first.line} and line {last.line}; "
-                                     f"{minimum:g} s required")
+                                     f"{minimum:g} s required", last.line)
     return Verdict(req.id, PASS, f"{total:g} s of waiting between line {first.line} and line {last.line}")
 
 
@@ -304,7 +306,7 @@ def _check_head_for_other_steps(wt, ops: list[_Op], req: Requirement) -> Verdict
     wrong = [op for op in others if op.head != head]
     if wrong:
         return Verdict(req.id, FAIL, f"{len(wrong)} step(s) use another head, e.g. line {wrong[0].line} "
-                                     f"({wrong[0].head} {wrong[0].action} on {wrong[0].labware})")
+                                     f"({wrong[0].head} {wrong[0].action} on {wrong[0].labware})", wrong[0].line)
     return Verdict(req.id, PASS, f"all {len(others)} other aspirate/mix step(s) use the {head.upper()}")
 
 
@@ -430,6 +432,17 @@ def extract_requirements(client: Any, request: str, document: str | None = None
         dispositions = [d for d in data.get("dispositions") or [] if isinstance(d, dict)]
         return requirements, dispositions
     return [], []
+
+
+def sidecar_path(protocol: Path | str) -> Path:
+    """Where a hand-written protocol keeps its checklist: ``<name>.requirements.json``."""
+    protocol = Path(protocol)
+    return protocol.with_name(protocol.stem + ".requirements.json")
+
+
+def save_requirements(path: Path | str, requirements: Iterable[Requirement]) -> None:
+    Path(path).write_text(json.dumps([asdict(r) for r in requirements], indent=1, ensure_ascii=False),
+                          encoding="utf-8")
 
 
 def verify_all(wt, requirements: Iterable[Requirement]) -> list[Verdict]:

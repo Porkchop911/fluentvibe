@@ -86,11 +86,42 @@ def analyze_source(source: str, path: str | Path) -> list[Diagnostic]:
         ]
     else:
         diagnostics = _simulate_diagnostics(wt, path)
+        diagnostics += _requirement_diagnostics(wt, path)
 
     lines = source.splitlines()
     for d in diagnostics:
         d.fixes = compute_fixes(d.code, d.line, d.source, lines, d.message)
     return diagnostics
+
+
+def _requirement_diagnostics(wt: Any, path: Path) -> list[Diagnostic]:
+    """The protocol's checklist (``<name>.requirements.json`` beside it), checked
+    on the resolved operations: an unmet instruction is an error on the line of
+    the operation that breaks it; one the checks cannot see is a warning."""
+    from ..authoring.requirements import FAIL, UNKNOWN, load_requirements, sidecar_path, verify_all
+
+    sidecar = sidecar_path(path)
+    if not sidecar.exists():
+        return []
+    try:
+        requirements = load_requirements(sidecar)
+        verdicts = verify_all(wt, requirements)
+    except Exception as exc:  # noqa: BLE001 - a broken checklist is reported, not raised
+        return [Diagnostic(line=1, severity="warning", code="requirements_unreadable",
+                           message=f"{sidecar.name}: {type(exc).__name__}: {exc}", source="requirements",
+                           file=str(path))]
+    texts = {r.id: r.text for r in requirements}
+    out = []
+    for v in verdicts:
+        if v.status == FAIL:
+            out.append(Diagnostic(line=v.line or 1, severity="error", code="instruction_not_met",
+                                  message=f"Instruction not met: {texts.get(v.id, v.id)} — {v.evidence}",
+                                  source="requirements", file=str(path)))
+        elif v.status == UNKNOWN:
+            out.append(Diagnostic(line=1, severity="warning", code="instruction_not_verified",
+                                  message=f"Instruction not verified: {texts.get(v.id, v.id)} — {v.evidence}",
+                                  source="requirements", file=str(path)))
+    return out
 
 
 # ── module loading ─────────────────────────────────────────────────
