@@ -105,6 +105,9 @@ export async function generateFromDocument(): Promise<void> {
   const args = ["author-spec", doc, "--profile", resolveInRoot(settings().get<string>("profile", "")), "-o", outDir];
   if (request.trim()) {
     args.push("--request", request.trim());
+    if (settings().get<boolean>("checkInstructions", true)) {
+      args.push("--check-instructions");
+    }
   }
   if (settings().get<boolean>("fluentControlCheck", true)) {
     args.push("--fc-check");
@@ -155,9 +158,13 @@ export async function generateFromDocument(): Promise<void> {
   }
   const summary = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   const specMd = path.join(outDir, "spec.md");
+  const reqMd = path.join(outDir, "requirements.md");
   const draft = path.join(outDir, "draft.py");
   if (fs.existsSync(specMd)) {
     await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.file(specMd));
+  }
+  if (fs.existsSync(reqMd)) {
+    await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.file(reqMd));
   }
   if (fs.existsSync(draft)) {
     const opened = await vscode.workspace.openTextDocument(draft);
@@ -166,10 +173,16 @@ export async function generateFromDocument(): Promise<void> {
   const fc = summary.fc_ok === true ? "FluentControl: no InfoPad errors" :
     summary.fc_ok === false ? `FluentControl: ${summary.fc_findings.length} finding(s)` : "not checked in FluentControl";
   const todo = summary.todo_steps ? `, ${summary.todo_steps} step(s) left to author` : "";
+  const ins = summary.instructions;
+  const insText = ins && ins.total
+    ? ` — your instructions: ${ins.verified}/${ins.total} verified` +
+      (ins.failed ? `, ${ins.failed} NOT met` : "") + (ins.unverified ? `, ${ins.unverified} not checkable` : "")
+    : "";
   const text = summary.stage === "done"
-    ? `fluentvibe: protocol generated in ${secs} s — ${fc}${todo}.`
+    ? `fluentvibe: protocol generated in ${secs} s — ${fc}${todo}${insText}.`
     : `fluentvibe: stopped at ${summary.stage} after ${secs} s: ${summary.error ?? ""}`;
-  (summary.stage === "done" && summary.fc_ok !== false ? vscode.window.showInformationMessage : vscode.window.showWarningMessage)(text);
+  const ok = summary.stage === "done" && summary.fc_ok !== false && !(ins && ins.failed);
+  (ok ? vscode.window.showInformationMessage : vscode.window.showWarningMessage)(text);
 }
 
 interface FcFinding {

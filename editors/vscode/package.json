@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -123,6 +123,11 @@
           "type": "number",
           "default": 65536,
           "description": "Output token limit per request."
+        },
+        "fluentvibe.checkInstructions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Extract the instructions in your request (separate model call) and check each one on the generated protocol."
         }
       }
     },

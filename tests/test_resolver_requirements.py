@@ -114,3 +114,47 @@ def test_wt_add_without_profile_says_how_to_fix(monkeypatch):
     with pytest.raises(ResolutionError, match="FLUENTVIBE_PROFILE_DIR"):
         build_worktable_from_source(_source(), str(EXAMPLE))
     assert PASS == "pass"
+
+
+def test_new_check_kinds_on_the_example():
+    from fluentvibe.authoring.requirements import Requirement, verify_all
+
+    wt = build_worktable_from_source(_source(), str(EXAMPLE))
+    wt.simulate()
+    verdicts = {v.id: v for v in verify_all(wt, [
+        Requirement("vol", "20 ul samples", "sample_volume", {"ul": 20}),
+        Requirement("n", "whole plate", "sample_count", {"count": 96}),
+        Requirement("plate", "abgene plates", "plate_catalog", {"contains": "ABgene"}),
+        Requirement("mca", "otherwise the MCA", "head_for_other_steps",
+                    {"head": "mca", "except": ["AMPure", "Elution", "ethanol"]}),
+        Requirement("free", "not checkable", "unchecked"),
+    ])}
+    assert [verdicts[k].status for k in ("vol", "n", "plate", "mca")] == ["pass"] * 4
+    assert verdicts["free"].status == "unknown"
+
+
+def test_mix_default_is_a_clarification_not_a_failure():
+    from fluentvibe.authoring.requirements import Requirement, verify
+
+    wt = build_worktable_from_source(_source(), str(EXAMPLE))
+    (verdict,) = verify(wt, [Requirement("lc", "lc vars", "liquid_class_variables", {"default": "Water Free Single"})])
+    assert verdict.status == "pass" and "Mix section" in verdict.evidence
+
+
+def test_extraction_parses_and_drops_unchecked_duplicates():
+    import json as _json
+
+    from fluentvibe.authoring.requirements import extract_requirements
+
+    class Client:
+        def complete(self, *, messages, tools):
+            args = {"requirements": [
+                {"id": "R1", "text": "use the fca for ethanol", "kind": "head_for_reagent",
+                 "params": {"reagent": "ethanol", "head": "fca"}},
+                {"id": "R2", "text": "use the fca for ethanol", "kind": "unchecked"},
+                {"id": "R3", "text": "label the plates nicely", "kind": "unchecked"},
+            ], "dispositions": [{"clause": "thanks!", "disposition": "excluded"}]}
+            return {"tool_calls": [{"function": {"name": "submit_requirements", "arguments": _json.dumps(args)}}]}
+
+    reqs, dispositions = extract_requirements(Client(), "use the fca for ethanol; label the plates nicely")
+    assert [r.id for r in reqs] == ["R1", "R3"] and dispositions[0]["disposition"] == "excluded"

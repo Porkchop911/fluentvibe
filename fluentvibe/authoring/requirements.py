@@ -187,6 +187,15 @@ def _check_lc_variables(wt, ops: list[_Op], req: Requirement) -> Verdict:
     # The default applies to transfers; a mix needs a class with a Mix section,
     # so mixes may default to another class (``mix_default``) — still a variable.
     mix_default = req.params.get("mix_default")
+    clarified = ""
+    if mix_default is None and default is not None and any(op.action == "mix" for op in pipetting):
+        # FluentControl rejects a mix with a transfer-only class, so mixes
+        # cannot share the transfer default: they need their own Mix class.
+        mixes = {variables.get(op.step.liquid_class) for op in pipetting
+                 if op.action == "mix" and op.step.liquid_class in variables}
+        mix_default = next(iter(mixes)) if len(mixes) == 1 else None
+        if mix_default is not None and mix_default != default:
+            clarified = f"; mixes default to {mix_default!r} (FluentControl needs a class with a Mix section)"
 
     def expected(op: _Op):
         return mix_default if op.action == "mix" and mix_default is not None else default
@@ -205,7 +214,7 @@ def _check_lc_variables(wt, ops: list[_Op], req: Requirement) -> Verdict:
     if problems:
         return Verdict(req.id, FAIL, "; ".join(problems))
     used = sorted({op.step.liquid_class for op in pipetting})
-    return Verdict(req.id, PASS, f"{len(pipetting)} pipetting step(s) reference string variables {used}")
+    return Verdict(req.id, PASS, f"{len(pipetting)} pipetting step(s) reference string variables {used}{clarified}")
 
 
 def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
@@ -237,7 +246,73 @@ def _check_step_present(wt, ops: list[_Op], req: Requirement) -> Verdict:
     return Verdict(req.id, PASS, f"{len(found)} x {type(found[0].step).__name__}, first at line {found[0].line}")
 
 
+def _sample_plates(wt) -> list:
+    """Labware whose authored initial contents include an analyte (the samples)."""
+    out = []
+    for labware in getattr(wt, "_placed", {}).values():
+        if any(getattr(layer.reagent, "role", "") == "analyte"
+               for well in getattr(labware, "wells", {}).values() for layer in well.layers):
+            out.append(labware)
+    return out
+
+
+def _check_sample_volume(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    want = float(req.params["ul"])
+    plates = _sample_plates(wt)
+    if not plates:
+        return Verdict(req.id, UNKNOWN, "no sample (analyte) labware found")
+    volumes = sorted({round(sum(layer.volume_ul for layer in well.layers), 2)
+                      for plate in plates for well in plate.wells.values()
+                      if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)})
+    if volumes == [round(want, 2)]:
+        return Verdict(req.id, PASS, f"every sample well starts with {want:g} ul")
+    return Verdict(req.id, FAIL, f"sample wells start with {volumes} ul, not {want:g} ul")
+
+
+def _check_sample_count(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    want = int(req.params["count"])
+    plates = _sample_plates(wt)
+    if not plates:
+        return Verdict(req.id, UNKNOWN, "no sample (analyte) labware found")
+    count = sum(1 for plate in plates for well in plate.wells.values()
+                if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers))
+    status = PASS if count == want else FAIL
+    return Verdict(req.id, status, f"{count} sample well(s)" + ("" if status == PASS else f", not {want}"))
+
+
+def _check_plate_catalog(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    marker = str(req.params["contains"]).lower()
+    plates = [lw for lw in getattr(wt, "_placed", {}).values() if getattr(lw, "category", "") == "plate"]
+    if not plates:
+        return Verdict(req.id, UNKNOWN, "no plates placed")
+    wrong = [f"{lw.label} ({lw.catalog_name})" for lw in plates if marker not in str(lw.catalog_name).lower()]
+    if wrong:
+        return Verdict(req.id, FAIL, f"plates of another type: {', '.join(wrong[:4])}")
+    return Verdict(req.id, PASS, f"all {len(plates)} plate(s) are {plates[0].catalog_name!r}")
+
+
+def _check_head_for_other_steps(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    head = str(req.params["head"]).lower()
+    excepted = set()
+    for name in req.params.get("except") or []:
+        excepted |= _initial_holders(wt, str(name))
+    # A transfer is the aspirate that starts it; its dispense/mix follow the same head.
+    pipetting = [op for op in ops if op.action in ("aspirate", "mix")]
+    if not pipetting:
+        return Verdict(req.id, UNKNOWN, "no pipetting steps")
+    others = [op for op in pipetting if not (op.action == "aspirate" and op.labware in excepted)]
+    wrong = [op for op in others if op.head != head]
+    if wrong:
+        return Verdict(req.id, FAIL, f"{len(wrong)} step(s) use another head, e.g. line {wrong[0].line} "
+                                     f"({wrong[0].head} {wrong[0].action} on {wrong[0].labware})")
+    return Verdict(req.id, PASS, f"all {len(others)} other aspirate/mix step(s) use the {head.upper()}")
+
+
 _CHECKS = {
+    "sample_volume": _check_sample_volume,
+    "sample_count": _check_sample_count,
+    "plate_catalog": _check_plate_catalog,
+    "head_for_other_steps": _check_head_for_other_steps,
     "step_present": _check_step_present,
     "head_for_reagent": _check_head,
     "liquid_class_variables": _check_lc_variables,
@@ -264,3 +339,123 @@ def verify(wt, requirements: Iterable[Requirement]) -> list[Verdict]:
 
 def fully_verified(verdicts: Iterable[Verdict]) -> bool:
     return all(v.status == PASS for v in verdicts)
+
+
+# ── extraction (a separate model call; the author never writes its own) ──
+
+EXTRACTION_TOOL = "submit_requirements"
+
+_EXTRACTION_PROMPT = """You turn a user's request for a liquid-handling protocol into a checklist.
+
+Go through the request clause by clause. Every clause gets one disposition:
+- "requirement": the protocol must do this; add a checkable requirement for it;
+- "preference": nice to have, not binding;
+- "clarification": ambiguous or impossible as written; say what is unclear;
+- "excluded": not about the protocol (context, remarks).
+
+Requirements use these kinds (params in brackets):
+- head_for_reagent {"reagent": "<distinctive part of the reagent name>", "head": "fca"|"mca"}
+  a named head dispenses that reagent (FCA = 8-channel arm, MCA = 96-channel head);
+- liquid_class_variables {"default": "<liquid class>"} (add "mix_default": "Water Mix" —
+  mixing needs a class with a Mix section) — liquid classes as string variables;
+- wait_between {"after": ["add", "<reagent>"], "before": ["magnet_on"] or ["magnet_off"],
+  "min_seconds": N} — an incubation between adding a reagent and a magnet step;
+- step_present {"step_types": ["WorklistImportStep", "LoadWorklistStep"]} — the request
+  asks for a worklist;
+- sample_volume {"ul": N} — each sample well starts with N ul;
+- sample_count {"count": N} — N samples (a whole 96-well plate = 96);
+- plate_catalog {"contains": "<part of the plate type name, e.g. ABgene>"} — plate type;
+- head_for_other_steps {"head": "mca"|"fca", "except": ["<reagent>", ...]} — "otherwise use
+  the MCA": every other aspirate/mix uses that head (list the reagents named for the other head);
+- unchecked {} — a real requirement none of the kinds above can check: it is
+  listed, not verified. Do not add an unchecked entry for a clause you already
+  turned into checkable requirements.
+Also add wait_between requirements for incubations the DOCUMENT states between
+adding a reagent and a magnet step. Quote the source clause verbatim in "text".
+Call submit_requirements once."""
+
+
+def _extraction_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["requirements", "dispositions"],
+        "properties": {
+            "requirements": {"type": "array", "items": {
+                "type": "object", "required": ["id", "text", "kind"],
+                "properties": {
+                    "id": {"type": "string"}, "text": {"type": "string"},
+                    "kind": {"type": "string", "enum": [*_CHECKS, "unchecked"]},
+                    "params": {"type": "object"},
+                }}},
+            "dispositions": {"type": "array", "items": {
+                "type": "object", "required": ["clause", "disposition"],
+                "properties": {
+                    "clause": {"type": "string"},
+                    "disposition": {"type": "string",
+                                    "enum": ["requirement", "preference", "clarification", "excluded"]},
+                    "reason": {"type": "string"},
+                }}},
+        },
+    }
+
+
+def extract_requirements(client: Any, request: str, document: str | None = None
+                         ) -> tuple[list[Requirement], list[dict[str, str]]]:
+    """Requirements + per-clause dispositions for ``request`` (one forced tool call)."""
+    user = f"Request:\n{request.strip()}"
+    if document:
+        user += f"\n\nProtocol document:\n{document[:60000]}"
+    message = client.complete(
+        messages=[{"role": "system", "content": _EXTRACTION_PROMPT}, {"role": "user", "content": user}],
+        tools=[{"type": "function", "function": {
+            "name": EXTRACTION_TOOL, "description": "Submit the checklist.", "parameters": _extraction_schema()}}],
+    )
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        if function.get("name") != EXTRACTION_TOOL:
+            continue
+        arguments = function.get("arguments")
+        data = json.loads(arguments) if isinstance(arguments, str) else dict(arguments or {})
+        requirements = []
+        for i, item in enumerate(data.get("requirements") or []):
+            if not isinstance(item, dict) or not item.get("kind"):
+                continue
+            requirements.append(Requirement(
+                id=str(item.get("id") or f"R{i + 1}"), text=str(item.get("text") or ""),
+                kind=str(item["kind"]), params=dict(item.get("params") or {}),
+            ))
+        checked_texts = {r.text.strip().lower() for r in requirements if r.kind != "unchecked"}
+        requirements = [r for r in requirements
+                        if r.kind != "unchecked" or r.text.strip().lower() not in checked_texts]
+        dispositions = [d for d in data.get("dispositions") or [] if isinstance(d, dict)]
+        return requirements, dispositions
+    return [], []
+
+
+def verify_all(wt, requirements: Iterable[Requirement]) -> list[Verdict]:
+    """:func:`verify`, with ``unchecked`` requirements reported as not verified."""
+    requirements = list(requirements)
+    checked = verify(wt, [r for r in requirements if r.kind != "unchecked"])
+    by_id = {v.id: v for v in checked}
+    out = []
+    for req in requirements:
+        out.append(by_id.get(req.id) or Verdict(req.id, UNKNOWN, "listed; no automatic check for this kind"))
+    return out
+
+
+def requirements_markdown(requirements: list[Requirement], verdicts: list[Verdict],
+                          dispositions: list[dict[str, str]]) -> str:
+    icon = {PASS: "✅", FAIL: "❌", UNKNOWN: "⚪"}
+    by_id = {v.id: v for v in verdicts}
+    lines = ["# Your instructions, checked on the protocol", "",
+             "| | Instruction | Check | Evidence |", "|---|---|---|---|"]
+    for req in requirements:
+        v = by_id.get(req.id)
+        status = v.status if v else UNKNOWN
+        lines.append(f"| {icon[status]} | {req.text} | {req.kind} | {(v.evidence if v else '').replace('|', '/')} |")
+    other = [d for d in dispositions if d.get("disposition") != "requirement"]
+    if other:
+        lines += ["", "Other clauses:", ""]
+        lines += [f"- *{d.get('disposition')}*: {d.get('clause')}" + (f" — {d['reason']}" if d.get("reason") else "")
+                  for d in other]
+    return "\n".join(lines) + "\n"

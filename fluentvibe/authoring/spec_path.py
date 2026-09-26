@@ -59,6 +59,9 @@ class SpecPathResult:
     rounds: list[dict[str, Any]] = field(default_factory=list)   # questions asked and answers
     gate: dict[str, Any] | None = None
     fluentcontrol: dict[str, Any] | None = None
+    # The request's instructions (a separate model call) and their verdicts.
+    requirements: list[dict[str, Any]] = field(default_factory=list)
+    requirements_markdown: str | None = None
     error: str | None = None
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -77,6 +80,12 @@ class SpecPathResult:
             "steps": [s.op for s in self.spec.steps] if self.spec else [],
             # Deck steps the skeleton could not map (left as TODO comments): not a finished protocol.
             "todo_steps": (self.source or "").count('wt.add_comment("TODO'),
+            "instructions": {
+                "total": len(self.requirements),
+                "verified": sum(1 for r in self.requirements if r["status"] == "pass"),
+                "failed": sum(1 for r in self.requirements if r["status"] == "fail"),
+                "unverified": sum(1 for r in self.requirements if r["status"] == "unknown"),
+            },
             "timings": {k: round(v, 1) for k, v in self.timings.items()},
         }
 
@@ -126,6 +135,7 @@ def author_from_document(
     fluentcontrol: bool = False,
     examples: bool = True,
     progress: Callable[[str], None] | None = None,
+    check_requirements: bool = False,
 ) -> SpecPathResult:
     """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl).
 
@@ -147,6 +157,18 @@ def author_from_document(
         similar = retrieval_context(source_text)
         if similar:
             context_parts.append(similar)
+    # The request's instructions are extracted by a separate call, in parallel
+    # with the spec: the author never writes its own checklist.
+    pending_requirements = None
+    if check_requirements and request:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .requirements import extract_requirements
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        pending_requirements = pool.submit(extract_requirements, client, request, source_text)
+        pool.shutdown(wait=False)
+        note("extracting your instructions into a checklist (model, in parallel)")
     try:
         spec, problems, raw = extract_bench_spec(client, source_text,
                                                  extra_context="\n\n".join(context_parts) or None)
@@ -213,6 +235,25 @@ def author_from_document(
         result.stage = "gate"
         result.error = " ".join(str(result.gate.get("failure_message", "")).split())[:600]
         return result
+    if pending_requirements is not None:
+        from .eval_rubric import build_worktable_from_source
+        from .requirements import requirements_markdown, verify_all
+
+        note("checking your instructions on the protocol")
+        try:
+            reqs, dispositions = pending_requirements.result(timeout=1800)
+            wt = build_worktable_from_source(result.source, str(out / "draft.py"))
+            wt.simulate()
+            verdicts = verify_all(wt, reqs)
+            by_id = {v.id: v for v in verdicts}
+            result.requirements = [
+                {"id": r.id, "text": r.text, "kind": r.kind, "params": r.params,
+                 "status": by_id[r.id].status, "evidence": by_id[r.id].evidence}
+                for r in reqs
+            ]
+            result.requirements_markdown = requirements_markdown(reqs, verdicts, dispositions)
+        except Exception as exc:  # noqa: BLE001 - the checklist failing is reported, not fatal
+            result.requirements_markdown = f"Instruction check failed: {type(exc).__name__}: {exc}\n"
     if fluentcontrol:
         from .eval_rubric import build_worktable_from_source
         from .fc_feedback import check_in_fluentcontrol
