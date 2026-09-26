@@ -233,6 +233,18 @@ def main(argv: Optional[list[str]] = None) -> int:
                                help="seconds per model request (spec extraction reads the whole document)")
     p_author_spec.set_defaults(func=_cmd_author_spec)
 
+    p_ot = sub.add_parser(
+        "opentrons",
+        help="convert an Opentrons protocol (.py or its folder) into a protocol for this deck",
+    )
+    p_ot.add_argument("protocol", type=Path, help="Opentrons protocol .py file or its folder")
+    p_ot.add_argument("--profile", type=Path, required=True, help="workspace-app profile dir")
+    p_ot.add_argument("--output", "-o", type=Path, required=True, help="directory for spec, draft, checks")
+    p_ot.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
+    p_ot.add_argument("--opentrons-python", type=Path, default=None,
+                      help="python with the opentrons package (default: .venv-opentrons in the repo)")
+    p_ot.set_defaults(func=_cmd_opentrons)
+
     p_fc_open = sub.add_parser(
         "fc-open",
         help="compile a draft and open it in FluentControl (shell script) for checking and editing",
@@ -882,6 +894,92 @@ def _cmd_fc_pull(args) -> int:
     print(roundtrip_message(changes))
     print(f"\nWrote {report}")
     return 0
+
+
+def _cmd_opentrons(args) -> int:
+    """Opentrons protocol -> Bench Spec (Opentrons simulator) -> skeleton -> checks. No model."""
+    import json as _json
+    import os
+    import subprocess
+    import time
+
+    from .authoring.bench_spec import spec_to_markdown, validate_bench_spec
+    from .authoring.profile import PROFILE_DIR_ENV
+    from .authoring.skeleton import DeckMismatch, OpenValues, build_skeleton, load_deck
+
+    def progress(message: str) -> None:
+        print(f"progress: {message}", flush=True)
+
+    repo = Path(__file__).resolve().parent.parent
+    python = args.opentrons_python or repo / ".venv-opentrons" / "Scripts" / "python.exe"
+    if not Path(python).exists():
+        print(f"error: no Python with the opentrons package at {python} (see scripts/opentrons_to_spec.py)",
+              file=sys.stderr)
+        return 1
+    os.environ[PROFILE_DIR_ENV] = str(args.profile)
+    args.output.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
+    summary: dict[str, Any] = {"stage": "convert", "error": None}
+
+    def finish(code: int) -> int:
+        summary["total_s"] = round(time.monotonic() - started, 1)
+        (args.output / "result.json").write_text(_json.dumps(summary, indent=2), encoding="utf-8")
+        print(_json.dumps(summary, indent=2))
+        return code
+
+    progress("running the protocol in the Opentrons simulator and reading its steps")
+    done = subprocess.run(
+        [str(python), str(repo / "scripts" / "opentrons_to_spec.py"), str(args.protocol),
+         "--out", str(args.output), "--single"],
+        capture_output=True, text=True, timeout=600,
+    )
+    rows = [line for line in done.stdout.splitlines() if line.startswith("{")]
+    row = _json.loads(rows[-1]) if rows else {"status": "error", "error": done.stderr.strip()[-300:]}
+    if row.get("status") != "ok":
+        summary["error"] = row.get("error")
+        return finish(1)
+    name = args.protocol.stem if args.protocol.is_file() else args.protocol.name
+    raw = _json.loads((args.output / f"{name}.json").read_text(encoding="utf-8"))
+    raw.pop("_source", None)
+    (args.output / "spec.json").write_text(_json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+    spec, problems = validate_bench_spec(raw)
+    if spec is None:
+        summary.update(stage="spec", error="; ".join(p.message for p in problems))
+        return finish(1)
+    (args.output / "spec.md").write_text(spec_to_markdown(spec, problems), encoding="utf-8")
+    summary["steps"] = [st.op for st in spec.steps]
+    progress(f"spec: {len(spec.steps)} steps; building the protocol for this deck")
+    try:
+        source = build_skeleton(spec, load_deck(args.profile))
+    except (OpenValues, DeckMismatch, ValueError) as exc:
+        summary.update(stage="skeleton", error=str(exc))
+        return finish(1)
+    draft = args.output / "draft.py"
+    draft.write_text(source, encoding="utf-8")
+    from .authoring.lab_scope import load_lab_scope
+    from .authoring.tools import AuthoringToolRegistry
+
+    progress("compiling and simulating")
+    registry = AuthoringToolRegistry(output_dir=args.output)
+    registry.lab_scope = load_lab_scope("skills")
+    gate = registry.compile_and_simulate(source)
+    summary["gate"] = bool(gate.get("success"))
+    summary["todo_steps"] = source.count('wt.add_comment("TODO')
+    if not summary["gate"]:
+        summary.update(stage="gate", error=" ".join(str(gate.get("failure_message", "")).split())[:600])
+        return finish(1)
+    if args.fc_check:
+        from .authoring.eval_rubric import build_worktable_from_source
+        from .authoring.fc_feedback import check_in_fluentcontrol
+
+        progress("checking in FluentControl (InfoPad)")
+        xscr = args.output / "draft.xscr"
+        build_worktable_from_source(source, str(draft)).compile(xscr)
+        fc = check_in_fluentcontrol(xscr, source=source, source_file=str(draft))
+        summary["fc_ok"] = fc.get("ok")
+        summary["fc_findings"] = [f"{f['kind']}: {f['message'][:100]}" for f in fc.get("findings", [])]
+    summary["stage"] = "done"
+    return finish(0 if summary.get("fc_ok") is not False else 1)
 
 
 def _cmd_author_spec(args) -> int:
