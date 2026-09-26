@@ -10,6 +10,7 @@ from .common import (
     BlockError,
     BlockVariables,
     columns_or_all,
+    mca_columns,
     require_distinct,
     require_positive,
     variable_prefix,
@@ -29,6 +30,7 @@ def stamp(
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
     variables: bool = True,
+    columns: Iterable[int] | None = None,
 ) -> None:
     """Copy every well of ``source`` into the same well of ``dest`` (MCA96).
 
@@ -40,9 +42,12 @@ def stamp(
     ``tips`` is an MCA96 tip box used for this stamp only; reuse the same box
     later only for the same samples. The block mounts and drops the adapter.
     With a ``name``, volumes and liquid classes become FluentControl variables
-    (``<NAME>_VOLUME_UL`` …) unless ``variables=False``.
+    (``<NAME>_VOLUME_UL`` …) unless ``variables=False``. ``columns`` (1-based)
+    restricts it to those plate columns (a partial plate); the same box columns
+    of ``tips`` are used.
     """
     require_positive("stamp", volume_ul=volume_ul)
+    cols = mca_columns(columns)
     # More than the tips hold: equal trips with the same tips.
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 0.0)
     trips = math.ceil(float(volume_ul) / capacity) if capacity else 1
@@ -57,14 +62,14 @@ def stamp(
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
-    head.pick_up(tips)
+    head.pick_up(tips, columns=cols)
     for _ in range(trips):
-        head.aspirate(source, volume, liquid_class=lc)
-        head.dispense(dest, volume, liquid_class=lc)
+        head.aspirate(source, volume, liquid_class=lc, columns=cols)
+        head.dispense(dest, volume, liquid_class=lc, columns=cols)
     if mix_cycles:
         head.mix(dest, v.ref("MIX_UL", float(mix_volume_ul)), cycles=mix_cycles,
-                 liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class))
-    head.return_tips(tips)
+                 liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class), columns=cols)
+    head.return_tips(tips, columns=cols)
     head.drop_adapter()
 
 
@@ -135,6 +140,7 @@ def add_reagent(
     mix_liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
     variables: bool = True,
+    columns: Iterable[int] | None = None,
 ) -> None:
     """Add a reagent from a trough to every well of ``plate`` (MCA96).
 
@@ -145,6 +151,7 @@ def add_reagent(
     reagent trough the next time they are used.
     """
     require_positive("add_reagent", volume_ul=volume_ul)
+    cols = mca_columns(columns)
     if mix_cycles:
         if mix_tips is None:
             raise BlockError(
@@ -161,21 +168,68 @@ def add_reagent(
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
-    head.pick_up(reagent_tips)
+    head.pick_up(reagent_tips, columns=cols)
     for _ in range(trips):
         head.aspirate(reagent_source, volume, liquid_class=lc)
-        head.dispense(plate, volume, liquid_class=lc)
-    head.return_tips(reagent_tips)
+        head.dispense(plate, volume, liquid_class=lc, columns=cols)
+    head.return_tips(reagent_tips, columns=cols)
     if mix_cycles:
-        head.pick_up(mix_tips)
+        head.pick_up(mix_tips, columns=cols)
         head.mix(
             plate,
             v.ref("MIX_UL", float(mix_volume_ul if mix_volume_ul is not None else 0.8 * float(volume_ul))),
             cycles=mix_cycles,
             liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class),
+            columns=cols,
         )
-        head.return_tips(mix_tips)
+        head.return_tips(mix_tips, columns=cols)
     head.drop_adapter()
+
+
+def pool_wells(
+    wt,
+    *,
+    source,
+    dest,
+    volume_ul: float,
+    tips,
+    liquid_class: str,
+    source_wells: Iterable[str],
+    dest_well: str = "A1",
+    name: str | None = None,
+    variables: bool = True,
+) -> None:
+    """Pool ``volume_ul`` from each of ``source_wells`` into one well of ``dest`` (LiHa).
+
+    The wells of each source column go in one pass (one channel per well, up
+    to 8), all dispensed into ``dest_well``; every pass uses fresh FCA tips, so
+    no tip touches two samples before the pool. Use it for a handful of samples
+    (a partial plate) or any explicit set of wells; :func:`pool_columns` pools
+    whole plate columns into 8 row pools instead.
+
+    ``tips`` is an FCA tip box.
+    """
+    require_positive("pool_wells", volume_ul=volume_ul)
+    wells = [str(w).strip().upper() for w in source_wells]
+    if not wells:
+        raise BlockError("pool_wells: give the source_wells to pool.")
+    by_column: dict[str, list[str]] = {}
+    for well in wells:
+        by_column.setdefault(well[1:], []).append(well)
+    v = BlockVariables(wt, variable_prefix(name) if variables else None, block="pool_wells")
+    volume = v.ref("VOLUME_UL", float(volume_ul))
+    lc = v.ref("LIQUID_CLASS", liquid_class)
+    if name:
+        wt.group(name)
+    head = wt.liha
+    target = str(dest_well).strip().upper()
+    for column_wells in by_column.values():
+        for start in range(0, len(column_wells), 8):
+            batch = column_wells[start:start + 8]
+            head.get_tips(tips)
+            head.aspirate(source, volume, liquid_class=lc, wells=batch)
+            head.dispense(dest, volume, liquid_class=lc, wells=[target] * len(batch))
+            head.drop_tips()
 
 
 def pool_columns(

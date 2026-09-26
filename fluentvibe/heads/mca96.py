@@ -167,12 +167,15 @@ class MCA96Head:
         *,
         cycles: Union[int, str] = 10,
         liquid_class: str,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
+        """Mix in place; `columns` restricts it to 1-based plate columns (partial plate)."""
         self._wt._emit(Mca384MixStep(
             labware_name=self._label(target),
             volume=volume_ul,
             cycles=cycles,
             liquid_class=liquid_class,
+            columns=list(columns) if columns is not None else None,
         ))
 
     def empty_tips(

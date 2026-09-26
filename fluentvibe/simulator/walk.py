@@ -546,7 +546,10 @@ class Simulator:
         self._check_peel_edge(step, picked, present)
         capacity = tip_box.capacity_ul
         tip_box.remove_columns(picked)
-        self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(96)]
+        # A partial pickup mounts only the picked columns (8 tips each), so a
+        # trough draw or tip count reflects the tips actually on the head.
+        rows = 8
+        self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(rows * len(picked))]
         self._contamination.on_pickup(step.labware_name, self._mca_tips)
         self._mca_tip_box_label = step.labware_name
 
@@ -710,7 +713,8 @@ class Simulator:
         cycles = int(step.cycles) if not isinstance(step.cycles, str) else int(self._resolve_sim_number(step.cycles))
         if cycles <= 0:
             return
-        for tip, well in zip(self._mca_tips, self._iter_aspirate_wells(target)):
+        wells = self._select_mca_columns(self._iter_aspirate_wells(target), getattr(step, "columns", None))
+        for tip, well in zip(self._mca_tips, wells):
             self._validate_mix_one(target, well, volume, tip)
             self._mix_equilibrate(target, well)
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 from ..ir.schema import (
     LihaAspirateStep,
@@ -15,8 +15,26 @@ from ..ir.schema import (
 from ..labware.base import Labware
 
 
+def _selection(wells: Optional[Sequence[str]], well_offset) -> Optional[str]:
+    """Per-channel wells -> the step's selection (channel i uses ``wells[i]``)."""
+    if wells is None:
+        return None
+    if well_offset is not None:
+        raise ValueError("give either wells= (one well per channel) or well_offset=, not both")
+    addresses = [str(w).strip().upper() for w in wells]
+    if not 1 <= len(addresses) <= 8:
+        raise ValueError(f"wells= needs 1-8 wells (one per LiHa channel), got {len(addresses)}")
+    return ";".join(addresses)
+
+
 class LiHa:
-    """Liquid Handling Arm authoring facade."""
+    """Liquid Handling Arm authoring facade.
+
+    Pipetting addresses 8 consecutive wells from ``well_offset`` by default.
+    ``wells=["A1", "B1", "C1"]`` instead gives each channel its own well (channel
+    *i* uses ``wells[i]``; fewer wells use fewer channels): a partial column, a
+    cherry-pick, or ``["A1"] * 3`` to dispense three channels into one well (pooling).
+    """
 
     def __init__(self, worktable) -> None:
         self.worktable = worktable
@@ -42,6 +60,7 @@ class LiHa:
         *,
         liquid_class: Optional[str] = None,
         well_offset: Optional[Union[int, str]] = None,
+        wells: Optional[Sequence[str]] = None,
     ) -> None:
         self.worktable._emit(
             LihaAspirateStep(
@@ -49,6 +68,7 @@ class LiHa:
                 volume=volume,
                 liquid_class=liquid_class,
                 well_offset=well_offset,
+                selection=_selection(wells, well_offset),
             )
         )
 
@@ -59,6 +79,7 @@ class LiHa:
         *,
         liquid_class: Optional[str] = None,
         well_offset: Optional[Union[int, str]] = None,
+        wells: Optional[Sequence[str]] = None,
     ) -> None:
         self.worktable._emit(
             LihaDispenseStep(
@@ -66,6 +87,7 @@ class LiHa:
                 volume=volume,
                 liquid_class=liquid_class,
                 well_offset=well_offset,
+                selection=_selection(wells, well_offset),
             )
         )
 
@@ -77,6 +99,7 @@ class LiHa:
         cycles: Union[int, str] = 10,
         liquid_class: Optional[str] = None,
         well_offset: Optional[Union[int, str]] = None,
+        wells: Optional[Sequence[str]] = None,
     ) -> None:
         self.worktable._emit(
             LihaMixStep(
@@ -85,6 +108,7 @@ class LiHa:
                 cycles=cycles,
                 liquid_class=liquid_class,
                 well_offset=well_offset,
+                selection=_selection(wells, well_offset),
             )
         )
 

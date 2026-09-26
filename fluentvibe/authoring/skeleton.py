@@ -343,23 +343,34 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     physics needs, and :class:`DeckMismatch` when the volumes do not fit.
     """
     questions = [p.message for p in open_values(spec)]
-    # A kit reagent the deck steps draw beyond its supply (MCA96 blocks fill all 96 wells).
+    # Partial plate: the samples fill the first columns; MCA96 steps pipette
+    # whole columns, so every well of a used column is addressed.
+    sample_n = max(1, min(int(spec.sample_count or 96), 96))
+    used_columns = -(-sample_n // 8)
+    n = 8 * used_columns
+    column_list = list(range(1, used_columns + 1))
+    cols_arg = "" if used_columns == 12 else f", columns={column_list}"
+    # A kit reagent the deck steps draw beyond its supply.
     for reagent in spec.reagents:
         supply = _supply(reagent)
         if supply is None:
             continue
-        drawn = sum(float(st.volume_ul) * 96 for st in spec.steps
+        drawn = sum(float(st.volume_ul) * n for st in spec.steps
                     if st.location == "deck" and st.op == "add" and st.reagent == reagent.id and st.volume_ul)
         if drawn > supply:
             questions.append(
-                f"{reagent.id} is added at {drawn:g} µl for 96 wells but the kit supplies {supply:g} µl: "
+                f"{reagent.id} is added at {drawn:g} µl for {n} wells but the kit supplies {supply:g} µl: "
                 f"more vials, fewer wells, or less per well?"
             )
     if questions:
         raise OpenValues(questions)
     w = _Writer(deck=deck)
-    # MCA96 blocks address the whole plate: every channel draws reagent.
-    n = 96
+    if sample_n < 96:
+        blanks = n - sample_n
+        w.notes.append(
+            f"{sample_n} samples in columns 1-{used_columns}; MCA96 steps pipette whole columns"
+            + (f" ({blanks} unused well(s) of column {used_columns} are modelled as blank liquid)" if blanks else "")
+        )
     lc = deck.liquid_class
     reagent_vars: dict[str, str] = {}
     # Reagent id -> its reservoirs (a new one whenever the current one would
@@ -445,8 +456,18 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         # is a small marker in plain sample liquid; copies of the plate (stamps)
         # then keep their volume through a clean-up too.
         marker_ul = min(2.0, sample_ul / 10)
-        w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
-        w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
+        if sample_n == 96:
+            w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+            w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
+        else:
+            wells = f"{samples}.first_wells({sample_n})"
+            w.fills.append(f"    {samples}.fill_wells({wells}, Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+            w.fills.append(f"    {samples}.layer_wells({wells}, {analyte_var}, {marker_ul:g})")
+            if n > sample_n:
+                # Simulation only: the unused wells of the last column hold nothing
+                # on the bench; modelled as blank so whole-column pipetting is checked.
+                w.fills.append(f"    {samples}.fill_wells({samples}.first_wells({n})[{sample_n}:], "
+                               f"Reagent(\"Blank (unused well of a pipetted column)\"), {sample_ul:g})")
     well_ul = sample_ul
     # The analyte marker binds to beads added to its wells and leaves the free
     # liquid (the simulator counts it as bound), and comes back with an eluent.
@@ -584,7 +605,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
             w.body.append(
                 f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol:g}, tips={plate_tips(current)},\n"
-                f"                  liquid_class={json.dumps(lc)}, name={label}){comment}"
+                f"                  liquid_class={json.dumps(lc)}, name={label}{cols_arg}){comment}"
             )
             well_ul -= vol
             continue
@@ -598,7 +619,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             comment = "  # ASSUMED: cycles" if step.cycles is None else ""
             w.body.append(
                 f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol:g}, "
-                f"cycles={cycles}, name={label}){comment}"
+                f"cycles={cycles}, name={label}{cols_arg}){comment}"
             )
             continue
 
@@ -647,7 +668,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"        eluate_plate={eluate}, reagent_tips={tips[0]}, sample_tips={tips[1]},\n"
                 f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, {bead_arg},\n"
                 f"        elution_volume_ul={elute_ul:g}, wash_volume_ul={wash_ul:g}, wash_count={washes},\n"
-                f"        liquid_class={json.dumps(lc)}, fca_tips={fca_tips}, name={label},\n"
+                f"        liquid_class={json.dumps(lc)}, fca_tips={fca_tips}, name={label}{cols_arg},\n"
                 f"    ){comment}"
             )
             w.retire(current, sample_tips)
@@ -661,15 +682,31 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             if vol > well_ul - 1.0:
                 w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; pooling {well_ul - 1.0:g} ul")
                 vol = well_ul - 1.0
-            if vol * 12 > _POOL_WELL_UL:
-                w.notes.append(f"{step.id}: 12 x {vol:g} ul overflows one pool well; pooling {_POOL_WELL_UL / 12:g} ul per column")
-                vol = _POOL_WELL_UL / 12
+            if used_columns == 1:
+                # The samples fit one column: pool them into one well, one channel per sample.
+                if vol * sample_n > _POOL_WELL_UL:
+                    w.notes.append(f"{step.id}: {sample_n} x {vol:g} ul overflows one pool well; "
+                                   f"pooling {_POOL_WELL_UL / sample_n:g} ul per sample")
+                    vol = _POOL_WELL_UL / sample_n
+                w.body.append(
+                    f"    pool_wells(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
+                    f"               liquid_class={json.dumps(lc)}, source_wells={current}.first_wells({sample_n}), "
+                    f"dest_well=\"A1\", name={label})"
+                )
+                w.retire(current, tips)
+                current, well_ul = pool, vol * sample_n
+                pooled = True
+                continue
+            if vol * used_columns > _POOL_WELL_UL:
+                w.notes.append(f"{step.id}: {used_columns} x {vol:g} ul overflows one pool well; "
+                               f"pooling {_POOL_WELL_UL / used_columns:g} ul per column")
+                vol = _POOL_WELL_UL / used_columns
             w.body.append(
                 f"    pool_columns(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
-                f"                 liquid_class={json.dumps(lc)}, dest_column=1, name={label})"
+                f"                 liquid_class={json.dumps(lc)}, dest_column=1, name={label}{cols_arg})"
             )
             w.retire(current, tips)
-            current, well_ul = pool, vol * 12
+            current, well_ul = pool, vol * used_columns
             pooled = True
             continue
 
@@ -682,7 +719,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             mix = ", mix_cycles=5" if re.search(r"\bmix", step.text or "", re.IGNORECASE) else ""
             w.body.append(
                 f"    stamp(wt, source={source}, dest={current}, volume_ul={vol:g}, tips={tips},\n"
-                f"          liquid_class={json.dumps(lc)}{mix}, name={label})"
+                f"          liquid_class={json.dumps(lc)}{mix}, name={label}{cols_arg})"
             )
             w.retire(source, tips)
             well_ul += vol
@@ -699,14 +736,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                     shared_tips["reagent"] = w.mca_box("ReagentTips")
                 w.body.append(
                     f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
-                    f"                reagent_tips={shared_tips['reagent']}, liquid_class={json.dumps(lc)}, name={label})"
+                    f"                reagent_tips={shared_tips['reagent']}, liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
                 )
             else:
                 # Reagents: the FCA from a slim trough (little dead volume).
                 trough = fca_trough_for(reagent, vol * n * 1.1 + 2000)
                 w.body.append(
                     f"    distribute_reagent(wt, source={trough}, plate={current}, volume_ul={vol:g},\n"
-                    f"                       tips={w.fca_reagent_tips()}, liquid_class={json.dumps(lc)}, name={label})"
+                    f"                       tips={w.fca_reagent_tips()}, liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
                 )
             well_ul += vol
             if reagent.role == "bead_carrier" and free_marker_ul:
@@ -729,7 +766,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             fits(step, vol)
             w.body.append(
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
-                f"          liquid_class={json.dumps(lc)}, name={label})"
+                f"          liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
             )
             # The emptied plate leaves the magnet so the next separation can use it.
             release_current(json.dumps(f"{step.id}: spent plate off the magnet"))
@@ -774,7 +811,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         cls for line in w.placements + w.body
         for cls in re.findall(r"wt\.place\((\w+)\(", line)
     } | {"Reagent", "Worktable"})
-    used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns",
+    used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns", "pool_wells",
                                       "offdeck_step", "remove_liquid", "mix_wells", "separate", "release")
                           if any(f"{b}(" in line for line in w.body)})
     header = [
