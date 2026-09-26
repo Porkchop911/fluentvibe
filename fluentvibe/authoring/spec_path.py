@@ -136,8 +136,12 @@ def author_from_document(
         similar = retrieval_context(source_text)
         if similar:
             context_parts.append(similar)
-    spec, problems, raw = extract_bench_spec(client, source_text,
-                                             extra_context="\n\n".join(context_parts) or None)
+    try:
+        spec, problems, raw = extract_bench_spec(client, source_text,
+                                                 extra_context="\n\n".join(context_parts) or None)
+    except Exception as exc:  # noqa: BLE001 - a model/server failure is a result, not a crash
+        result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
+        return result
     result.timings["spec_s"] = time.monotonic() - started
     result.spec, result.problems, result.spec_raw = spec, problems, raw
     if spec is None:
@@ -162,7 +166,11 @@ def author_from_document(
                 return result
             round_["answer"] = answer
             t0 = time.monotonic()
-            revised, problems, revised_raw = revise_bench_spec(client, raw, source_text, questions, answer)
+            try:
+                revised, problems, revised_raw = revise_bench_spec(client, raw, source_text, questions, answer)
+            except Exception as exc:  # noqa: BLE001
+                result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
+                return result
             result.timings["revise_s"] = result.timings.get("revise_s", 0.0) + time.monotonic() - t0
             if revised is None:
                 result.stage, result.error = "spec", "revision unusable: " + "; ".join(p.message for p in problems)

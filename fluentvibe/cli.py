@@ -227,6 +227,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_author_spec.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
     p_author_spec.add_argument("--endpoint", default=None)
     p_author_spec.add_argument("--model", default=None)
+    p_author_spec.add_argument("--request-timeout", type=float, default=1800.0,
+                               help="seconds per model request (spec extraction reads the whole document)")
     p_author_spec.set_defaults(func=_cmd_author_spec)
 
     p_fc_open = sub.add_parser(
@@ -888,6 +890,7 @@ def _cmd_author_spec(args) -> int:
         kwargs["endpoint"] = args.endpoint
     if args.model:
         kwargs["model"] = args.model
+    kwargs["request_timeout_s"] = args.request_timeout
 
     def ask_terminal(questions: list[str]) -> str | None:
         print("\nThe spec leaves these open:")
