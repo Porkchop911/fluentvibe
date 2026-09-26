@@ -192,3 +192,24 @@ def test_replay_frames_follow_the_protocol_steps():
     assert all(c and c[0] > 0 for c in eluate["cells"])            # eluate in every well
     page = replay_html(data)
     assert "<script>" in page and "AMPure" in page and "</script>" in page
+
+
+def test_reagent_names_match_ignoring_case_and_spaces():
+    from fluentvibe.authoring.requirements import Requirement, verify
+
+    wt = build_worktable_from_source(_source(), str(EXAMPLE))
+    (verdict,) = verify(wt, [Requirement("eb", "elution buffer via FCA", "head_for_reagent",
+                                         {"reagent": "elutionbuffer", "head": "fca"})])
+    assert verdict.status == "pass", verdict.evidence
+
+
+def test_otherwise_mca_excludes_reagents_the_checklist_gives_the_fca():
+    from fluentvibe.authoring.requirements import Requirement, verify_all
+
+    wt = build_worktable_from_source(_source(), str(EXAMPLE))
+    reqs = [Requirement("f1", "beads via FCA", "head_for_reagent", {"reagent": "AMPure", "head": "fca"}),
+            Requirement("f2", "EB via FCA", "head_for_reagent", {"reagent": "Elution buffer", "head": "fca"}),
+            Requirement("f3", "ethanol via FCA", "head_for_reagent", {"reagent": "ethanol", "head": "fca"}),
+            Requirement("m", "otherwise the MCA", "head_for_other_steps", {"head": "mca"})]   # no "except"
+    verdicts = {v.id: v.status for v in verify_all(wt, reqs)}
+    assert verdicts == {"f1": "pass", "f2": "pass", "f3": "pass", "m": "pass"}
