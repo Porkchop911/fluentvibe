@@ -508,7 +508,8 @@ currently working in (the samples at first; after a transfer, the new plate):
   The deck has a magnet: separate is a deck step even when the document uses a
   hand-held magnet (DynaMag); so are the removes and adds around it.
 - incubate: time and/or temperature (location off_deck when it needs a device).
-- measure / manual: operator steps.
+- measure / manual: operator steps. Preparing a reagent away from the plate (mixing
+  working reagent from A and B, reconstituting a substrate) is manual.
 A bead wash is: separate(engage=true), remove, separate(engage=false), add wash buffer, mix.
 Macros, only when the document really does exactly this:
 - bead_cleanup: a SPRI/AMPure-type clean-up that binds DNA to beads, washes,

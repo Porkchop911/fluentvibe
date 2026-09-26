@@ -340,3 +340,14 @@ def test_missing_sample_volume_is_a_question(profile):
     raw["sample_volume_ul"] = None
     with pytest.raises(OpenValues, match="volume per well is not given"):
         build_skeleton(_spec(raw), load_deck(profile))
+
+
+def test_room_temperature_incubation_is_a_wait_and_a_warm_one_goes_to_the_operator(profile):
+    raw = json.loads(json.dumps(_SPRI_PRIMITIVES))
+    raw["steps"][2]["temp_c"] = [25]  # "room temperature (25 C)"
+    raw["steps"].insert(3, {"id": "s3b", "op": "incubate", "text": "37 C 30 min", "location": "deck",
+                            "temp_c": [37], "minutes": [30]})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "wt.wait(duration_seconds=300)  # room temperature" in source
+    assert "TODO" not in source
+    assert "37 C incubation handed to the operator" in source and "offdeck_step(wt, \"37 C 30 min\"" in source

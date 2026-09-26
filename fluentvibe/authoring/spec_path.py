@@ -75,6 +75,8 @@ class SpecPathResult:
             "fc_ok": (self.fluentcontrol or {}).get("ok"),
             "fc_findings": [f"{f['kind']}: {f['message'][:100]}" for f in (self.fluentcontrol or {}).get("findings", [])],
             "steps": [s.op for s in self.spec.steps] if self.spec else [],
+            # Deck steps the skeleton could not map (left as TODO comments): not a finished protocol.
+            "todo_steps": (self.source or "").count('wt.add_comment("TODO'),
             "timings": {k: round(v, 1) for k, v in self.timings.items()},
         }
 
