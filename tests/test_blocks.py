@@ -526,3 +526,9 @@ def test_free_text_with_xml_characters_renders_well_formed(tmp_path):
     xml = render_protocol(deck.wt.to_protocol())
     ET.fromstring(xml.encode("utf-8"))  # well-formed
     assert "1X B&amp;W" in xml and "&amp;amp;" not in xml
+
+
+def test_variable_prefix_is_ascii_only():
+    from fluentvibe.blocks.common import variable_prefix
+
+    assert variable_prefix("s03: Add 36 µL beads (1.8 × 20 µL)") == "S03_ADD_36_L_BEADS_1_8_20_L"

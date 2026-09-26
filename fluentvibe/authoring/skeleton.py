@@ -144,6 +144,13 @@ def load_deck(profile_dir: Path | str) -> _Deck:
     )
 
 
+def _label(text: str) -> str:
+    """A FluentControl-safe labware name: letters, digits, '_' and '-' only
+    ("EtOH 70%_trough" -> "EtOH_70_trough"; FC rejects e.g. '%')."""
+    out = re.sub(r"[^0-9A-Za-z_-]+", "_", text).strip("_")
+    return re.sub(r"_+", "_", out) or "Labware"
+
+
 def _ident(text: str) -> str:
     out = re.sub(r"[^0-9a-zA-Z]+", "_", text).strip("_").lower()
     if not out or out[0].isdigit():
@@ -200,6 +207,9 @@ class _Writer:
         return self._reclaim()
 
     def _put(self, label: str, expr: str) -> str:
+        safe = _label(label)
+        expr = expr.replace(f'("{label}"', f'("{safe}"', 1)
+        label = safe
         # FluentControl labware names are unique for the whole script, even
         # after the first one was removed.
         taken = set(self.labels.values())
@@ -238,6 +248,7 @@ class _Writer:
         return self._put(label, f'{cls}("{label}", catalog="{catalog}")')
 
     def slim_trough(self, label: str, need_ul: float) -> str:
+        label = _label(label)
         """A slim trough on a trough site, for reagents the FCA dispenses."""
         if not self.deck.free_trough_sites:
             raise ValueError("skeleton: the deck has no free trough site left for an FCA reagent")
@@ -257,6 +268,7 @@ class _Writer:
         return self.fca_boxes[-1]
 
     def trough(self, label: str, *, large: bool) -> str:
+        label = _label(label)
         """An MCA-compatible SBS reservoir: large ones on a 7 mm nest, small on a plate nest."""
         if large and self.deck.free_large_sites:
             loc, pos = self.deck.free_large_sites.pop(0)
@@ -406,7 +418,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         """Slim trough for a reagent the FCA dispenses (one per reagent)."""
         key = f"fca:{reagent.id}"
         if key not in trough_vars:
-            trough_vars[key] = [w.slim_trough(f"{reagent.id}_trough", need_ul)]
+            trough_vars[key] = [w.slim_trough(_label(f"{reagent.id}_trough"), need_ul)]
             fill_estimate[trough_vars[key][0]] = 0.0
             reagent_of[key] = reagent
         fill_estimate[trough_vars[key][0]] += need_ul
@@ -419,7 +431,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         cap = _LARGE_RESERVOIR_FILL_UL if troughs and troughs[-1] in large_troughs else _RESERVOIR_FILL_UL
         if not troughs or fill_estimate[troughs[-1]] + need_ul > cap:
             use_large = large and bool(deck.free_large_sites)
-            troughs.append(w.trough(f"{reagent.id}_trough", large=use_large))
+            troughs.append(w.trough(_label(f"{reagent.id}_trough"), large=use_large))
             if use_large:
                 large_troughs.add(troughs[-1])
             fill_estimate[troughs[-1]] = 0.0
@@ -711,7 +723,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             continue
 
         if step.op in {"add", "transfer", "mix"} and reagent is not None and reagent.role == "per_sample":
-            source = w.plate(f"{reagent.id}_Plate")
+            source = w.plate(_label(f"{reagent.id}_Plate"))
             per_well = reagent.supply_ul if reagent.supply_ul is not None else (step.volume_ul or 1.0) * 2
             w.fills.append(f"    {source}.fill_all({reagent_var(reagent)}, {per_well:g})")
             tips = w.mca_box(f"{step.id}_Tips")
