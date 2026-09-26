@@ -22,9 +22,12 @@ _SYSTEM_PROMPT = (
     "fluentvibe Python API. You are given the whole file for context, a selected "
     "region, and an instruction. Rewrite ONLY the selected region to satisfy the "
     "instruction. Preserve the surrounding indentation. Use only fluentvibe API "
-    "that already appears in the file or is clearly analogous. Return ONLY the "
-    "replacement Python for the selected region — no explanations, no markdown "
-    "code fences."
+    "that already appears in the file or is clearly analogous. To add a reagent to "
+    "every well you may use wt.add(reagent, to=plate, volume_ul=..., head='fca'|'mca', "
+    "liquid_class_var='LC_NAME', columns=[...]): it places and fills the source trough "
+    "and the tips itself, and honours head / liquid_class_var as requirements. Return "
+    "ONLY the replacement Python for the selected region — no explanations, no "
+    "markdown code fences."
 )
 
 _FENCE_RE = re.compile(r"^```[\w-]*\n(.*)\n```$", re.DOTALL)
