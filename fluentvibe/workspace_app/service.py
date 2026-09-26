@@ -305,6 +305,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "finished_at": job["finished_at"],
         "result": job["result"],
         "progress": list(job.get("progress") or []),
+        "question": job.get("question"),
         "error": job["error"],
         "queue_s": round(queue_s, 3),
         "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
@@ -327,6 +328,43 @@ def _job_handlers() -> dict[str, Any]:
             "replay-source": _job_replay_source,
         }
     return _JOB_HANDLERS
+
+
+_ANSWER_EVENTS: dict[str, threading.Event] = {}
+
+
+def answer_job(payload: dict[str, Any]) -> dict[str, Any]:
+    """Answer the question a waiting job asked (empty answer: let it stop)."""
+    job_id = str(payload.get("id") or "")
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        event = _ANSWER_EVENTS.get(job_id)
+        if job is None or event is None or not job.get("question"):
+            raise ValueError("this job is not waiting for an answer")
+        job["answer"] = str(payload.get("answer") or "").strip()
+        job["question"] = None
+    event.set()
+    return {"ok": True}
+
+
+def _job_ask(payload: dict[str, Any], questions: list[str], timeout_s: float = 1800.0) -> str | None:
+    """Pause the job with ``questions`` until the page answers (or time runs out)."""
+    job_id = payload.get("_job_id")
+    event = threading.Event()
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            return None
+        job["question"] = list(questions)
+        job["answer"] = None
+        _ANSWER_EVENTS[job_id] = event
+    _job_progress(payload, "waiting for your answer")
+    answered = event.wait(timeout_s)
+    with _JOB_LOCK:
+        _ANSWER_EVENTS.pop(job_id, None)
+        job = _JOBS.get(job_id) or {}
+        job["question"] = None
+        return (job.get("answer") or None) if answered else None
 
 
 def _job_progress(payload: dict[str, Any], message: str) -> None:
@@ -364,7 +402,9 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     os.environ[PROFILE_DIR_ENV] = str(profile_dir)
     result = author_from_document(
         LMStudioChatClient(request_timeout_s=1800), document, profile_dir, output_dir,
-        request=request or None, ask=choose_yourself, fluentcontrol=bool(payload.get("fc_check", False)),
+        request=request or None,
+        ask=choose_yourself if payload.get("choose") else (lambda questions: _job_ask(payload, questions)),
+        fluentcontrol=bool(payload.get("fc_check", False)),
         check_requirements=bool(request) and bool(payload.get("check_instructions", True)),
         progress=lambda message: _job_progress(payload, message),
     )

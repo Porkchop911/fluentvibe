@@ -688,11 +688,17 @@
             <span>Document: the files under “Attach files” below, and the Profile above.</span>
             <label><input type="checkbox" id="fastCheckInstructions" checked> check my instructions</label>
             <label><input type="checkbox" id="fastFcCheck"> check in FluentControl</label>
+            <label><input type="checkbox" id="fastChoose"> let the model choose open values</label>
             <button id="fastGenerate">Generate protocol</button>
             <button id="fastReplay" class="secondary" disabled>Show replay</button>
           </div>
           <div class="status" id="fastStatus" aria-live="polite"></div>
           <div class="fp-progress" id="fastProgress"></div>
+          <div id="fastQuestion" hidden>
+            <div class="fp-summary" id="fastQuestionText"></div>
+            <div class="fp-row"><input id="fastAnswer" style="flex:1" placeholder="Your answer">
+              <button id="fastAnswerSend">Answer</button></div>
+          </div>
           <div class="fp-summary" id="fastSummary"></div>
           <div id="fastInstructions"></div>
           <details><summary>Bench Spec</summary><div class="pre" id="fastSpec"></div></details>
@@ -1035,11 +1041,20 @@
             attachments: await buildAuthorAttachmentPayload(),
             check_instructions: $('fastCheckInstructions').checked,
             fc_check: $('fastFcCheck').checked,
+            choose: $('fastChoose').checked,
           });
+          $('fastAnswerSend').onclick = async () => {
+            await post('/api/job-answer', { id: created.job.id, answer: $('fastAnswer').value });
+            $('fastQuestion').hidden = true; $('fastAnswer').value = '';
+          };
           let job;
           while (true) {
             job = (await api(`/api/job?id=${encodeURIComponent(created.job.id)}`)).job;
             $('fastProgress').textContent = (job.progress || []).join('\n');
+            if (job.question && job.question.length) {
+              $('fastQuestionText').textContent = 'The spec leaves this open: ' + job.question.join(' | ');
+              if ($('fastQuestion').hidden) { $('fastQuestion').hidden = false; $('fastAnswer').focus(); }
+            }
             if (job.status === 'queued' || job.status === 'running') {
               setStatus('fastStatus', `generating · ${formatDuration(job.elapsed_s || 0)}`, 'running');
               await sleep(1000);
