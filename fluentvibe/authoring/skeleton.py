@@ -279,6 +279,8 @@ _LARGE_RESERVOIR_FILL_UL = 250000.0
 # What one pool well receives at most (12 columns into one).
 _POOL_WELL_UL = 300.0
 
+# Deck incubations up to this are room temperature (a wait); warmer ones need a device.
+_ROOM_TEMP_MAX_C = 30.0
 # Most a skeleton 96-well plate well may hold at any point.
 _PLATE_MAX_UL = 330.0
 
@@ -530,6 +532,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             # magnet (DynaMag) still separate on the deck's magnet.
             w.notes.append(f"{step.id}: separation runs on the deck magnet")
             step = replace(step, location="deck")
+        if step.op == "incubate" and step.location == "deck" and any(t > _ROOM_TEMP_MAX_C for t in step.temp_c):
+            # The deck has no heater: a warm incubation is an operator step.
+            w.notes.append(f"{step.id}: {max(step.temp_c):g} C incubation handed to the operator")
+            step = replace(step, location="off_deck")
         if step.location != "deck" or step.op in {"measure", "manual"}:
             pending_offdeck.append(step)
             continue
@@ -732,10 +738,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             current, well_ul = dest, vol
             continue
 
-        if step.op == "incubate" and not step.temp_c:
+        if step.op == "incubate":  # room temperature (warmer ones went to the operator above)
             seconds = int(sum(step.minutes) * 60) if step.minutes else 300
+            assumed_time = "" if step.minutes else ", ASSUMED: 5 min"
             w.body.append(f"    wt.group({label})")
-            w.body.append(f"    wt.wait(duration_seconds={seconds})  # room temperature")
+            w.body.append(f"    wt.wait(duration_seconds={seconds})  # room temperature{assumed_time}")
             continue
 
         # Anything else on the deck: leave it for review.

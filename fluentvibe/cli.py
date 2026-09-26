@@ -912,7 +912,8 @@ def _cmd_author_spec(args) -> int:
         (args.output / "draft.py").write_text(result.source, encoding="utf-8")
     (args.output / "result.json").write_text(_json.dumps(result.summary(), indent=2, ensure_ascii=False), encoding="utf-8")
     print(_json.dumps(result.summary(), indent=2, ensure_ascii=False))
-    return 0 if result.stage == "done" and result.summary()["fc_ok"] is not False else 1
+    summary = result.summary()
+    return 0 if result.stage == "done" and summary["fc_ok"] is not False and not summary["todo_steps"] else 1
 
 
 def _cmd_skeleton(args) -> int:
