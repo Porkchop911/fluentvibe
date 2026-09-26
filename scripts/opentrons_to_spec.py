@@ -502,7 +502,11 @@ def _merge(steps: list[dict]) -> list[dict]:
 
 
 def convert(protocol_dir: Path, hardware_dir: Path | None = None) -> dict:
-    protocol = next((p for p in sorted(protocol_dir.glob("*.py"))), None)
+    # A single protocol file is accepted too (its folder may hold others).
+    if protocol_dir.is_file():
+        protocol, protocol_dir = protocol_dir, protocol_dir.parent
+    else:
+        protocol = next((p for p in sorted(protocol_dir.glob("*.py"))), None)
     if protocol is None:
         raise FileNotFoundError(f"no .py protocol in {protocol_dir}")
     runlog, printed = _simulate(protocol, hardware_dir)
@@ -554,7 +558,7 @@ def _convert_one(directory: Path, out: Path) -> dict:
     row = {"protocol": directory.name}
     try:
         spec = convert(directory, out)
-        (out / f"{directory.name}.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
+        (out / f"{directory.stem if directory.is_file() else directory.name}.json").write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
         row.update(status="ok", steps=len(spec["steps"]),
                    ops=dict(Counter(s["op"] for s in spec["steps"])))
     except Exception as exc:  # noqa: BLE001 - record and continue
@@ -565,7 +569,8 @@ def _convert_one(directory: Path, out: Path) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("protocols", nargs="+", type=Path, help="protocol directories (or a corpus root with --all)")
+    ap.add_argument("protocols", nargs="+", type=Path,
+                    help="protocol directories or .py files (or a corpus root with --all)")
     ap.add_argument("--all", action="store_true", help="treat each argument as a corpus root")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--timeout", type=float, default=120.0, help="seconds per protocol (default 120)")

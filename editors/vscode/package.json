@@ -21,7 +21,8 @@
     "onLanguage:python",
     "onCommand:fluentvibe.generateFromDocument",
     "onCommand:fluentvibe.openInFluentControl",
-    "onCommand:fluentvibe.pullFluentControlEdits"
+    "onCommand:fluentvibe.pullFluentControlEdits",
+    "onCommand:fluentvibe.convertOpentrons"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -41,6 +42,10 @@
       {
         "command": "fluentvibe.pullFluentControlEdits",
         "title": "fluentvibe: Pull FluentControl edits"
+      },
+      {
+        "command": "fluentvibe.convertOpentrons",
+        "title": "fluentvibe: Convert Opentrons protocol"
       }
     ],
     "keybindings": [

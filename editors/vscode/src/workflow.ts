@@ -263,3 +263,59 @@ export async function pullFluentControlEdits(): Promise<void> {
 export function clearFluentControlDiagnostics(doc: vscode.TextDocument): void {
   fcDiagnostics.delete(doc.uri);
 }
+
+export async function convertOpentrons(): Promise<void> {
+  const picked = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    openLabel: "Convert to FluentControl",
+    filters: { "Opentrons protocol": ["py"] },
+  });
+  if (!picked?.length) {
+    return;
+  }
+  const file = picked[0].fsPath;
+  const stem = path.basename(file, ".py").replace(/[^0-9A-Za-z_-]+/g, "_").slice(0, 40);
+  const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+  const outDir = resolveInRoot(path.join(settings().get<string>("outputDir", "build/eval"), `ot-${stem}-${stamp}`));
+  const args = ["opentrons", file, "--profile", resolveInRoot(settings().get<string>("profile", "")), "-o", outDir];
+  if (settings().get<boolean>("fluentControlCheck", true)) {
+    args.push("--fc-check");
+  }
+  output.clear();
+  output.show(true);
+  output.appendLine(`Opentrons protocol: ${file}`);
+  const started = Date.now();
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: Opentrons → FluentControl" },
+    (progress) =>
+      runCli(args, (line) => {
+        output.appendLine(line);
+        const m = /^progress: (.*)$/.exec(line);
+        if (m) {
+          progress.report({ message: `${m[1]} (${Math.round((Date.now() - started) / 1000)} s)` });
+        }
+      })
+  );
+  const secs = Math.round((Date.now() - started) / 1000);
+  const resultPath = path.join(outDir, "result.json");
+  if (!fs.existsSync(resultPath)) {
+    vscode.window.showErrorMessage(`fluentvibe: conversion failed after ${secs} s — see the fluentvibe output.`);
+    return;
+  }
+  const summary = JSON.parse(fs.readFileSync(resultPath, "utf8"));
+  const specMd = path.join(outDir, "spec.md");
+  const draft = path.join(outDir, "draft.py");
+  if (fs.existsSync(specMd)) {
+    await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.file(specMd));
+  }
+  if (fs.existsSync(draft)) {
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(draft), vscode.ViewColumn.One);
+  }
+  const fc = summary.fc_ok === true ? "FluentControl: no InfoPad errors" :
+    summary.fc_ok === false ? `FluentControl: ${summary.fc_findings.length} finding(s)` : "compiled and simulated";
+  if (summary.stage === "done") {
+    vscode.window.showInformationMessage(`fluentvibe: Opentrons protocol converted in ${secs} s — ${fc}.`);
+  } else {
+    vscode.window.showWarningMessage(`fluentvibe: stopped at ${summary.stage}: ${summary.error ?? ""}`);
+  }
+}
