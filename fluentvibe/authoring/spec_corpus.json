@@ -4,7 +4,7 @@
   "family": "protein-assay",
   "title": "Variables Cell Lysis and BCA protocol - Part 2",
   "description": "",
-  "sample_count": 5,
+  "sample_count": 8,
   "steps": [
    {
     "id": "s1",
@@ -636,7 +636,7 @@
   "family": "ngs-library-prep",
   "title": "AMPure XP 48x v8",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -845,7 +845,7 @@
   "family": "protein-assay",
   "title": "Sample Prep for MS (EasyPep Digestion and TMT Labeling) - Flex w/ Thermal Cycler",
   "description": "",
-  "sample_count": 12,
+  "sample_count": 72,
   "steps": [
    {
     "id": "s1",
@@ -901,7 +901,7 @@
   "family": "ngs-library-prep",
   "title": "cDNA capture and Amplification using PBMC cells",
   "description": "cDNA Capture and Amplification protocol using the Flex with Evercode WT v3 kit",
-  "sample_count": 13,
+  "sample_count": 17,
   "steps": [
    {
     "id": "s1",
@@ -1248,7 +1248,7 @@
   "family": "pcr-setup",
   "title": "Universal_test_Protocol_Demo_Flex with Plate reader_May2025",
   "description": "",
-  "sample_count": 22,
+  "sample_count": 26,
   "steps": [
    {
     "id": "s1",
@@ -1262,7 +1262,7 @@
    {
     "id": "s2",
     "op": "manual",
-    "text": "20260924-13.34.58_Single Detection Result: {450: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260926-17.12.40_Single Detection Result: {450: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1277,7 +1277,7 @@
    {
     "id": "s4",
     "op": "manual",
-    "text": "20260924-13.34.58_Single Detection Result: {562: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260926-17.12.41_Single Detection Result: {562: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1292,7 +1292,7 @@
    {
     "id": "s6",
     "op": "manual",
-    "text": "20260924-13.34.58_Single Detection Result: {600: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260926-17.12.41_Single Detection Result: {600: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1307,7 +1307,7 @@
    {
     "id": "s8",
     "op": "manual",
-    "text": "20260924-13.34.58_Single Detection Result: {650: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260926-17.12.41_Single Detection Result: {650: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1345,7 +1345,7 @@
   "family": "pooling",
   "title": "Forenseq DNA Signature Prep Plus Kit - Pool and Denature",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 8,
   "steps": [
    {
     "id": "s1",
@@ -1452,7 +1452,7 @@
   "family": "bead-cleanup",
   "title": "Omega Bio-tek Mag-Bind Blood & Tissue DNA HDQ 96 Kit- Mammalian Cells",
   "description": "",
-  "sample_count": 6,
+  "sample_count": 12,
   "steps": [
    {
     "id": "s1",
@@ -1497,7 +1497,7 @@
   "family": "bead-cleanup",
   "title": "Omega HDQ DNA Extraction from Cells",
   "description": "",
-  "sample_count": 8,
+  "sample_count": 9,
   "steps": [
    {
     "id": "s1",
@@ -1545,7 +1545,7 @@
   "family": "bead-cleanup",
   "title": "Omega HDQ DNA Extraction from Saliva",
   "description": "",
-  "sample_count": 8,
+  "sample_count": 9,
   "steps": [
    {
     "id": "s1",
@@ -1958,7 +1958,7 @@
   "family": "ngs-library-prep",
   "title": "Illumina PCR-Free DNA Prep",
   "description": "",
-  "sample_count": 6,
+  "sample_count": 10,
   "steps": [
    {
     "id": "s1",
@@ -2052,7 +2052,7 @@
   "family": "ngs-library-prep",
   "title": "Illumina Stranded mRNA Prep,Ligation",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 8,
   "steps": [
    {
     "id": "s1",
@@ -2073,7 +2073,7 @@
    },
    {
     "id": "s3",
-    "op": "pool",
+    "op": "transfer",
     "text": "LIGATE ANCHORS (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
     "location": "deck",
     "volume_ul": 3.75
@@ -2252,24 +2252,17 @@
   "family": "ngs-library-prep",
   "title": "Illumina Stranded Total RNA Prep, Ligation with Ribo-Zero Plus, Tip Tracking",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 11,
   "steps": [
    {
     "id": "s1",
-    "op": "pool",
+    "op": "transfer",
     "text": "Start (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
     "location": "deck",
-    "volume_ul": 4.5
+    "volume_ul": 5.0
    },
    {
     "id": "s2",
-    "op": "transfer",
-    "text": "REMOVE PROBES (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
-    "location": "deck",
-    "volume_ul": 10.0
-   },
-   {
-    "id": "s3",
     "op": "bead_cleanup",
     "text": "CLEANUP RNA",
     "location": "deck",
@@ -2279,14 +2272,14 @@
     "elute_ul": 19.5
    },
    {
-    "id": "s4",
-    "op": "pool",
+    "id": "s3",
+    "op": "transfer",
     "text": "LIGATE ANCHORS (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_1)",
     "location": "deck",
     "volume_ul": 3.75
    },
    {
-    "id": "s5",
+    "id": "s4",
     "op": "bead_cleanup",
     "text": "CLEANUP FRAGMENTS",
     "location": "deck",
@@ -2626,7 +2619,7 @@
   "family": "ngs-library-prep",
   "title": "KAPA HyperPlus Library Preparation",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -2639,7 +2632,7 @@
    },
    {
     "id": "s2",
-    "op": "pool",
+    "op": "add",
     "text": "Adding 50 ul tip rack #1 to slot A2 (Temp Module Reservoir Plate -> Sample Pate)",
     "location": "deck",
     "volume_ul": 12.5
@@ -2653,7 +2646,7 @@
    },
    {
     "id": "s4",
-    "op": "pool",
+    "op": "transfer",
     "text": "Wash # 1 with Ethanol (NEST 96 Deep Well Plate 2mL -> Sample Pate)",
     "location": "deck",
     "volume_ul": 160.0
@@ -2670,7 +2663,7 @@
    },
    {
     "id": "s6",
-    "op": "pool",
+    "op": "transfer",
     "text": "Wash # 1 with Ethanol (NEST 96 Deep Well Plate 2mL -> Sample Pate)",
     "location": "deck",
     "volume_ul": 160.0
@@ -2689,7 +2682,7 @@
   "family": "ngs-library-prep",
   "title": "Nanopore Genomic Ligation 24x v5",
   "description": "",
-  "sample_count": 4,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -2969,7 +2962,7 @@
   "family": "bead-cleanup",
   "title": "Promega MagneSil Purification",
   "description": "",
-  "sample_count": 8,
+  "sample_count": 11,
   "steps": [
    {
     "id": "s1",
@@ -3049,7 +3042,7 @@
   "family": "bead-cleanup",
   "title": "Promega MagneSil Total RNA Extraction from Cells & Bacteria",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 7,
   "steps": [
    {
     "id": "s1",
@@ -3330,7 +3323,7 @@
   "family": "bead-cleanup",
   "title": "Omega Bio-Tek Mag-Bind Environmental DNA 96 Kit",
   "description": "",
-  "sample_count": 2,
+  "sample_count": 3,
   "steps": [
    {
     "id": "s1",
@@ -3429,7 +3422,7 @@
   "family": "ngs-library-prep",
   "title": "PacBio Hifi Prep 96",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -3489,7 +3482,7 @@
   "family": "ngs-library-prep",
   "title": "PacBio SRE and Shearing",
   "description": "",
-  "sample_count": 2,
+  "sample_count": 5,
   "steps": [
    {
     "id": "s1",
@@ -4108,17 +4101,10 @@
    },
    {
     "id": "s3",
-    "op": "pool",
+    "op": "add",
     "text": "Prepare Control Well in A1 (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
     "location": "deck",
     "volume_ul": 5.5
-   },
-   {
-    "id": "s4",
-    "op": "add",
-    "text": "Adding Master Mix 1 to Plate (Opentrons 24 Well Aluminum Block with NEST 1.5 mL Snapcap -> Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt)",
-    "location": "deck",
-    "volume_ul": 4.5
    }
   ]
  },
@@ -4127,7 +4113,7 @@
   "family": "bead-cleanup",
   "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 3 Post-Multiplex PCR Cleanup",
   "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
-  "sample_count": 3,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -4175,7 +4161,7 @@
   "family": "bead-cleanup",
   "title": "IDT xGen SARS-CoV2 Gene Sequencing Protocol - Part 5 Post-Indexing PCR Cleanup",
   "description": "Next generation sequencing (NGS) workfow for Illumina™ sequencing platforms using multiplex PCR technology, enabling library construction from frst-strand cDNA",
-  "sample_count": 3,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -4447,7 +4433,7 @@
   "family": "ngs-library-prep",
   "title": "Chromium 3ʹ OCM GEM-X Single Cell (Dual Index) - Day 1",
   "description": "10X Genomics PN-1000268 & PN-1000269",
-  "sample_count": 2,
+  "sample_count": 5,
   "steps": [
    {
     "id": "s1",
@@ -4667,7 +4653,7 @@
   "family": "ngs-library-prep",
   "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 1 -\n    RNA Isolation, Fragmentation and Priming",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 4,
   "steps": [
    {
     "id": "s1",
@@ -4871,7 +4857,7 @@
   "family": "ngs-library-prep",
   "title": "NEBNext Ultra II Directional RNA Library Prep Kit\n    for Illumina with poly(A) selection: part 4 -\n    PCR Enrichment and Bead Clean Up",
   "description": "",
-  "sample_count": 5,
+  "sample_count": 6,
   "steps": [
    {
     "id": "s1",
@@ -5025,7 +5011,7 @@
   "family": "ngs-library-prep",
   "title": "QIASeq FX with Normalizer Workflow B 48x v8",
   "description": "",
-  "sample_count": 10,
+  "sample_count": 12,
   "steps": [
    {
     "id": "s1",
@@ -5087,7 +5073,7 @@
   "family": "ngs-library-prep",
   "title": "QIAseq miRNA 48x v8",
   "description": "",
-  "sample_count": 6,
+  "sample_count": 9,
   "steps": [
    {
     "id": "s1",
@@ -5139,7 +5125,7 @@
   "family": "ngs-library-prep",
   "title": "QIAseq Normalizer Workflow A x48 v8",
   "description": "",
-  "sample_count": 6,
+  "sample_count": 7,
   "steps": [
    {
     "id": "s1",
@@ -5181,7 +5167,7 @@
   "family": "ngs-library-prep",
   "title": "QIAseq Targeted DNA 48x v8",
   "description": "",
-  "sample_count": 4,
+  "sample_count": 8,
   "steps": [
    {
     "id": "s1",
@@ -5346,7 +5332,7 @@
   "family": "serial-dilution",
   "title": "QUiCKR V2 kit - part 1",
   "description": "",
-  "sample_count": 9,
+  "sample_count": 12,
   "steps": [
    {
     "id": "s1",
@@ -5409,7 +5395,7 @@
   "family": "ngs-library-prep",
   "title": "Illumina RNA Seq Ribo-Zero Plus Part 1 of 2",
   "description": "",
-  "sample_count": 2,
+  "sample_count": 7,
   "steps": [
    {
     "id": "s1",
@@ -5727,7 +5713,7 @@
   "steps": [
    {
     "id": "s1",
-    "op": "pool",
+    "op": "transfer",
     "text": "REMOVE SUPERNATANT and WASH (working plate -> waste)",
     "location": "deck",
     "volume_ul": 97.5
@@ -5746,7 +5732,7 @@
   "family": "bead-cleanup",
   "title": "Mag-BindÂ® Total RNA 96 Kit",
   "description": "",
-  "sample_count": 1,
+  "sample_count": 4,
   "steps": [
    {
     "id": "s1",
@@ -5916,7 +5902,7 @@
   "family": "bead-cleanup",
   "title": "Zymo Research Direct-zolâ„¢-96 MagBead RNA Kit",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 5,
   "steps": [
    {
     "id": "s1",
@@ -6024,7 +6010,7 @@
   "family": "pooling",
   "title": "seqWell ExpressPlex Library Preparation Part 2 of 2",
   "description": "",
-  "sample_count": 4,
+  "sample_count": 32,
   "steps": [
    {
     "id": "s1",
@@ -6034,7 +6020,7 @@
    },
    {
     "id": "s2",
-    "op": "pool",
+    "op": "transfer",
     "text": "After pause (Ready Reaction Plate 1 -> Pooling Plate)",
     "location": "deck",
     "volume_ul": 12.0
@@ -7248,7 +7234,7 @@
   "family": "purification",
   "title": "DNA Isolation Protocol with 8-Channel Pipette - Rev 3",
   "description": "Isolation of DNA using bead solution and ethanol washes with an 8-channel pipette",
-  "sample_count": 1,
+  "sample_count": 2,
   "steps": [
    {
     "id": "s1",
@@ -7332,7 +7318,7 @@
   "family": "ngs-library-prep",
   "title": "Twist Library Preparation with Enzymatic Fragmention 2.0, tip track",
   "description": "",
-  "sample_count": 3,
+  "sample_count": 4,
   "steps": [
    {
     "id": "s1",
@@ -7346,7 +7332,7 @@
    },
    {
     "id": "s2",
-    "op": "pool",
+    "op": "transfer",
     "text": "Adding 50 ul tip rack #1 to slot A2 (Opentrons Tough 96 Well Plate 200 µL PCR Full Skirt -> Sample_Plate)",
     "location": "deck",
     "volume_ul": 10.0
@@ -7590,11 +7576,11 @@
   "family": "bead-cleanup",
   "title": "Zymo Magbead Quick-RNA- Mammalian Cells",
   "description": "",
-  "sample_count": 1,
+  "sample_count": 4,
   "steps": [
    {
     "id": "s1",
-    "op": "pool",
+    "op": "add",
     "text": "Start (reagent reservoir 1 -> Sample Plate)",
     "location": "deck",
     "volume_ul": 325.0
