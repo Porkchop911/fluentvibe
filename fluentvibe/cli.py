@@ -245,6 +245,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                       help="python with the opentrons package (default: .venv-opentrons in the repo)")
     p_ot.set_defaults(func=_cmd_opentrons)
 
+    p_req = sub.add_parser(
+        "requirements",
+        help="turn instructions into a checklist beside a protocol (<name>.requirements.json) and check it",
+    )
+    p_req.add_argument("draft", type=Path, help="fluentvibe Python protocol")
+    p_req.add_argument("--request", default=None, help="the instructions (a model turns them into a checklist)")
+    p_req.add_argument("--document", type=Path, default=None, help="protocol document the instructions refer to")
+    p_req.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir")
+    p_req.set_defaults(func=_cmd_requirements)
+
     p_fc_open = sub.add_parser(
         "fc-open",
         help="compile a draft and open it in FluentControl (shell script) for checking and editing",
@@ -980,6 +990,44 @@ def _cmd_opentrons(args) -> int:
         summary["fc_findings"] = [f"{f['kind']}: {f['message'][:100]}" for f in fc.get("findings", [])]
     summary["stage"] = "done"
     return finish(0 if summary.get("fc_ok") is not False else 1)
+
+
+def _cmd_requirements(args) -> int:
+    """Write (with --request) and check the protocol's instruction checklist; prints JSON."""
+    import json as _json
+    import os
+
+    from .authoring.eval_rubric import build_worktable_from_source
+    from .authoring.profile import PROFILE_DIR_ENV
+    from .authoring.requirements import (
+        extract_requirements, load_requirements, save_requirements, sidecar_path, verify_all,
+    )
+
+    if args.profile is not None:
+        os.environ[PROFILE_DIR_ENV] = str(args.profile)
+    sidecar = sidecar_path(args.draft)
+    if args.request:
+        from .authoring.lm_client import LMStudioChatClient
+
+        document = None
+        if args.document is not None:
+            from .authoring.attachments import extract_file_text
+
+            document = extract_file_text(args.document)[0]
+        requirements, _dispositions = extract_requirements(LMStudioChatClient(request_timeout_s=1800),
+                                                           args.request, document)
+        save_requirements(sidecar, requirements)
+    if not sidecar.exists():
+        print(f"error: no checklist {sidecar}; give --request", file=sys.stderr)
+        return 1
+    requirements = load_requirements(sidecar)
+    wt = build_worktable_from_source(args.draft.read_text(encoding="utf-8"), str(args.draft))
+    verdicts = verify_all(wt, requirements)
+    texts = {r.id: r.text for r in requirements}
+    print(_json.dumps({"checklist": str(sidecar), "verdicts": [
+        {"id": v.id, "text": texts.get(v.id, ""), "status": v.status, "evidence": v.evidence, "line": v.line}
+        for v in verdicts]}, indent=2, ensure_ascii=False))
+    return 0 if all(v.status == "pass" for v in verdicts) else 1
 
 
 def _cmd_author_spec(args) -> int:

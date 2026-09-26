@@ -10,6 +10,7 @@ import {
 import {
   clearFluentControlDiagnostics,
   convertOpentrons,
+  setInstructions,
   generateFromDocument,
   openInFluentControl,
   pullFluentControlEdits,
@@ -31,6 +32,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("fluentvibe.openInFluentControl", openInFluentControl),
     vscode.commands.registerCommand("fluentvibe.pullFluentControlEdits", pullFluentControlEdits),
     vscode.commands.registerCommand("fluentvibe.convertOpentrons", convertOpentrons),
+    vscode.commands.registerCommand("fluentvibe.setInstructions", setInstructions),
     // InfoPad findings describe the file as it was checked; an edit invalidates them.
     vscode.workspace.onDidChangeTextDocument((e) => clearFluentControlDiagnostics(e.document))
   );

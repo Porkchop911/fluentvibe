@@ -158,3 +158,22 @@ def test_extraction_parses_and_drops_unchecked_duplicates():
 
     reqs, dispositions = extract_requirements(Client(), "use the fca for ethanol; label the plates nicely")
     assert [r.id for r in reqs] == ["R1", "R3"] and dispositions[0]["disposition"] == "excluded"
+
+
+def test_editor_marks_an_unmet_instruction_on_its_line():
+    from fluentvibe.copilot.analyzer import analyze_source
+
+    source = _source()
+    assert analyze_source(source, EXAMPLE) == []          # the sidecar checklist is met
+    broken = source.replace('head="fca", liquid_class_var="LC_ETHANOL"', 'head="mca", liquid_class_var="LC_ETHANOL"')
+    line = next(i for i, text in enumerate(broken.splitlines(), 1) if 'head="mca"' in text)
+    diagnostics = [d for d in analyze_source(broken, EXAMPLE) if d.code == "instruction_not_met"]
+    assert diagnostics and diagnostics[0].line == line and "ethanol" in diagnostics[0].message
+
+
+def test_no_checklist_means_no_instruction_diagnostics(tmp_path):
+    from fluentvibe.copilot.analyzer import analyze_source
+
+    copy = tmp_path / "protocol.py"
+    copy.write_text(_source(), encoding="utf-8")
+    assert not [d for d in analyze_source(_source(), copy) if d.source == "requirements"]

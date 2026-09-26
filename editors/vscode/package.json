@@ -22,7 +22,8 @@
     "onCommand:fluentvibe.generateFromDocument",
     "onCommand:fluentvibe.openInFluentControl",
     "onCommand:fluentvibe.pullFluentControlEdits",
-    "onCommand:fluentvibe.convertOpentrons"
+    "onCommand:fluentvibe.convertOpentrons",
+    "onCommand:fluentvibe.setInstructions"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -46,6 +47,10 @@
       {
         "command": "fluentvibe.convertOpentrons",
         "title": "fluentvibe: Convert Opentrons protocol"
+      },
+      {
+        "command": "fluentvibe.setInstructions",
+        "title": "fluentvibe: Set instructions for this protocol"
       }
     ],
     "keybindings": [
