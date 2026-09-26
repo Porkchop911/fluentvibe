@@ -87,6 +87,14 @@ def _parse_skill(path: Path) -> Skill | None:
     description = str(meta.get("description") or "").strip()
     if not name or axis not in _VALID_AXES or not description:
         return None
+    # ``requires_env: NAME`` — the skill exists only while that variable is
+    # set to a true value (experimental features, off by default).
+    gate = str(meta.get("requires_env") or "").strip()
+    if gate:
+        import os
+
+        if os.environ.get(gate, "").strip().lower() not in {"1", "true", "yes", "on"}:
+            return None
     ws = meta.get("workspace") if isinstance(meta.get("workspace"), dict) else {}
     ws_name = str(ws.get("name") or "").strip() or None
     ws_guid = str(ws.get("guid") or "").strip() or None

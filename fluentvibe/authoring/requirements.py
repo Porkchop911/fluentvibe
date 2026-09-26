@@ -24,6 +24,8 @@ Kinds (``params``):
   a wait of at least that long lies between the two anchors. Anchors:
   ``["add", reagent]`` (the first dispense after aspirating that reagent),
   ``["magnet_on"]`` (the plate moved onto a magnet), ``["magnet_off"]``.
+* ``step_present``: ``step_types`` — the protocol contains one of these
+  operations (e.g. a worklist import for a CSV-driven step).
 """
 
 from __future__ import annotations
@@ -227,7 +229,16 @@ def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
     return Verdict(req.id, PASS, f"{total:g} s of waiting between line {first.line} and line {last.line}")
 
 
+def _check_step_present(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    kinds = {str(k) for k in req.params["step_types"]}
+    found = [op for op in ops if type(op.step).__name__ in kinds]
+    if not found:
+        return Verdict(req.id, FAIL, f"no {' / '.join(sorted(kinds))} in the protocol")
+    return Verdict(req.id, PASS, f"{len(found)} x {type(found[0].step).__name__}, first at line {found[0].line}")
+
+
 _CHECKS = {
+    "step_present": _check_step_present,
     "head_for_reagent": _check_head,
     "liquid_class_variables": _check_lc_variables,
     "wait_between": _check_wait_between,
