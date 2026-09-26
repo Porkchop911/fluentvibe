@@ -98,6 +98,8 @@ class SpecStep:
     engage: bool | None = None
     # Numeric fields the model chose because the document leaves them open.
     proposed: list[str] = field(default_factory=list)
+    # add: which head dispenses, when the request says so ("fca" / "mca").
+    head: str | None = None
 
 
 @dataclass
@@ -109,6 +111,8 @@ class BenchSpec:
     steps: list[SpecStep]
     notes: list[str] = field(default_factory=list)
     spec_version: int = SPEC_VERSION
+    # The request wants liquid classes as FluentControl string variables.
+    liquid_class_variables: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -179,6 +183,7 @@ def bench_spec_json_schema() -> dict[str, Any]:
                         "residual_ul": {"type": ["number", "null"]},
                         "cycles": {"type": ["integer", "null"]},
                         "engage": {"type": ["boolean", "null"]},
+                        "head": {"type": ["string", "null"], "enum": ["fca", "mca", None]},
                         "proposed": {"type": "array", "items": {"type": "string",
                                                                  "enum": list(_NUMERIC_STEP_FIELDS)}},
                         "source_quote": {"type": ["string", "null"]},
@@ -186,6 +191,7 @@ def bench_spec_json_schema() -> dict[str, Any]:
                 },
             },
             "notes": {"type": "array", "items": {"type": "string"}},
+            "liquid_class_variables": {"type": "boolean"},
         },
     }
 
@@ -279,6 +285,7 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
             cycles=int(cycles) if isinstance(cycles, (int, float)) and not isinstance(cycles, bool) else None,
             engage=engage if isinstance(engage, bool) else None,
             proposed=proposed,
+            head=str(item.get("head")).lower() if str(item.get("head") or "").lower() in {"fca", "mca"} else None,
         ))
     if not title:
         return None, problems
@@ -289,6 +296,7 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
         reagents=reagents,
         steps=steps,
         notes=[str(n) for n in raw.get("notes") or []],
+        liquid_class_variables=bool(raw.get("liquid_class_variables", False)),
     )
     return spec, problems
 
@@ -518,6 +526,13 @@ Macros, only when the document really does exactly this:
   washes, keeping the beads) is written as primitives.
 - pool: samples combined into one container.
 - custom: only if no primitive fits; say why in text.
+
+Instructions in the request about HOW the robot works are part of the spec:
+- "head" on an add step: "fca" or "mca" when the request says which head
+  (FCA = 8-channel arm, MCA = 96-channel head) dispenses that reagent;
+  otherwise null (the deck decides).
+- "liquid_class_variables": true when the request asks for the liquid
+  classes as (string) variables.
 
 Rules:
 - Numbers from the document go in their fields as written.
