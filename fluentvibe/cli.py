@@ -214,6 +214,21 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_skeleton.add_argument("--output", "-o", type=Path, default=None)
     p_skeleton.set_defaults(func=_cmd_skeleton)
 
+    p_author_spec = sub.add_parser(
+        "author-spec",
+        help="document -> Bench Spec -> protocol draft on a deck profile, asking about open values",
+    )
+    p_author_spec.add_argument("document", type=Path, help="protocol document (PDF, DOCX, text)")
+    p_author_spec.add_argument("--profile", type=Path, required=True, help="workspace-app profile dir")
+    p_author_spec.add_argument("--output", "-o", type=Path, required=True, help="directory for spec, draft, checks")
+    p_author_spec.add_argument("--request", default=None, help="what to automate (scope, sample count)")
+    p_author_spec.add_argument("--choose", action="store_true",
+                               help="do not ask: the model chooses open values within the deck and kit limits")
+    p_author_spec.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
+    p_author_spec.add_argument("--endpoint", default=None)
+    p_author_spec.add_argument("--model", default=None)
+    p_author_spec.set_defaults(func=_cmd_author_spec)
+
     p_fc_open = sub.add_parser(
         "fc-open",
         help="compile a draft and open it in FluentControl (shell script) for checking and editing",
@@ -852,6 +867,49 @@ def _cmd_fc_pull(args) -> int:
     print(roundtrip_message(changes))
     print(f"\nWrote {report}")
     return 0
+
+
+def _cmd_author_spec(args) -> int:
+    import json as _json
+    import os
+
+    from .authoring.attachments import extract_file_text
+    from .authoring.bench_spec import spec_to_markdown
+    from .authoring.lm_client import LMStudioChatClient
+    from .authoring.profile import PROFILE_DIR_ENV
+    from .authoring.spec_path import author_from_document, choose_yourself
+
+    os.environ[PROFILE_DIR_ENV] = str(args.profile)
+    text, _method, _pages, warnings = extract_file_text(args.document)
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    kwargs: dict[str, Any] = {}
+    if args.endpoint:
+        kwargs["endpoint"] = args.endpoint
+    if args.model:
+        kwargs["model"] = args.model
+
+    def ask_terminal(questions: list[str]) -> str | None:
+        print("\nThe spec leaves these open:")
+        for q in questions:
+            print(f"  - {q}")
+        answer = input("Answer (empty to stop): ").strip()
+        return answer or None
+
+    args.output.mkdir(parents=True, exist_ok=True)
+    result = author_from_document(
+        LMStudioChatClient(**kwargs), text, args.profile, args.output, request=args.request,
+        ask=choose_yourself if args.choose else ask_terminal, fluentcontrol=args.fc_check,
+    )
+    if result.spec_raw is not None:
+        (args.output / "spec.json").write_text(_json.dumps(result.spec_raw, indent=2, ensure_ascii=False), encoding="utf-8")
+    if result.spec is not None:
+        (args.output / "spec.md").write_text(spec_to_markdown(result.spec, result.problems), encoding="utf-8")
+    if result.source is not None:
+        (args.output / "draft.py").write_text(result.source, encoding="utf-8")
+    (args.output / "result.json").write_text(_json.dumps(result.summary(), indent=2, ensure_ascii=False), encoding="utf-8")
+    print(_json.dumps(result.summary(), indent=2, ensure_ascii=False))
+    return 0 if result.stage == "done" and result.summary()["fc_ok"] is not False else 1
 
 
 def _cmd_skeleton(args) -> int:
