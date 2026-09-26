@@ -528,9 +528,12 @@ def convert(protocol_dir: Path, hardware_dir: Path | None = None) -> dict:
         first = next((line.strip("# ").strip() for line in readme.read_text(encoding="utf-8", errors="replace").splitlines()
                       if line.startswith("#")), None)
         title = first or title
+    # Samples: the most wells any labware has touched. Aspirates count too: a
+    # pooling protocol draws from N sample wells into one tube, and counting
+    # only dispenses gave it a single sample.
     wells = defaultdict(set)
     for e in events:
-        if e.get("labware") and e["kind"] == "dispense":
+        if e.get("labware") and e["kind"] in ("dispense", "aspirate"):
             wells[e["labware"]].add(e["well"])
     sample_count = max((len(w) for w in wells.values()), default=1)
     return {
