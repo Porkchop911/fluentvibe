@@ -530,6 +530,14 @@
       animation: author-blink 1s infinite;
     }
     @keyframes author-blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+    .fast-path { border: 1px solid var(--line, #d0d7de); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .fast-path > summary { cursor: pointer; font-weight: 600; }
+    .fast-path textarea { min-height: 54px; width: 100%; }
+    .fast-path .fp-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+    .fast-path .fp-progress { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; max-height: 140px; overflow: auto; }
+    .fast-path table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
+    .fast-path td, .fast-path th { border-bottom: 1px solid var(--line, #d0d7de); padding: 4px 6px; text-align: left; vertical-align: top; }
+    .fast-path .fp-summary { font-weight: 600; margin-top: 6px; }
     .author-extras {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -671,6 +679,23 @@
           </div>
           <div class="status" id="authorStatus" aria-live="polite"></div>
         </div>
+
+        <details class="fast-path" id="fastPath" open>
+          <summary>Document → protocol (fast path, instructions checked)</summary>
+          <label for="fastRequest">What should be automated? Instructions here are checked on the protocol.</label>
+          <textarea id="fastRequest" placeholder="e.g. 20 ul PCR samples, whole plate, Abgene plates, beads/ethanol/elution buffer via the FCA, liquid classes as string variables"></textarea>
+          <div class="fp-row">
+            <span>Document: the files under “Attach files” below, and the Profile above.</span>
+            <label><input type="checkbox" id="fastCheckInstructions" checked> check my instructions</label>
+            <label><input type="checkbox" id="fastFcCheck"> check in FluentControl</label>
+            <button id="fastGenerate">Generate protocol</button>
+          </div>
+          <div class="status" id="fastStatus" aria-live="polite"></div>
+          <div class="fp-progress" id="fastProgress"></div>
+          <div class="fp-summary" id="fastSummary"></div>
+          <div id="fastInstructions"></div>
+          <details><summary>Bench Spec</summary><div class="pre" id="fastSpec"></div></details>
+        </details>
 
         <div class="author-chat" id="authorChat" role="log" aria-live="polite"></div>
 
@@ -979,10 +1004,66 @@
 
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+    function bindFastPath() {
+      const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
+      $('fastGenerate').addEventListener('click', async () => {
+        const profile = $('authorProfile').value;
+        if (!profile) { setStatus('fastStatus', 'Choose a profile first.', 'error'); return; }
+        $('fastGenerate').disabled = true;
+        $('fastProgress').textContent = ''; $('fastSummary').textContent = '';
+        $('fastInstructions').innerHTML = ''; $('fastSpec').textContent = '';
+        try {
+          const created = await post('/api/jobs/author-spec', {
+            profile_name: profile,
+            request: $('fastRequest').value,
+            attachments: await buildAuthorAttachmentPayload(),
+            check_instructions: $('fastCheckInstructions').checked,
+            fc_check: $('fastFcCheck').checked,
+          });
+          let job;
+          while (true) {
+            job = (await api(`/api/job?id=${encodeURIComponent(created.job.id)}`)).job;
+            $('fastProgress').textContent = (job.progress || []).join('\n');
+            if (job.status === 'queued' || job.status === 'running') {
+              setStatus('fastStatus', `generating · ${formatDuration(job.elapsed_s || 0)}`, 'running');
+              await sleep(1000);
+              continue;
+            }
+            break;
+          }
+          if (job.status === 'failure') {
+            setStatus('fastStatus', job.error ? job.error.message : 'failed', 'error');
+            return;
+          }
+          const r = job.result, sm = r.summary || {};
+          const ins = sm.instructions || {};
+          const fc = sm.fc_ok === true ? 'FluentControl: no InfoPad errors' :
+            sm.fc_ok === false ? `FluentControl: ${(sm.fc_findings || []).length} finding(s)` : 'compiled and simulated';
+          setStatus('fastStatus', `${sm.stage} in ${formatDuration(job.elapsed_s || 0)}`, sm.stage === 'done' ? 'ok' : 'error');
+          $('fastSummary').textContent = sm.stage === 'done'
+            ? `${fc}` + (ins.total ? ` · your instructions: ${ins.verified}/${ins.total} verified` +
+                (ins.failed ? `, ${ins.failed} NOT met` : '') + (ins.unverified ? `, ${ins.unverified} not checkable` : '') : '')
+            : `Stopped at ${sm.stage}: ${sm.error || ''}`;
+          if ((r.requirements || []).length) {
+            $('fastInstructions').innerHTML = '<table><tr><th></th><th>Instruction</th><th>Evidence</th></tr>' +
+              r.requirements.map(q => `<tr><td>${icon[q.status] || '⚪'}</td><td>${escapeHtml(q.text)}</td><td>${escapeHtml(q.evidence)}</td></tr>`).join('') +
+              '</table>';
+          }
+          $('fastSpec').textContent = r.spec_markdown || '';
+          if (r.source) { $('generatedCode').value = r.source; }
+        } catch (err) {
+          setStatus('fastStatus', String(err.message || err), 'error');
+        } finally {
+          $('fastGenerate').disabled = false;
+        }
+      });
+    }
+
     async function init() {
       bindTabs();
       bindSetup();
       bindWorkbench();
+      bindFastPath();
       try {
         await loadCapabilities();
         const [configs, workspaces, liquidClasses] = await Promise.all([
