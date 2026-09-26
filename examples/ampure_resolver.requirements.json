@@ -1,0 +1,13 @@
+[
+  {"id": "R1", "text": "be sure to use the fca to dispense the beads", "kind": "head_for_reagent",
+   "params": {"reagent": "AMPure", "head": "fca"}},
+  {"id": "R2", "text": "be sure to use the fca to dispense the ... elutionbuffer", "kind": "head_for_reagent",
+   "params": {"reagent": "Elution buffer", "head": "fca"}},
+  {"id": "R3", "text": "be sure to use the fca to dispense the ... ethanol from troughs", "kind": "head_for_reagent",
+   "params": {"reagent": "ethanol", "head": "fca"}},
+  {"id": "R4", "text": "use string variables for the different liquid classes, set their default value to water free single",
+   "kind": "liquid_class_variables", "params": {"default": "Water Free Single", "mix_default": "Water Mix"},
+   "disposition": "clarified: mixing cannot use Water Free Single (FluentControl requires a Mix section); mixes use a string variable defaulting to Water Mix"},
+  {"id": "R5", "text": "Let the mixed samples incubate for 5 minutes at room temperature", "kind": "wait_between",
+   "params": {"after": ["add", "AMPure"], "before": ["magnet_on"], "min_seconds": 300}}
+]
