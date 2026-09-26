@@ -244,7 +244,9 @@ def submit_job(kind: str, payload: dict[str, Any] | None = None) -> dict[str, An
         "finished_at": None,
         "result": None,
         "error": None,
+        "progress": [],
     }
+    payload["_job_id"] = job_id  # lets long jobs report progress lines
     with _JOB_LOCK:
         _JOBS[job_id] = job
     thread = threading.Thread(
@@ -302,6 +304,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "started_at": job["started_at"],
         "finished_at": job["finished_at"],
         "result": job["result"],
+        "progress": list(job.get("progress") or []),
         "error": job["error"],
         "queue_s": round(queue_s, 3),
         "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
@@ -320,8 +323,65 @@ def _job_handlers() -> dict[str, Any]:
             "catalog-refresh": _job_catalog_refresh,
             "fc-validate": _job_fc_validate,
             "deploy-xscr": _job_deploy_xscr,
+            "author-spec": _job_author_spec,
         }
     return _JOB_HANDLERS
+
+
+def _job_progress(payload: dict[str, Any], message: str) -> None:
+    job_id = payload.get("_job_id")
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        if job is not None:
+            elapsed = time.time() - (job["started_at"] or time.time())
+            job.setdefault("progress", []).append(f"{elapsed:5.0f} s  {message}")
+
+
+def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
+    """Document + request -> Bench Spec -> protocol (fast path), with the
+    request's instructions checked on the protocol and optionally FluentControl."""
+    import os
+
+    from ..authoring.attachments import extract_uploaded_attachments
+    from ..authoring.bench_spec import spec_to_markdown
+    from ..authoring.lm_client import LMStudioChatClient
+    from ..authoring.profile import PROFILE_DIR_ENV
+    from ..authoring.spec_path import author_from_document, choose_yourself
+
+    profile_name = str(payload.get("profile_name") or "").strip()
+    if not profile_name:
+        raise ValueError("choose a workspace profile first (Setup tab)")
+    profile_dir = _profile_dir(profile_name)
+    request = str(payload.get("request") or "").strip()
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    output_dir = WORKBENCH_BASE_DIR / "authored" / f"spec-{stamp}-{uuid.uuid4().hex[:4]}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    attachments = extract_uploaded_attachments(payload.get("attachments") or [], output_dir=output_dir, turn_index=1)
+    document = "\n\n".join(a.text for a in attachments).strip() or request
+    if not document:
+        raise ValueError("attach a protocol document or describe the protocol")
+    os.environ[PROFILE_DIR_ENV] = str(profile_dir)
+    result = author_from_document(
+        LMStudioChatClient(request_timeout_s=1800), document, profile_dir, output_dir,
+        request=request or None, ask=choose_yourself, fluentcontrol=bool(payload.get("fc_check", False)),
+        check_requirements=bool(request) and bool(payload.get("check_instructions", True)),
+        progress=lambda message: _job_progress(payload, message),
+    )
+    files = {}
+    if result.spec is not None:
+        files["spec_markdown"] = spec_to_markdown(result.spec, result.problems)
+    if result.source is not None:
+        (output_dir / "draft.py").write_text(result.source, encoding="utf-8")
+    summary = result.summary()
+    return {
+        "ok": result.stage == "done",
+        "output_dir": str(output_dir),
+        "summary": summary,
+        "source": result.source,
+        "spec_markdown": files.get("spec_markdown"),
+        "requirements": result.requirements,
+        "requirements_markdown": result.requirements_markdown,
+    }
 
 
 def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
