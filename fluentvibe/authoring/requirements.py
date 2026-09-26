@@ -100,13 +100,20 @@ def _operations(wt) -> list[_Op]:
     return ops
 
 
+def _norm(text: str) -> str:
+    return "".join(ch for ch in str(text).lower() if ch.isalnum())
+
+
 def _initial_holders(wt, reagent_match: str) -> set[str]:
-    """Labware whose authored initial contents include a reagent matching the name."""
-    match = reagent_match.lower()
+    """Labware whose authored initial contents include a reagent matching the name
+    (case, spaces and punctuation ignored: "elutionbuffer" matches "Elution buffer")."""
+    match = _norm(reagent_match)
     holders = set()
+    if not match:
+        return holders
     for label, labware in getattr(wt, "_placed", {}).items():
         for well in getattr(labware, "wells", {}).values():
-            if any(match in str(getattr(layer.reagent, "name", "")).lower() for layer in well.layers):
+            if any(match in _norm(getattr(layer.reagent, "name", "")) for layer in well.layers):
                 holders.add(label)
                 break
     return holders
@@ -448,6 +455,15 @@ def save_requirements(path: Path | str, requirements: Iterable[Requirement]) -> 
 def verify_all(wt, requirements: Iterable[Requirement]) -> list[Verdict]:
     """:func:`verify`, with ``unchecked`` requirements reported as not verified."""
     requirements = list(requirements)
+    # "Otherwise use the MCA" excludes every reagent the same checklist assigns
+    # to the other head, even when the extractor left it out of "except".
+    for req in requirements:
+        if req.kind == "head_for_other_steps":
+            head = str(req.params.get("head", "")).lower()
+            named = [str(r.params.get("reagent")) for r in requirements
+                     if r.kind == "head_for_reagent" and str(r.params.get("head", "")).lower() != head
+                     and r.params.get("reagent")]
+            req.params["except"] = sorted({*map(str, req.params.get("except") or []), *named})
     checked = verify(wt, [r for r in requirements if r.kind != "unchecked"])
     by_id = {v.id: v for v in checked}
     out = []
