@@ -261,6 +261,13 @@ class Mca384MixStep(BaseStep):
     volume: Union[float, str] = Field(..., description="Mix volume in microliters (value or variable name)")
     cycles: Union[int, str] = Field(default=10, description="Number of mix cycles (value or variable name)")
     liquid_class: Optional[str] = None
+    columns: Optional[list[int]] = Field(
+        default=None,
+        description=(
+            "1-based MCA plate columns to mix for partial-column pipetting "
+            "(None = the full plate)"
+        ),
+    )
     device_alias: Optional[str] = None
     available_id: Optional[str] = None
 

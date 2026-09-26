@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import math
 
+from typing import Iterable
+
 from .common import (
     DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     DEFAULT_MIX_LIQUID_CLASS,
     BlockError,
     BlockVariables,
+    mca_columns,
     require_positive,
     variable_prefix,
 )
@@ -35,6 +38,7 @@ def remove_liquid(
     empty_liquid_class: str = DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     name: str | None = None,
     variables: bool = True,
+    columns: Iterable[int] | None = None,
 ) -> None:
     """Take ``volume_ul`` out of every well of ``plate`` into ``waste`` (MCA96).
 
@@ -42,9 +46,11 @@ def remove_liquid(
     (and what is bound to them) stay in the well; off the magnet a draw takes
     suspended beads along. ``tips`` touch the samples: use the plate's own
     sample tip box (on the MCA96 channel *i* only ever meets well *i*). Volumes
-    above what the tips hold go in equal trips.
+    above what the tips hold go in equal trips. ``columns`` restricts it to
+    those plate columns (a partial plate).
     """
     require_positive("remove_liquid", volume_ul=volume_ul)
+    cols = mca_columns(columns)
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
     trips = math.ceil(float(volume_ul) / capacity)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="remove_liquid")
@@ -55,11 +61,11 @@ def remove_liquid(
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
-    head.pick_up(tips)
+    head.pick_up(tips, columns=cols)
     for _ in range(trips):
-        head.aspirate(plate, volume, liquid_class=lc)
+        head.aspirate(plate, volume, liquid_class=lc, columns=cols)
         head.empty_tips(waste, volume, liquid_class=empty_lc)
-    head.return_tips(tips)
+    head.return_tips(tips, columns=cols)
     head.drop_adapter()
 
 
@@ -73,6 +79,7 @@ def mix_wells(
     liquid_class: str = DEFAULT_MIX_LIQUID_CLASS,
     name: str | None = None,
     variables: bool = True,
+    columns: Iterable[int] | None = None,
 ) -> None:
     """Mix every well of ``plate`` in place (MCA96): resuspend beads, mix a reaction.
 
@@ -81,6 +88,7 @@ def mix_wells(
     section (default ``"Water Mix"``).
     """
     require_positive("mix_wells", volume_ul=volume_ul)
+    cols = mca_columns(columns)
     if int(cycles) < 1:
         raise BlockError(f"mix_wells: cycles must be 1 or more, got {cycles!r}.")
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
@@ -93,9 +101,9 @@ def mix_wells(
         wt.group(name)
     head = wt.mca96
     head.mount_adapter()
-    head.pick_up(tips)
-    head.mix(plate, volume, cycles=count, liquid_class=lc)
-    head.return_tips(tips)
+    head.pick_up(tips, columns=cols)
+    head.mix(plate, volume, cycles=count, liquid_class=lc, columns=cols)
+    head.return_tips(tips, columns=cols)
     head.drop_adapter()
 
 

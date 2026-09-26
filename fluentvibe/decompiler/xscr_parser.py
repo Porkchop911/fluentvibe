@@ -511,6 +511,7 @@ def _parse_step_object(obj: ET.Element) -> Optional[Step]:
             volume=_parse_volume(_extract_field(obj, "Volume")),
             cycles=_coerce_scalar(_extract_field(obj, "Cycles") or "10"),
             liquid_class=_extract_field(obj, "LiquidClassName"),
+            columns=_mca_partial_columns(obj),
         )
     if step_type == StepType.MCA384_EMPTY_TIPS:
         return Mca384EmptyTipsStep(

@@ -761,7 +761,7 @@ class Renderer:
         if "LiquidClassName" in params:
             xml = self._post_process_liquid_class_xml(xml, str(params.get("LiquidClassName") or ""))
 
-        if stype in {"aspirate", "dispense", "pick_up_tips", "set_tips_back"}:
+        if stype in {"aspirate", "dispense", "pick_up_tips", "set_tips_back", "mca384_mix"}:
             xml = self._post_process_partial_columns_xml(xml, step)
 
         if stype in {"export_variable", "import_variable"}:
@@ -1815,6 +1815,36 @@ class Renderer:
         wells = f"{first} - {last}"
         return indexes, wells
 
+    @staticmethod
+    def _liha_explicit_wells(selection: str, labware_wells, single_well: bool) -> tuple[int, str, str]:
+        """(channels, SerializedWellIndexes, SelectedWellsString) for per-channel wells.
+
+        Encoded as FluentControl writes it (reference scripts in the FC
+        database): one column-major well index per channel, ``;``-separated
+        ("8;9;" = A2, B2; "0;0;0;0;" = four channels into A1), and the display
+        string as a range ("A1 - D1"), a repeat ("4 * A1") or a list
+        ("A1, B1, C1, E1, H1").
+        """
+        addresses = [a.strip().upper() for a in selection.replace(",", ";").split(";") if a.strip()]
+        rows = {96: 8, 384: 16, 24: 4, 48: 6, 12: 3, 6: 2}.get(int(labware_wells or 96), 8)
+
+        def index(address: str) -> int:
+            if single_well:
+                return 0
+            row = ord(address[0]) - ord("A")
+            return (int(address[1:]) - 1) * rows + row
+
+        indexes = [index(a) for a in addresses]
+        serialized = "".join(f"{i};" for i in indexes)
+        if len(set(addresses)) == 1 and len(addresses) > 1:
+            text = f"{len(addresses)} * {addresses[0]}"
+        elif len(addresses) > 1 and indexes == list(range(indexes[0], indexes[0] + len(indexes))) \
+                and all(a[1:] == addresses[0][1:] for a in addresses):
+            text = f"{addresses[0]} - {addresses[-1]}"
+        else:
+            text = ", ".join(addresses)
+        return len(addresses), serialized, text
+
     def _resolve_labware_type(self, label: Optional[str]) -> Optional[str]:
         if not label:
             return None
@@ -1850,9 +1880,18 @@ class Renderer:
                 flags=re.DOTALL
             )
 
+        # Per-channel wells (wells=[...]): only those channels pipette.
+        explicit = None
+        selection = getattr(step, "selection", None)
+        if selection and step.step_type in (StepType.LIHA_ASPIRATE, StepType.LIHA_DISPENSE, StepType.LIHA_MIX):
+            labware_type_l = str(params.get("_labware_type") or "").lower()
+            single = params.get("_labware_wells") == 1 or params.get("_labware_category") == "reservoir" or any(
+                token in labware_type_l for token in ("trough", "reservoir", "waste", "25ml", "100ml", "300ml"))
+            explicit = self._liha_explicit_wells(selection, params.get("_labware_wells"), single)
+
         # Replace hardcoded SelectedTipsIndexes block
         # First, find how many tips are in the template and replace with all 8
-        new_tips = self._build_liha_tips_xml(num_channels)
+        new_tips = self._build_liha_tips_xml(explicit[0] if explicit else num_channels)
         xml = re.sub(
             r'(<SelectedTipsIndexes>\s*)(?:<Object Type="System\.Int32">\s*<int>\d+</int>\s*</Object>\s*)+(\s*</SelectedTipsIndexes>)',
             lambda m: m.group(1) + "\n" + new_tips + "\n                " + m.group(2).strip(),
@@ -1873,7 +1912,10 @@ class Renderer:
             )
             is_single_well = labware_wells == 1 or labware_category == "reservoir" or inferred_single
             mode = "repeat_single" if is_single_well else "range"
-            indexes, wells = self._build_liha_well_selection(num_channels, mode=mode)
+            if explicit:
+                indexes, wells = explicit[1], explicit[2]
+            else:
+                indexes, wells = self._build_liha_well_selection(num_channels, mode=mode)
             xml = re.sub(
                 r'<SerializedWellIndexes>[^<]*</SerializedWellIndexes>',
                 f'<SerializedWellIndexes>{indexes}</SerializedWellIndexes>',

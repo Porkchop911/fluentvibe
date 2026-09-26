@@ -158,6 +158,21 @@ def require_positive(block: str, **values: float) -> None:
             raise BlockError(f"{block}: {name} must be a positive number, got {value!r}.")
 
 
+def mca_columns(columns: Iterable[int] | None) -> list[int] | None:
+    """Plate columns for an MCA96 partial-plate call: ``None`` for the full plate.
+
+    The same 1-based numbers address the tip box (``pick_up`` / ``return_tips``
+    peel them from the box's left edge) and the plate (``aspirate`` /
+    ``dispense`` / ``mix``), so the picked tips line up with the addressed columns.
+    """
+    if columns is None:
+        return None
+    cols = sorted({int(c) for c in columns})
+    if not cols or any(not 1 <= c <= 12 for c in cols):
+        raise BlockError(f"columns must be 1..12 plate columns, got {cols!r}.")
+    return None if cols == list(range(1, 13)) else cols
+
+
 def columns_or_all(columns: Iterable[int] | None) -> list[int]:
     cols = list(range(1, 13)) if columns is None else [int(c) for c in columns]
     bad = [c for c in cols if not 1 <= c <= 12]

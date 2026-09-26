@@ -351,3 +351,105 @@ def test_room_temperature_incubation_is_a_wait_and_a_warm_one_goes_to_the_operat
     assert "wt.wait(duration_seconds=300)  # room temperature" in source
     assert "TODO" not in source
     assert "37 C incubation handed to the operator" in source and "offdeck_step(wt, \"37 C 30 min\"" in source
+
+
+@pytest.mark.parametrize("samples,columns", [(24, [1, 2, 3]), (20, [1, 2, 3])])
+def test_partial_plate_pipettes_only_the_used_columns(profile, tmp_path, samples, columns):
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    raw = json.loads(json.dumps(_SPRI_PRIMITIVES))
+    raw["sample_count"] = samples
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert f"columns={columns}" in source and "fill_all(Reagent(\"PCR product matrix\")" not in source
+    assert (f"first_wells({samples})" in source)
+    assert ("Blank (unused well" in source) == (samples % 8 != 0)
+    path = tmp_path / "s.py"
+    path.write_text(source, encoding="utf-8")
+    result = score_protocol(source, filename=str(path), spec=_spec(raw))
+    assert result.failed == 0, [i for i in result.invariants if i.status == "fail"]
+    registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
+    registry.lab_scope = load_lab_scope("skills")
+    gate = registry.compile_and_simulate(source)
+    assert gate["success"] is True, gate.get("failure_message")
+    # The eluate lands in columns 1-3 only; columns 4-12 stay empty.
+    from fluentvibe.authoring.eval_rubric import _iter_labware, build_worktable_from_source
+
+    wt = build_worktable_from_source(source, str(path))
+    wt.simulate()
+    eluate = next(lw for lw in _iter_labware(wt.snapshots[-1]) if lw.label.startswith("s12_"))
+    assert all(eluate.well(f"{r}{c}").layers for r in "ABCDEFGH" for c in columns)
+    assert not any(eluate.well(f"{r}{c}").layers for r in "ABCDEFGH" for c in range(4, 13))
+
+
+def test_partial_plate_spri_macro(profile, tmp_path):
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    raw = {
+        "title": "24-sample clean-up", "sample_count": 24, "sample_volume_ul": 20,
+        "reagents": [{"id": "S", "name": "Sample", "role": "sample"}],
+        "steps": [{"id": "s1", "op": "bead_cleanup", "text": "Clean-up", "location": "deck",
+                   "ratio": 1.8, "elute_ul": 30}],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "spri_cleanup(" in source and "columns=[1, 2, 3]" in source
+    registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
+    registry.lab_scope = load_lab_scope("skills")
+    gate = registry.compile_and_simulate(source)
+    assert gate["success"] is True, gate.get("failure_message")
+
+
+def test_liha_per_channel_wells_render_like_fluentcontrol(profile, tmp_path):
+    """Encoding copied from FluentControl reference scripts: one column-major
+    well index per channel; the display string is a range, a repeat or a list."""
+    import html
+    import re
+
+    from fluentvibe import FCA200Box, Plate96, Reagent, Worktable
+
+    deck = load_deck(profile)
+    wt = Worktable.from_workspace(deck.workspace_name, workspace_guid=deck.workspace_guid, auto_place=False)
+    wt.group("Setup")
+    src = wt.place(Plate96("Src", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
+    dst = wt.place(Plate96("Dst", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
+    tips = wt.place(FCA200Box("Tips", catalog="FCA, 200ul SBS"), "Nest61mm_Pos", 3)
+    src.fill_wells(src.first_wells(8), Reagent("S"), 20)
+    wt.group("Pool")
+    wt.liha.get_tips(tips)
+    wt.liha.aspirate(src, 5, liquid_class="Water Free Single", wells=["A1", "B1", "C1"])
+    wt.liha.dispense(dst, 5, liquid_class="Water Free Single", wells=["A1"] * 3)
+    wt.liha.drop_tips()
+    wt.simulate(strict=True)
+    final = wt.snapshots[-1]
+    assert final.labware("Dst").well("A1").volume_ul == pytest.approx(15.0)
+    assert final.labware("Src").well("D1").volume_ul == pytest.approx(20.0)
+    xml = html.unescape(html.unescape(wt.compile(tmp_path / "p.xscr").read_text(encoding="utf-8")))
+    aspirate = xml[xml.index("LihaAspirateScriptCommandData"):]
+    assert "<SerializedWellIndexes>0;1;2;</SerializedWellIndexes>" in aspirate[:12000]
+    assert "<SelectedWellsString>A1 - C1</SelectedWellsString>" in aspirate[:12000]
+    dispense = xml[xml.index("LihaDispenseScriptCommandData"):]
+    assert "<SerializedWellIndexes>0;0;0;</SerializedWellIndexes>" in dispense[:12000]
+    assert "<SelectedWellsString>3 * A1</SelectedWellsString>" in dispense[:12000]
+    tips_block = re.search(r"<SelectedTipsIndexes>(.*?)</SelectedTipsIndexes>", dispense, re.S).group(1)
+    assert re.findall(r"<int>(\d+)</int>", tips_block) == ["0", "1", "2"]
+
+
+def test_few_samples_pool_into_one_well(profile, tmp_path):
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    raw = {
+        "title": "Pool 3 libraries", "sample_count": 3, "sample_volume_ul": 20,
+        "reagents": [{"id": "L", "name": "Library", "role": "sample"}],
+        "steps": [{"id": "s1", "op": "pool", "text": "Pool 10 ul of each", "location": "deck", "volume_ul": 10}],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "pool_wells(" in source and "first_wells(3)" in source
+    path = tmp_path / "p.py"
+    path.write_text(source, encoding="utf-8")
+    result = score_protocol(source, filename=str(path), spec=_spec(raw))
+    assert result.get("spec_conformance").status == "pass", result.get("spec_conformance").evidence
+    registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
+    registry.lab_scope = load_lab_scope("skills")
+    assert registry.compile_and_simulate(source)["success"] is True

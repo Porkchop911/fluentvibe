@@ -11,6 +11,7 @@ from .common import (
     BlockError,
     BlockVariables,
     ensure_analyte_marker,
+    mca_columns,
     require_distinct,
     require_positive,
     require_role,
@@ -63,6 +64,7 @@ def spri_cleanup(
     name: str = "Bead cleanup",
     variables: bool = True,
     fca_tips=None,
+    columns=None,
 ) -> CleanupVolumes:
     """Full-plate magnetic bead cleanup: bind, wash, elute off-magnet, recover.
 
@@ -111,6 +113,9 @@ def spri_cleanup(
     so they stay editable in FluentControl; pass ``variables=False`` for plain
     literals. Two cleanups need different ``name`` values.
 
+    ``columns`` (1-based) restricts every step to those plate columns (a partial
+    plate); the tip boxes are used over the same box columns.
+
     Returns the derived :class:`CleanupVolumes`.
     """
     block = "spri_cleanup"
@@ -136,6 +141,8 @@ def spri_cleanup(
     require_role(bead_source, "bead_carrier", param="bead_source", block=block)
     require_role(elution_source, "eluent", param="elution_source", block=block)
     ensure_analyte_marker(sample_plate)
+    cols = mca_columns(columns)
+    fca_columns = cols if cols is not None else range(1, 13)
     home = sample_plate.slot
     if home is None:
         raise BlockError(f"{block}: place sample_plate with wt.place(...) before the cleanup.")
@@ -195,42 +202,42 @@ def spri_cleanup(
     wt.group(f"{name} - bind")
     if fca_tips is not None:
         liha_distribute(wt, source=bead_source, plate=sample_plate, volume=fca_bead, volume_ul=volumes.bead_ul,
-                        tips=fca_tips, liquid_class=lc, columns=range(1, 13))
+                        tips=fca_tips, liquid_class=lc, columns=fca_columns)
         head.mount_adapter()
     else:
         head.mount_adapter()
-        head.pick_up(reagent_tips)
+        head.pick_up(reagent_tips, columns=cols)
         for _ in range(bead_trips):
             head.aspirate(bead_source, bead, liquid_class=lc)
-            head.dispense(sample_plate, bead, liquid_class=lc)
-        head.return_tips(reagent_tips)
-    head.pick_up(sample_tips)
-    head.mix(sample_plate, bind_mix, cycles=bind_mix_cycles, liquid_class=mix_lc)
-    head.return_tips(sample_tips)
+            head.dispense(sample_plate, bead, liquid_class=lc, columns=cols)
+        head.return_tips(reagent_tips, columns=cols)
+    head.pick_up(sample_tips, columns=cols)
+    head.mix(sample_plate, bind_mix, cycles=bind_mix_cycles, liquid_class=mix_lc, columns=cols)
+    head.return_tips(sample_tips, columns=cols)
     wt.wait(duration_seconds=bind_time)
 
     wt.group(f"{name} - separate and remove supernatant")
     wt.gripper.move(sample_plate, onto=magnet)
     wt.wait(duration_seconds=settle_time)
-    head.pick_up(sample_tips)
+    head.pick_up(sample_tips, columns=cols)
     for _ in range(supernatant_trips):
-        head.aspirate(sample_plate, supernatant, liquid_class=lc)
+        head.aspirate(sample_plate, supernatant, liquid_class=lc, columns=cols)
         head.empty_tips(waste, supernatant, liquid_class=empty_lc)
-    head.return_tips(sample_tips)
+    head.return_tips(sample_tips, columns=cols)
 
     for index in range(1, wash_count + 1):
         wt.group(f"{name} - wash {index}")
-        head.pick_up(reagent_tips)
+        head.pick_up(reagent_tips, columns=cols)
         for _ in range(wash_trips):
             head.aspirate(wash_source, wash, liquid_class=wash_lc)
-            head.dispense(sample_plate, wash, liquid_class=wash_lc)
-        head.return_tips(reagent_tips)
+            head.dispense(sample_plate, wash, liquid_class=wash_lc, columns=cols)
+        head.return_tips(reagent_tips, columns=cols)
         wt.wait(duration_seconds=30)
-        head.pick_up(sample_tips)
+        head.pick_up(sample_tips, columns=cols)
         for _ in range(wash_trips):
-            head.aspirate(sample_plate, wash, liquid_class=wash_lc)
+            head.aspirate(sample_plate, wash, liquid_class=wash_lc, columns=cols)
             head.empty_tips(waste, wash, liquid_class=empty_lc)
-        head.return_tips(sample_tips)
+        head.return_tips(sample_tips, columns=cols)
     if wash_count:
         wt.wait(duration_seconds=dry_time)
 
@@ -238,26 +245,26 @@ def spri_cleanup(
     wt.gripper.move(sample_plate, to=home)
     if fca_tips is not None:
         liha_distribute(wt, source=elution_source, plate=sample_plate, volume=fca_elution,
-                        volume_ul=volumes.elution_ul, tips=fca_tips, liquid_class=lc, columns=range(1, 13))
+                        volume_ul=volumes.elution_ul, tips=fca_tips, liquid_class=lc, columns=fca_columns)
     else:
-        head.pick_up(reagent_tips)
+        head.pick_up(reagent_tips, columns=cols)
         for _ in range(elution_trips):
             head.aspirate(elution_source, elution, liquid_class=lc)
-            head.dispense(sample_plate, elution, liquid_class=lc)
-        head.return_tips(reagent_tips)
-    head.pick_up(sample_tips)
-    head.mix(sample_plate, elution_mix, cycles=elution_mix_cycles, liquid_class=mix_lc)
-    head.return_tips(sample_tips)
+            head.dispense(sample_plate, elution, liquid_class=lc, columns=cols)
+        head.return_tips(reagent_tips, columns=cols)
+    head.pick_up(sample_tips, columns=cols)
+    head.mix(sample_plate, elution_mix, cycles=elution_mix_cycles, liquid_class=mix_lc, columns=cols)
+    head.return_tips(sample_tips, columns=cols)
     wt.wait(duration_seconds=elute_time)
 
     wt.group(f"{name} - recover eluate")
     wt.gripper.move(sample_plate, onto=magnet)
     wt.wait(duration_seconds=settle_time)
-    head.pick_up(eluate_tips)
+    head.pick_up(eluate_tips, columns=cols)
     for _ in range(eluate_trips):
-        head.aspirate(sample_plate, eluate, liquid_class=lc)
-        head.dispense(eluate_plate, eluate, liquid_class=lc)
-    head.return_tips(eluate_tips)
+        head.aspirate(sample_plate, eluate, liquid_class=lc, columns=cols)
+        head.dispense(eluate_plate, eluate, liquid_class=lc, columns=cols)
+    head.return_tips(eluate_tips, columns=cols)
     head.drop_adapter()
     wt.gripper.move(sample_plate, to=home)
     return volumes

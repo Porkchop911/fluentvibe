@@ -438,6 +438,8 @@ def _emit_steps(
             target = _label_arg(step.labware_name, label_to_var) or repr(step.labware_name)
             parts = [target, repr(step.volume), f"cycles={step.cycles!r}"]
             parts.append(f"liquid_class={(step.liquid_class or 'Water Mix')!r}")
+            if step.columns:
+                parts.append(f"columns={list(step.columns)!r}")
             out.append(indent + f"head.mix({', '.join(parts)})")
             i += 1
             continue

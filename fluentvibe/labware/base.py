@@ -323,6 +323,22 @@ class Labware:
         for w in self.wells.values():
             w.add_layer(reagent, volume_ul)
 
+    def first_wells(self, count: int) -> list[str]:
+        """Addresses of the first ``count`` wells in column order (A1, B1, … H1, A2 …)."""
+        rows, cols = self._effective_grid()
+        order = [f"{_ROW_LETTERS[r]}{c}" for c in range(1, cols + 1) for r in range(rows)]
+        return [a for a in order if a in self.wells][: int(count)]
+
+    def fill_wells(self, addresses, reagent: "Reagent", volume_ul: float) -> None:
+        """Set the given wells to ``volume_ul`` of ``reagent`` (a partial plate)."""
+        for address in addresses:
+            self.well(address).layers = [Layer(reagent=reagent, volume_ul=volume_ul)]
+
+    def layer_wells(self, addresses, reagent: "Reagent", volume_ul: float) -> None:
+        """Add ``volume_ul`` of ``reagent`` on top of what the given wells hold."""
+        for address in addresses:
+            self.well(address).add_layer(reagent, volume_ul)
+
     # ── Stacking / state ──────────────────────────────────────────
 
     @property
