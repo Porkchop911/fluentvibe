@@ -496,6 +496,8 @@ currently working in (the samples at first; after a transfer, the new plate):
 - mix: mix the working wells in place (resuspend beads); cycles.
 - separate: magnet. engage=true puts the plate on the magnet (beads collect,
   minutes = settle time); engage=false takes it off so beads can be resuspended.
+  The deck has a magnet: separate is a deck step even when the document uses a
+  hand-held magnet (DynaMag); so are the removes and adds around it.
 - incubate: time and/or temperature (location off_deck when it needs a device).
 - measure / manual: operator steps.
 A bead wash is: separate(engage=true), remove, separate(engage=false), add wash buffer, mix.
@@ -541,28 +543,56 @@ def extract_bench_spec(client: Any, source_text: str, *, extra_context: str | No
     user = "Protocol document:\n\n" + source_text
     if extra_context:
         user = extra_context.strip() + "\n\n" + user
-    message = client.complete(
-        messages=[
-            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-            {"role": "user", "content": user},
-        ],
-        tools=[tool],
-    )
-    raw = None
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+        {"role": "user", "content": user},
+    ]
+    # An unusable spec (no steps, no call, bad JSON) gets one retry that says why.
+    for attempt in range(2):
+        message = client.complete(messages=messages, tools=[tool])
+        raw, fatal = _spec_arguments(message)
+        if raw is not None:
+            spec, problems = validate_bench_spec(raw, source_text)
+            if spec is not None:
+                return spec, _drop_untraced_supply(spec, problems), raw
+            fatal = problems
+        if attempt == 0:
+            messages += [
+                {"role": "assistant", "content": message.get("content") or "",
+                 **({"tool_calls": message["tool_calls"]} if message.get("tool_calls") else {})},
+                {"role": "user", "content": "The spec could not be used: "
+                 + "; ".join(f"{p.where}: {p.message}" for p in fatal)
+                 + f". Call {EXTRACTION_TOOL_NAME} again with the complete spec, every step included."},
+            ]
+    return None, fatal, raw
+
+
+def _spec_arguments(message: dict[str, Any]) -> tuple[dict[str, Any] | None, list[SpecProblem]]:
     for call in message.get("tool_calls") or []:
         function = call.get("function") or {}
         if function.get("name") != EXTRACTION_TOOL_NAME:
             continue
         arguments = function.get("arguments")
         try:
-            raw = json.loads(arguments) if isinstance(arguments, str) else dict(arguments or {})
+            return (json.loads(arguments) if isinstance(arguments, str) else dict(arguments or {})), []
         except (TypeError, ValueError):
-            return None, [SpecProblem("schema", "$", "submit_bench_spec arguments are not valid JSON")], None
-        break
-    if raw is None:
-        return None, [SpecProblem("schema", "$", "the model did not call submit_bench_spec")], None
-    spec, problems = validate_bench_spec(raw, source_text)
-    return spec, problems, raw
+            return None, [SpecProblem("schema", "$", "submit_bench_spec arguments are not valid JSON")]
+    return None, [SpecProblem("schema", "$", "the model did not call submit_bench_spec")]
+
+
+def _drop_untraced_supply(spec: BenchSpec, problems: list[SpecProblem]) -> list[SpecProblem]:
+    """A kit supply the document never states is not a supply: models tend to
+    invent one for lab-prepared buffers, which then fails the budget check."""
+    for problem in problems:
+        match = re.match(r"reagents\[(\d+)\]\.supply_(ul|count)$", problem.where)
+        if problem.kind == "number" and match:
+            reagent = spec.reagents[int(match.group(1))]
+            if reagent.supply_ul is not None:
+                spec.notes.append(f"{reagent.id}: kit supply {reagent.supply_ul:g} µl is not in the "
+                                  f"document; treated as lab stock")
+            reagent.supply_ul = None
+            reagent.supply_count = None
+    return problems
 
 
 # ── Deterministic plan from an approved spec ─────────────────────────────

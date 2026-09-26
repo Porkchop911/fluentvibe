@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -341,6 +341,18 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     physics needs, and :class:`DeckMismatch` when the volumes do not fit.
     """
     questions = [p.message for p in open_values(spec)]
+    # A kit reagent the deck steps draw beyond its supply (MCA96 blocks fill all 96 wells).
+    for reagent in spec.reagents:
+        supply = _supply(reagent)
+        if supply is None:
+            continue
+        drawn = sum(float(st.volume_ul) * 96 for st in spec.steps
+                    if st.location == "deck" and st.op == "add" and st.reagent == reagent.id and st.volume_ul)
+        if drawn > supply:
+            questions.append(
+                f"{reagent.id} is added at {drawn:g} µl for 96 wells but the kit supplies {supply:g} µl: "
+                f"more vials, fewer wells, or less per well?"
+            )
     if questions:
         raise OpenValues(questions)
     w = _Writer(deck=deck)
@@ -509,6 +521,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         pending_offdeck.clear()
 
     for index, step in enumerate(spec.steps):
+        if step.op == "separate" and deck.magnet is not None and step.location != "deck":
+            # A magnet is a deck device here: documents written for a hand-held
+            # magnet (DynaMag) still separate on the deck's magnet.
+            w.notes.append(f"{step.id}: separation runs on the deck magnet")
+            step = replace(step, location="deck")
         if step.location != "deck" or step.op in {"measure", "manual"}:
             pending_offdeck.append(step)
             continue
