@@ -689,6 +689,7 @@
             <label><input type="checkbox" id="fastCheckInstructions" checked> check my instructions</label>
             <label><input type="checkbox" id="fastFcCheck"> check in FluentControl</label>
             <button id="fastGenerate">Generate protocol</button>
+            <button id="fastReplay" class="secondary" disabled>Show replay</button>
           </div>
           <div class="status" id="fastStatus" aria-live="polite"></div>
           <div class="fp-progress" id="fastProgress"></div>
@@ -1006,6 +1007,21 @@
 
     function bindFastPath() {
       const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
+      $('fastReplay').addEventListener('click', async () => {
+        const win = window.open('', '_blank');
+        setStatus('fastStatus', 'simulating for the replay…', 'running');
+        try {
+          const created = await post('/api/jobs/replay-source', {
+            source: $('generatedCode').value, profile_name: $('authorProfile').value, title: 'Protocol replay' });
+          let job;
+          do { await sleep(700); job = (await api(`/api/job?id=${encodeURIComponent(created.job.id)}`)).job; }
+          while (job.status === 'queued' || job.status === 'running');
+          if (job.status === 'failure') { setStatus('fastStatus', job.error ? job.error.message : 'replay failed', 'error'); win && win.close(); return; }
+          const url = URL.createObjectURL(new Blob([job.result.html], { type: 'text/html' }));
+          if (win) { win.location = url; } else { window.open(url, '_blank'); }
+          setStatus('fastStatus', `replay: ${job.result.frames} steps`, 'ok');
+        } catch (err) { setStatus('fastStatus', String(err.message || err), 'error'); }
+      });
       $('fastGenerate').addEventListener('click', async () => {
         const profile = $('authorProfile').value;
         if (!profile) { setStatus('fastStatus', 'Choose a profile first.', 'error'); return; }
@@ -1050,7 +1066,7 @@
               '</table>';
           }
           $('fastSpec').textContent = r.spec_markdown || '';
-          if (r.source) { $('generatedCode').value = r.source; }
+          if (r.source) { $('generatedCode').value = r.source; $('fastReplay').disabled = false; }
         } catch (err) {
           setStatus('fastStatus', String(err.message || err), 'error');
         } finally {

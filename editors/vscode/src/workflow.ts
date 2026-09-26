@@ -359,3 +359,35 @@ export async function setInstructions(): Promise<void> {
       "Unmet ones show as errors on save."
   );
 }
+
+export async function showReplay(): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.languageId !== "python") {
+    vscode.window.showWarningMessage("fluentvibe: open a protocol .py first.");
+    return;
+  }
+  await editor.document.save();
+  const file = editor.document.uri.fsPath;
+  const out = file.replace(/\.py$/i, "") + ".replay.html";
+  const args = ["replay", file, "-o", out];
+  const profile = settings().get<string>("profile", "");
+  if (profile) {
+    args.push("--profile", resolveInRoot(profile));
+  }
+  const { code } = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: simulating the protocol for the replay…" },
+    () => runCli(args, (line) => output.appendLine(line))
+  );
+  if (code !== 0 || !fs.existsSync(out)) {
+    vscode.window.showErrorMessage("fluentvibe: replay failed — see the fluentvibe output.");
+    output.show(true);
+    return;
+  }
+  const panel = vscode.window.createWebviewPanel(
+    "fluentvibeReplay",
+    `Replay: ${path.basename(file)}`,
+    vscode.ViewColumn.Beside,
+    { enableScripts: true }
+  );
+  panel.webview.html = fs.readFileSync(out, "utf8");
+}

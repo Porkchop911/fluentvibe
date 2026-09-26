@@ -255,6 +255,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_req.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir")
     p_req.set_defaults(func=_cmd_requirements)
 
+    p_replay = sub.add_parser(
+        "replay",
+        help="write a standalone HTML replay of a protocol: the deck and every well after each step",
+    )
+    p_replay.add_argument("draft", type=Path, help="fluentvibe Python protocol")
+    p_replay.add_argument("--output", "-o", type=Path, default=None, help="HTML file (default <draft>.replay.html)")
+    p_replay.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir")
+    p_replay.set_defaults(func=_cmd_replay)
+
     p_fc_open = sub.add_parser(
         "fc-open",
         help="compile a draft and open it in FluentControl (shell script) for checking and editing",
@@ -1028,6 +1037,23 @@ def _cmd_requirements(args) -> int:
         {"id": v.id, "text": texts.get(v.id, ""), "status": v.status, "evidence": v.evidence, "line": v.line}
         for v in verdicts]}, indent=2, ensure_ascii=False))
     return 0 if all(v.status == "pass" for v in verdicts) else 1
+
+
+def _cmd_replay(args) -> int:
+    import os
+
+    from .authoring.eval_rubric import build_worktable_from_source
+    from .authoring.profile import PROFILE_DIR_ENV
+    from .replay import replay_frames, replay_html
+
+    if args.profile is not None:
+        os.environ[PROFILE_DIR_ENV] = str(args.profile)
+    wt = build_worktable_from_source(args.draft.read_text(encoding="utf-8"), str(args.draft))
+    frames = replay_frames(wt, title=getattr(wt, "name", None) or args.draft.stem)
+    out = args.output or args.draft.with_name(args.draft.stem + ".replay.html")
+    out.write_text(replay_html(frames), encoding="utf-8")
+    print(out)
+    return 0
 
 
 def _cmd_author_spec(args) -> int:

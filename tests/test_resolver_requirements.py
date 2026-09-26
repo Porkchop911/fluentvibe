@@ -177,3 +177,18 @@ def test_no_checklist_means_no_instruction_diagnostics(tmp_path):
     copy = tmp_path / "protocol.py"
     copy.write_text(_source(), encoding="utf-8")
     assert not [d for d in analyze_source(_source(), copy) if d.source == "requirements"]
+
+
+def test_replay_frames_follow_the_protocol_steps():
+    from fluentvibe.replay import replay_frames, replay_html
+
+    wt = build_worktable_from_source(_source(), str(EXAMPLE))
+    data = replay_frames(wt, title="AMPure")
+    steps = [f["step"] for f in data["frames"]]
+    assert steps[0] == "Labware Placement" and "Eluate to new plate" in steps
+    assert {"AMPure XP beads", "70% ethanol", "Elution buffer"} <= set(data["reagents"])
+    last = {lw["label"]: lw for lw in data["frames"][-1]["labware"]}
+    eluate = last["Eluate"]
+    assert all(c and c[0] > 0 for c in eluate["cells"])            # eluate in every well
+    page = replay_html(data)
+    assert "<script>" in page and "AMPure" in page and "</script>" in page
