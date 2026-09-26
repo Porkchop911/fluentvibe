@@ -175,6 +175,7 @@ class _Writer:
     placed_in_body: set[str] = field(default_factory=set)
     fca_boxes: list[str] = field(default_factory=list)
     fca_tip_uses: int = 0
+    catalog_of: dict[str, str] = field(default_factory=dict)
 
     def var(self, base: str) -> str:
         name = _ident(base)
@@ -248,14 +249,19 @@ class _Writer:
         return self._put(label, f'{cls}("{label}", catalog="{catalog}")')
 
     def slim_trough(self, label: str, need_ul: float) -> str:
-        label = _label(label)
         """A slim trough on a trough site, for reagents the FCA dispenses."""
+        label = _label(label)
+        taken = set(self.labels.values())
+        base, n = label, 2
+        while label in taken:
+            label, n = f"{base}_{n}", n + 1
         if not self.deck.free_trough_sites:
             raise ValueError("skeleton: the deck has no free trough site left for an FCA reagent")
         loc, pos = self.deck.free_trough_sites.pop(0)
         var = self.var(label)
         big = need_ul > _SLIM_TROUGH_FILL_UL
         cls, catalog = ("Trough100mL", self.deck.slim_large) if big else ("Trough25mL", self.deck.slim_small)
+        self.catalog_of[var] = catalog
         self.placements.append(f'    {var} = wt.place({cls}("{label}", catalog="{catalog}"), "{loc}", {pos})')
         self.labels[var] = label
         return var
@@ -384,6 +390,18 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             + (f" ({blanks} unused well(s) of column {used_columns} are modelled as blank liquid)" if blanks else "")
         )
     lc = deck.liquid_class
+    # Liquid classes as FluentControl string variables (the request asked):
+    # LC_<reagent> for additions, LC_SAMPLE for sample moves, LC_MIX for
+    # mixing (a mix needs a class with a Mix section, so it defaults to
+    # "Water Mix"). Otherwise literals, as before.
+    lc_vars: dict[str, str] = {}
+
+    def lc_for(kind: str, reagent: SpecReagent | None = None) -> str:
+        if not spec.liquid_class_variables:
+            return json.dumps(lc)
+        name = {"sample": "LC_SAMPLE", "mix": "LC_MIX"}.get(kind) or f"LC_{_ident(reagent.id).upper()}"
+        lc_vars.setdefault(name, "Water Mix" if kind == "mix" else lc)
+        return json.dumps(name)
     reagent_vars: dict[str, str] = {}
     # Reagent id -> its reservoirs (a new one whenever the current one would
     # exceed _RESERVOIR_FILL_UL); reservoir variable -> what it must hold.
@@ -417,12 +435,17 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     def fca_trough_for(reagent: SpecReagent, need_ul: float) -> str:
         """Slim trough for a reagent the FCA dispenses (one per reagent)."""
         key = f"fca:{reagent.id}"
-        if key not in trough_vars:
-            trough_vars[key] = [w.slim_trough(_label(f"{reagent.id}_trough"), need_ul)]
-            fill_estimate[trough_vars[key][0]] = 0.0
-            reagent_of[key] = reagent
-        fill_estimate[trough_vars[key][0]] += need_ul
-        return trough_vars[key][0]
+        troughs = trough_vars.setdefault(key, [])
+        reagent_of[key] = reagent
+        # A 25 ml trough chosen for the first use can overflow on later ones:
+        # then the reagent gets another trough (the 100 ml one holds far more).
+        full = bool(troughs) and w.catalog_of.get(troughs[-1]) == deck.slim_small \
+            and fill_estimate[troughs[-1]] + need_ul > _SLIM_TROUGH_FILL_UL
+        if not troughs or full:
+            troughs.append(w.slim_trough(_label(f"{reagent.id}_trough"), need_ul))
+            fill_estimate[troughs[-1]] = 0.0
+        fill_estimate[troughs[-1]] += need_ul
+        return troughs[-1]
 
     def trough_for(reagent: SpecReagent, need_ul: float) -> str:
         reagent_of[reagent.id] = reagent
@@ -617,7 +640,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
             w.body.append(
                 f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol:g}, tips={plate_tips(current)},\n"
-                f"                  liquid_class={json.dumps(lc)}, name={label}{cols_arg}){comment}"
+                f"                  liquid_class={lc_for('sample')}, name={label}{cols_arg}){comment}"
             )
             well_ul -= vol
             continue
@@ -631,7 +654,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             comment = "  # ASSUMED: cycles" if step.cycles is None else ""
             w.body.append(
                 f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol:g}, "
-                f"cycles={cycles}, name={label}{cols_arg}){comment}"
+                f"cycles={cycles}{', liquid_class=' + lc_for('mix') if spec.liquid_class_variables else ''}, "
+                f"name={label}{cols_arg}){comment}"
             )
             continue
 
@@ -680,7 +704,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"        eluate_plate={eluate}, reagent_tips={tips[0]}, sample_tips={tips[1]},\n"
                 f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, {bead_arg},\n"
                 f"        elution_volume_ul={elute_ul:g}, wash_volume_ul={wash_ul:g}, wash_count={washes},\n"
-                f"        liquid_class={json.dumps(lc)}, fca_tips={fca_tips}, name={label}{cols_arg},\n"
+                f"        liquid_class={lc_for('sample')}, fca_tips={fca_tips}, name={label}{cols_arg},\n"
                 f"    ){comment}"
             )
             w.retire(current, sample_tips)
@@ -702,7 +726,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                     vol = _POOL_WELL_UL / sample_n
                 w.body.append(
                     f"    pool_wells(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
-                    f"               liquid_class={json.dumps(lc)}, source_wells={current}.first_wells({sample_n}), "
+                    f"               liquid_class={lc_for('sample')}, source_wells={current}.first_wells({sample_n}), "
                     f"dest_well=\"A1\", name={label})"
                 )
                 w.retire(current, tips)
@@ -715,7 +739,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 vol = _POOL_WELL_UL / used_columns
             w.body.append(
                 f"    pool_columns(wt, source={current}, dest={pool}, volume_ul={vol:g}, tips={tips},\n"
-                f"                 liquid_class={json.dumps(lc)}, dest_column=1, name={label}{cols_arg})"
+                f"                 liquid_class={lc_for('sample')}, dest_column=1, name={label}{cols_arg})"
             )
             w.retire(current, tips)
             current, well_ul = pool, vol * used_columns
@@ -731,7 +755,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             mix = ", mix_cycles=5" if re.search(r"\bmix", step.text or "", re.IGNORECASE) else ""
             w.body.append(
                 f"    stamp(wt, source={source}, dest={current}, volume_ul={vol:g}, tips={tips},\n"
-                f"          liquid_class={json.dumps(lc)}{mix}, name={label}{cols_arg})"
+                f"          liquid_class={lc_for('add', reagent)}{mix}, name={label}{cols_arg})"
             )
             w.retire(source, tips)
             well_ul += vol
@@ -741,6 +765,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         if step.op == "add" and reagent is not None:
             vol = step.volume_ul if step.volume_ul is not None else 5.0
             cheap = (reagent.liquid_type or "") in {"ethanol", "water"} or reagent.role == "wash"
+            if step.head is not None:
+                # The request names the head: it is a requirement, not a default.
+                w.notes.append(f"{step.id}: {reagent.id} dispensed by the {step.head.upper()} (requested)")
+                cheap = step.head == "mca"
             if cheap:
                 # Cheap bulk liquid: MCA96 from an SBS reservoir, one shared box.
                 trough = trough_for(reagent, vol * n * 1.15 + 500)
@@ -748,14 +776,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                     shared_tips["reagent"] = w.mca_box("ReagentTips")
                 w.body.append(
                     f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
-                    f"                reagent_tips={shared_tips['reagent']}, liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
+                    f"                reagent_tips={shared_tips['reagent']}, liquid_class={lc_for('add', reagent)}, name={label}{cols_arg})"
                 )
             else:
                 # Reagents: the FCA from a slim trough (little dead volume).
                 trough = fca_trough_for(reagent, vol * n * 1.1 + 2000)
                 w.body.append(
                     f"    distribute_reagent(wt, source={trough}, plate={current}, volume_ul={vol:g},\n"
-                    f"                       tips={w.fca_reagent_tips()}, liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
+                    f"                       tips={w.fca_reagent_tips()}, liquid_class={lc_for('add', reagent)}, name={label}{cols_arg})"
                 )
             well_ul += vol
             if reagent.role == "bead_carrier" and free_marker_ul:
@@ -778,7 +806,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             fits(step, vol)
             w.body.append(
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
-                f"          liquid_class={json.dumps(lc)}, name={label}{cols_arg})"
+                f"          liquid_class={lc_for('sample')}, name={label}{cols_arg})"
             )
             # The emptied plate leaves the magnet so the next separation can use it.
             release_current(json.dumps(f"{step.id}: spent plate off the magnet"))
@@ -853,6 +881,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         "    )",
         f'    wt.declare_variable("RunId", "{slug}")',
         f'    wt.set_sim_value("RunId", "{slug}")',
+        *[line for name, default in lc_vars.items()
+          for line in (f"    wt.declare_variable({json.dumps(name)}, {json.dumps(default)})",
+                       f"    wt.set_sim_value({json.dumps(name)}, {json.dumps(default)})")],
         "",
         '    wt.group("Labware Placement")',
         *w.placements,

@@ -453,3 +453,40 @@ def test_few_samples_pool_into_one_well(profile, tmp_path):
     registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
     registry.lab_scope = load_lab_scope("skills")
     assert registry.compile_and_simulate(source)["success"] is True
+
+
+def test_request_head_and_liquid_class_variables_survive_the_spec_path(profile, tmp_path):
+    """The two instructions the spec path used to drop: ethanol via the FCA and
+    liquid classes as string variables (checked with the requirements ledger)."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import Requirement, verify
+
+    raw = json.loads(json.dumps(_SPRI_PRIMITIVES))
+    raw["liquid_class_variables"] = True
+    assert raw["steps"][5]["reagent"] == "ETOH" and raw["steps"][6]["op"] == "remove"
+    raw["steps"][5]["head"] = "fca"                       # s6 ethanol wash
+    raw["steps"][5]["volume_ul"] = 100                    # fits a 25 ml trough; the second wash does not
+    raw["steps"].insert(7, {"id": "s7b", "op": "add", "text": "Ethanol again", "location": "deck",
+                            "reagent": "ETOH", "volume_ul": 150, "head": "fca"})
+    raw["steps"].insert(8, {"id": "s7c", "op": "remove", "text": "Discard", "location": "deck"})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert source.count("_trough") >= 3 and "ETOH_trough_2" in source   # 25 ml overflowed -> second trough
+    path = tmp_path / "s.py"
+    path.write_text(source, encoding="utf-8")
+    wt = build_worktable_from_source(source, str(path))
+    wt.simulate(strict=True)
+    verdicts = {v.id: v for v in verify(wt, [
+        Requirement("R1", "ethanol via the FCA", "head_for_reagent", {"reagent": "ethanol", "head": "fca"}),
+        Requirement("R2", "liquid classes as string variables", "liquid_class_variables",
+                    {"default": "Water Free Single", "mix_default": "Water Mix"}),
+    ])}
+    assert all(v.status == "pass" for v in verdicts.values()), {k: v.evidence for k, v in verdicts.items()}
+
+
+def test_spec_parses_head_and_liquid_class_variables():
+    raw = json.loads(json.dumps(_SPRI_PRIMITIVES))
+    raw["liquid_class_variables"] = True
+    raw["steps"][0]["head"] = "FCA"
+    raw["steps"][1]["head"] = "robot arm"                 # not a head: ignored
+    spec = _spec(raw)
+    assert spec.liquid_class_variables and spec.steps[0].head == "fca" and spec.steps[1].head is None
