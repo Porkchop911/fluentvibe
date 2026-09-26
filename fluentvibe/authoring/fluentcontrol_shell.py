@@ -372,7 +372,7 @@ def _navigate_tree_to_shell(fc_win):
     return None
 
 
-def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
+def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0, *, embedded: bool = True) -> DialogScanResult:
     from pywinauto import Desktop
 
     deadline = time.monotonic() + timeout_s
@@ -475,7 +475,7 @@ def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
 
         if not dismissed_any:
             try:
-                main_text = _embedded_dialog_text()
+                main_text = _embedded_dialog_text() if embedded else ""
             except Exception:
                 main_text = ""
             if main_text and main_text not in seen_texts:
@@ -538,7 +538,8 @@ def _close_shell_tab_if_open(fc_win, timeout_s: float = 2.0) -> bool:
                 _bring_to_foreground(fc_win)
                 fc_win.type_keys("^{F4}")
                 time.sleep(0.2)
-                _dismiss_modal_dialogs(fc_win, timeout_s=1.0)
+                # Closing a changed tab asks "save changes?" in its own window.
+                _dismiss_modal_dialogs(fc_win, timeout_s=1.0, embedded=False)
                 return True
         except Exception:
             pass
@@ -548,7 +549,9 @@ def _close_shell_tab_if_open(fc_win, timeout_s: float = 2.0) -> bool:
 
 def _click_infopad_tab(fc_win) -> None:
     try:
-        tab = fc_win.child_window(title_re=r"^Infopad$", control_type="TabItem")
+        # Two elements carry the name; the first is the one the tree scan
+        # below would click. A direct lookup avoids walking the whole tree.
+        tab = fc_win.child_window(title="Infopad", found_index=0)
         if tab.exists(timeout=0.5):
             _safe_click(tab)
             time.sleep(0.2)
@@ -628,6 +631,7 @@ def open_shell_and_read_infopad(
     infopad_line_limit: int = 200,
     close_before_open: bool = True,
     close_after_read: bool = False,
+    context_lines: bool = False,
 ) -> UiResult:
     fc_win = _connect_fluent_window(process_id)
     if not fc_win.exists(timeout=2):
@@ -669,7 +673,7 @@ def open_shell_and_read_infopad(
         if error_lines:
             break
         time.sleep(0.4)
-    if not error_lines:
+    if not error_lines and context_lines:  # a sample for reports only; costs a tree scan
         lines = _infopad_context_lines(fc_win, infopad_line_limit)
 
     if close_after_read:
