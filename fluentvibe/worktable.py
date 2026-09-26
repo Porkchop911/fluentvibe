@@ -792,10 +792,45 @@ class Worktable:
         labware.stack_below = []
         self._emit(RemoveLabwareStep(labware_name=labware.label))
 
+    # ── High-level calls (resolved from the deck profile) ───────────
+
+    def add(self, reagent, *, to, volume_ul: float, head: Optional[str] = None, source=None,
+            liquid_class: Optional[str] = None, liquid_class_var: Optional[str] = None,
+            columns=None, name: Optional[str] = None) -> None:
+        """Add ``volume_ul`` of ``reagent`` to every well of ``to`` (or ``columns``).
+
+        Source labware, head, tips and fill volume are resolved from the deck
+        profile (:mod:`fluentvibe.resolver`): reagents via the FCA from a slim
+        trough, cheap bulk liquids (water, ethanol, wash) via the MCA96 from an
+        SBS reservoir. ``head="fca"``/``"mca"``, ``source=`` and
+        ``liquid_class_var="LC_X"`` (a string variable, default
+        ``liquid_class`` or the deck's) are requirements: an impossible
+        combination raises ``ResolutionConflict``. ``wt.resolution_report()``
+        lists every choice and why.
+        """
+        if getattr(self, "_resolver", None) is None:
+            from .resolver import Resolver
+
+            self._resolver = Resolver.for_worktable(self)
+        self._resolver.add(reagent, to=to, volume_ul=volume_ul, head=head, source=source,
+                           liquid_class=liquid_class, liquid_class_var=liquid_class_var,
+                           columns=columns, name=name)
+
+    def resolution_report(self) -> list[dict[str, str]]:
+        """Every choice ``wt.add`` made and the deck fact behind it."""
+        resolver = getattr(self, "_resolver", None)
+        return resolver.report() if resolver is not None else []
+
+    def _finalize_resolution(self) -> None:
+        resolver = getattr(self, "_resolver", None)
+        if resolver is not None:
+            resolver.finalize()
+
     # ── Compile / simulate ──────────────────────────────────────────
 
     def to_protocol(self) -> Protocol:
         """Build a Protocol IR from the collected steps."""
+        self._finalize_resolution()
         protocol = Protocol(
             name=self.name,
             comment=self.comment,
@@ -837,6 +872,8 @@ class Worktable:
     ) -> None:
         """Replay the IR through the Simulator, populating `self.snapshots`."""
         from .simulator import Simulator
+
+        self._finalize_resolution()
 
         sim = Simulator(self)
         sim.run(

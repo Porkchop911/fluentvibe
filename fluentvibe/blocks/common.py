@@ -128,6 +128,10 @@ class BlockVariables:
     def ref(self, key: str, value):
         if self.prefix is None:
             return value
+        # A liquid class given as a declared string variable is used as is
+        # (wrapping it would make a variable whose value is a variable name).
+        if key.endswith("LIQUID_CLASS") and isinstance(value, str) and value in self.wt.protocol_variables:
+            return value
         name = f"{self.prefix}_{key}"
         existing = self.wt.protocol_variables.get(name)
         if existing is not None and existing != value:
