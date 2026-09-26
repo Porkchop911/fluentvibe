@@ -324,6 +324,7 @@ def _job_handlers() -> dict[str, Any]:
             "fc-validate": _job_fc_validate,
             "deploy-xscr": _job_deploy_xscr,
             "author-spec": _job_author_spec,
+            "replay-source": _job_replay_source,
         }
     return _JOB_HANDLERS
 
@@ -382,6 +383,23 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
         "requirements": result.requirements,
         "requirements_markdown": result.requirements_markdown,
     }
+
+
+def _job_replay_source(payload: dict[str, Any]) -> dict[str, Any]:
+    """Simulate Python source and return a standalone replay page (deck and wells per step)."""
+    import os
+
+    from ..authoring.eval_rubric import build_worktable_from_source
+    from ..authoring.profile import PROFILE_DIR_ENV
+    from ..replay import replay_frames, replay_html
+
+    source = _source_from_payload(payload)
+    profile_name = str(payload.get("profile_name") or "").strip()
+    if profile_name:
+        os.environ[PROFILE_DIR_ENV] = str(_profile_dir(profile_name))
+    wt = build_worktable_from_source(source, "<workbench>")
+    frames = replay_frames(wt, title=str(payload.get("title") or getattr(wt, "name", "Protocol")))
+    return {"ok": True, "frames": len(frames["frames"]), "html": replay_html(frames)}
 
 
 def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:

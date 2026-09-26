@@ -23,7 +23,8 @@
     "onCommand:fluentvibe.openInFluentControl",
     "onCommand:fluentvibe.pullFluentControlEdits",
     "onCommand:fluentvibe.convertOpentrons",
-    "onCommand:fluentvibe.setInstructions"
+    "onCommand:fluentvibe.setInstructions",
+    "onCommand:fluentvibe.showReplay"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -51,6 +52,10 @@
       {
         "command": "fluentvibe.setInstructions",
         "title": "fluentvibe: Set instructions for this protocol"
+      },
+      {
+        "command": "fluentvibe.showReplay",
+        "title": "fluentvibe: Show protocol replay"
       }
     ],
     "keybindings": [
@@ -145,6 +150,11 @@
       "editor/title": [
         {
           "command": "fluentvibe.openInFluentControl",
+          "when": "editorLangId == python",
+          "group": "navigation"
+        },
+        {
+          "command": "fluentvibe.showReplay",
           "when": "editorLangId == python",
           "group": "navigation"
         }
