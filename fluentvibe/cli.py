@@ -237,6 +237,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     p_fc_open.add_argument("draft", type=Path, help="fluentvibe Python protocol")
     p_fc_open.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir (deck rules)")
+    p_fc_open.add_argument("--json", action="store_true", help="print the InfoPad findings as JSON (for editors)")
     p_fc_open.set_defaults(func=_cmd_fc_open)
 
     p_fc_pull = sub.add_parser(
@@ -836,6 +837,16 @@ def _cmd_fc_open(args) -> int:
     patch_shell_xscr_from_generated(base)
     ui = open_shell_and_read_infopad(close_before_open=True, close_after_read=False)
     findings = explain_infopad(list(ui.error_lines or []), wt)
+    if getattr(args, "json", False):
+        import json as _json
+
+        print(_json.dumps({
+            "opened": bool(getattr(ui, "opened", True)) and not getattr(ui, "load_failed", False),
+            "load_error": getattr(ui, "load_error_text", "") or "",
+            "compiled": str(base),
+            "findings": [f.to_dict() for f in findings],
+        }))
+        return 0
     print(f"Opened {args.draft.name} in FluentControl (script 'shell'); compiled copy: {base}")
     if findings:
         print(f"InfoPad: {len(findings)} finding(s):")
@@ -896,13 +907,15 @@ def _cmd_author_spec(args) -> int:
         print("\nThe spec leaves these open:")
         for q in questions:
             print(f"  - {q}")
-        answer = input("Answer (empty to stop): ").strip()
+        print("Answer (empty to stop): ", end="", flush=True)
+        answer = sys.stdin.readline().strip()
         return answer or None
 
     args.output.mkdir(parents=True, exist_ok=True)
     result = author_from_document(
         LMStudioChatClient(**kwargs), text, args.profile, args.output, request=args.request,
         ask=choose_yourself if args.choose else ask_terminal, fluentcontrol=args.fc_check,
+        progress=lambda message: print(f"progress: {message}", flush=True),
     )
     if result.spec_raw is not None:
         (args.output / "spec.json").write_text(_json.dumps(result.spec_raw, indent=2, ensure_ascii=False), encoding="utf-8")

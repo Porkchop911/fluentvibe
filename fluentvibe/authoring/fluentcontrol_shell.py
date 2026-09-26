@@ -395,17 +395,41 @@ def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
             pass
         return " ".join(parts)
 
+    try:
+        wrapper = fc_win.wrapper_object() if hasattr(fc_win, "wrapper_object") else fc_win
+        fc_pid = wrapper.process_id()
+        fc_handle = wrapper.handle
+    except Exception:
+        fc_pid = fc_handle = None
+
     def _iter_dialog_windows():
+        # Only FluentControl's own top-level windows other than the main one:
+        # reading every desktop window's text (editors, browsers) took seconds.
         windows = []
         try:
-            windows.extend(Desktop(backend="uia").windows())
+            windows.extend(Desktop(backend="uia").windows(process=fc_pid) if fc_pid else Desktop(backend="uia").windows())
         except Exception:
             pass
         try:
-            windows.extend(Desktop(backend="win32").windows(class_name="#32770"))
+            windows.extend(Desktop(backend="win32").windows(class_name="#32770", process=fc_pid) if fc_pid
+                           else Desktop(backend="win32").windows(class_name="#32770"))
         except Exception:
             pass
-        return windows
+        return [w for w in windows if fc_handle is None or getattr(w, "handle", None) != fc_handle]
+
+    def _embedded_dialog_text() -> str:
+        # Dialogs FluentControl shows inside its main window are child
+        # Window elements; reading those instead of the whole tree (thousands
+        # of script-tree elements) keeps this check fast.
+        parts = []
+        try:
+            for child in fc_win.descendants(control_type="Window"):
+                text = _dialog_text(child)
+                if text:
+                    parts.append(text)
+        except Exception:
+            pass
+        return " ".join(parts)
 
     while time.monotonic() < deadline:
         dismissed_any = False
@@ -451,7 +475,7 @@ def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
 
         if not dismissed_any:
             try:
-                main_text = _dialog_text(fc_win)
+                main_text = _embedded_dialog_text()
             except Exception:
                 main_text = ""
             if main_text and main_text not in seen_texts:
