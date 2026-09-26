@@ -208,3 +208,47 @@ def test_proposed_numbers_are_not_traced_to_the_document():
     assert spec.steps[0].proposed == ["volume_ul"]
     assert not any(p.where.startswith("steps[0].volume_ul") for p in problems)
     assert any(p.where.startswith("steps[4].volume_ul") for p in problems)  # 20 µl wash: not in the text
+
+
+def test_offdeck_separation_runs_on_the_deck_magnet(profile):
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    for step in raw["steps"]:
+        if step["op"] == "separate":
+            step["location"] = "off_deck"  # written for a hand-held magnet
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "separate(wt, plate=work, magnet=magnet" in source and "runs on the deck magnet" in source
+
+
+def test_kit_reagent_beyond_its_supply_is_a_question(profile):
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    raw["reagents"][0].update(supply_ul=2000, supply_count=1)
+    raw["steps"][0]["volume_ul"] = 50
+    with pytest.raises(OpenValues, match="BEADS is added at 4800 µl"):
+        build_skeleton(_spec(raw), load_deck(profile))
+
+
+class _ScriptedClient:
+    def __init__(self, *arguments):
+        self.replies = list(arguments)
+        self.calls = []
+
+    def complete(self, *, messages, tools):
+        self.calls.append(messages)
+        args = self.replies.pop(0)
+        return {"content": "", "tool_calls": [{"function": {"name": "submit_bench_spec", "arguments": json.dumps(args)}}]}
+
+
+def test_extraction_retries_an_empty_spec_and_drops_invented_supplies():
+    from fluentvibe.authoring.bench_spec import extract_bench_spec
+
+    good = json.loads(json.dumps(_STREPTAVIDIN))
+    good["reagents"][1].update(supply_ul=4800, supply_count=1)  # not in the document: invented
+    empty = {**good, "steps": []}
+    client = _ScriptedClient(empty, good)
+    spec, problems, raw = extract_bench_spec(client, "Streptavidin beads. B&W buffer. 2 minutes, 15 minutes.")
+    assert spec is not None and len(client.calls) == 2
+    assert "at least one step" in client.calls[1][-1]["content"]
+    bw = next(r for r in spec.reagents if r.id == "BW")
+    assert bw.supply_ul is None and any("treated as lab stock" in n for n in spec.notes)

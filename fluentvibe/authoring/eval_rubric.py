@@ -735,12 +735,17 @@ def _check_spec_conformance(wt, spec) -> Invariant:
             reagent = next((r for r in spec.reagents if r.id == step.reagent), None)
             if reagent is None:
                 continue
-            holders = [lw.label for lw in _iter_labware(final)
-                       if any(_names_spec_reagent(str(getattr(r, "name", "")), reagent)
-                              for well in lw.wells.values() for r, _ in _well_reagents(well))]
-            # Unidentified (code names it differently): no verdict. Found only
-            # in one labware: its source, never added anywhere.
-            if len(holders) == 1:
+            def holders(snap) -> set[str]:
+                return {lw.label for lw in _iter_labware(snap)
+                        if any(_names_spec_reagent(str(getattr(r, "name", "")), reagent)
+                               for well in lw.wells.values() for r, _ in _well_reagents(well))}
+
+            # Unidentified (code names it differently): no verdict. Only ever in
+            # the labware that held it at the start: never added anywhere.
+            # Sources: where it first appears (labware is placed step by step).
+            sources = next((found for snap in snapshots if (found := holders(snap))), set())
+            ended = holders(final)
+            if sources and ended and ended <= sources:
                 problems.append(f"deck add {step.id}: {reagent.id} never leaves its source")
     prompts = sum(1 for snap in snapshots if type(snap.step).__name__ == "UserPromptStep")
     if prompts < stretches:
