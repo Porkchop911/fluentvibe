@@ -102,7 +102,9 @@ def variable_prefix(name: str | None) -> str | None:
     ``"PCR_CLEAN_UP"``; ``None`` when the block has no name."""
     if not name:
         return None
-    slug = "".join(ch if ch.isalnum() else "_" for ch in str(name).upper())
+    # ASCII only: "µ" counts as alphanumeric (and upper-cases to Greek "Μ"),
+    # which FluentControl rejects in a variable name ("Enter a valid volume").
+    slug = "".join(ch if ch.isascii() and ch.isalnum() else "_" for ch in str(name).upper())
     slug = "_".join(part for part in slug.split("_") if part)
     return slug or None
 
