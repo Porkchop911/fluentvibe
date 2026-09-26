@@ -1,8 +1,8 @@
 {
   "name": "fluentvibe",
   "displayName": "fluentvibe",
-  "description": "Live diagnostics for fluentvibe protocol authoring (build errors + simulator failures).",
-  "version": "0.1.0",
+  "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
+  "version": "0.2.0",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -18,7 +18,10 @@
     "Linters"
   ],
   "activationEvents": [
-    "onLanguage:python"
+    "onLanguage:python",
+    "onCommand:fluentvibe.generateFromDocument",
+    "onCommand:fluentvibe.openInFluentControl",
+    "onCommand:fluentvibe.pullFluentControlEdits"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -26,6 +29,18 @@
       {
         "command": "fluentvibe.inlineEdit",
         "title": "fluentvibe: Edit selection with AI"
+      },
+      {
+        "command": "fluentvibe.generateFromDocument",
+        "title": "fluentvibe: Generate protocol from document"
+      },
+      {
+        "command": "fluentvibe.openInFluentControl",
+        "title": "fluentvibe: Open in FluentControl"
+      },
+      {
+        "command": "fluentvibe.pullFluentControlEdits",
+        "title": "fluentvibe: Pull FluentControl edits"
       }
     ],
     "keybindings": [
@@ -33,6 +48,11 @@
         "command": "fluentvibe.inlineEdit",
         "key": "ctrl+i",
         "when": "editorTextFocus && editorLangId == python"
+      },
+      {
+        "command": "fluentvibe.openInFluentControl",
+        "key": "ctrl+alt+f",
+        "when": "editorLangId == python"
       }
     ],
     "configuration": {
@@ -47,8 +67,73 @@
           "type": "boolean",
           "default": true,
           "description": "Enable the fluentvibe language server."
+        },
+        "fluentvibe.profile": {
+          "type": "string",
+          "default": "build/workspaces/sat_1080_test",
+          "description": "Deck profile directory (relative to the workspace folder)."
+        },
+        "fluentvibe.outputDir": {
+          "type": "string",
+          "default": "build/eval",
+          "description": "Where generated protocols are written (one folder per run)."
+        },
+        "fluentvibe.fluentControlCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check each generated protocol in FluentControl (InfoPad)."
+        },
+        "fluentvibe.chooseOpenValues": {
+          "type": "boolean",
+          "default": false,
+          "description": "Let the model choose values the document leaves open instead of asking you."
+        },
+        "fluentvibe.model.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible chat endpoint (empty: FLUENTVIBE_LM_ENDPOINT)."
+        },
+        "fluentvibe.model.name": {
+          "type": "string",
+          "default": "",
+          "description": "Model name (empty: FLUENTVIBE_LM_MODEL)."
+        },
+        "fluentvibe.model.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key (empty: FLUENTVIBE_LM_API_KEY)."
+        },
+        "fluentvibe.model.reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "default": "xhigh",
+          "description": "Reasoning effort for the model."
+        },
+        "fluentvibe.model.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "description": "Sampling temperature."
+        },
+        "fluentvibe.model.maxTokens": {
+          "type": "number",
+          "default": 65536,
+          "description": "Output token limit per request."
         }
       }
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "fluentvibe.openInFluentControl",
+          "when": "editorLangId == python",
+          "group": "navigation"
+        }
+      ]
     }
   },
   "scripts": {

@@ -125,12 +125,21 @@ def author_from_document(
     max_rounds: int = 3,
     fluentcontrol: bool = False,
     examples: bool = True,
+    progress: Callable[[str], None] | None = None,
 ) -> SpecPathResult:
-    """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl)."""
+    """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl).
+
+    ``progress`` receives one short line per stage (for an editor or terminal).
+    """
     from .skeleton import DeckMismatch, OpenValues, build_skeleton, load_deck
+
+    def note(message: str) -> None:
+        if progress is not None:
+            progress(message)
 
     result = SpecPathResult(stage="spec")
     started = time.monotonic()
+    note("reading the document and writing the Bench Spec (model)")
     context_parts = [f"Request: {request}"] if request else []
     if examples:
         from .spec_retrieval import retrieval_context
@@ -145,6 +154,8 @@ def author_from_document(
         result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
         return result
     result.timings["spec_s"] = time.monotonic() - started
+    if spec is not None:
+        note(f"spec: {len(spec.steps)} steps in {result.timings['spec_s']:.0f} s; building the protocol")
     result.spec, result.problems, result.spec_raw = spec, problems, raw
     if spec is None:
         result.error = "; ".join(f"{p.where}: {p.message}" for p in problems)
@@ -167,6 +178,7 @@ def author_from_document(
                 result.stage = "questions"
                 return result
             round_["answer"] = answer
+            note("revising the spec with the answer (model)")
             t0 = time.monotonic()
             try:
                 revised, problems, revised_raw = revise_bench_spec(client, raw, source_text, questions, answer)
@@ -194,6 +206,7 @@ def author_from_document(
     registry = AuthoringToolRegistry(output_dir=out)
     registry.lab_scope = load_lab_scope("skills")
     t0 = time.monotonic()
+    note("compiling and simulating")
     result.gate = registry.compile_and_simulate(result.source)
     result.timings["gate_s"] = time.monotonic() - t0
     if not result.gate.get("success"):
@@ -209,6 +222,7 @@ def author_from_document(
         xscr = out / "draft.xscr"
         build_worktable_from_source(result.source, str(draft)).compile(xscr)
         t0 = time.monotonic()
+        note("checking in FluentControl (InfoPad)")
         result.fluentcontrol = check_in_fluentcontrol(xscr, source=result.source, source_file=str(draft))
         result.timings["fc_s"] = time.monotonic() - t0
     result.stage = "done"

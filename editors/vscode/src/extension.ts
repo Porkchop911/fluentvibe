@@ -7,6 +7,13 @@ import {
   ExecuteCommandRequest,
 } from "vscode-languageclient/node";
 
+import {
+  clearFluentControlDiagnostics,
+  generateFromDocument,
+  openInFluentControl,
+  pullFluentControlEdits,
+} from "./workflow";
+
 let client: LanguageClient | undefined;
 
 interface InlineEditResult {
@@ -18,6 +25,13 @@ interface InlineEditResult {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand("fluentvibe.generateFromDocument", generateFromDocument),
+    vscode.commands.registerCommand("fluentvibe.openInFluentControl", openInFluentControl),
+    vscode.commands.registerCommand("fluentvibe.pullFluentControlEdits", pullFluentControlEdits),
+    // InfoPad findings describe the file as it was checked; an edit invalidates them.
+    vscode.workspace.onDidChangeTextDocument((e) => clearFluentControlDiagnostics(e.document))
+  );
   const config = vscode.workspace.getConfiguration("fluentvibe");
   if (!config.get<boolean>("enable", true)) {
     return;
