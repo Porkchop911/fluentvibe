@@ -490,3 +490,30 @@ def test_spec_parses_head_and_liquid_class_variables():
     raw["steps"][1]["head"] = "robot arm"                 # not a head: ignored
     spec = _spec(raw)
     assert spec.liquid_class_variables and spec.steps[0].head == "fca" and spec.steps[1].head is None
+
+
+def test_repeat_unrolls_a_wash_block(profile, tmp_path):
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    # s2..s6 is one wash (magnet, discard, off, buffer, resuspend): run it twice more
+    raw["steps"].insert(6, {"id": "r1", "op": "repeat", "text": "Two more washes", "location": "deck",
+                            "first_step": "s2", "last_step": "s6", "times": 2})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "TODO" not in source
+    # magnet on: the wash (s2) three times plus the final one (s9); magnet off: three times
+    assert source.count("    separate(wt") == 4 and source.count("    release(wt") == 3 and '"s4-3: Off"' in source
+    registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
+    registry.lab_scope = load_lab_scope("skills")
+    assert registry.compile_and_simulate(source)["success"] is True
+
+
+def test_repeat_of_unknown_steps_is_a_question(profile):
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    raw["steps"].append({"id": "r1", "op": "repeat", "text": "again", "location": "deck",
+                         "first_step": "nope", "last_step": "s3", "times": 1})
+    with pytest.raises(OpenValues, match="repeat 'r1' needs"):
+        build_skeleton(_spec(raw), load_deck(profile))

@@ -50,6 +50,7 @@ OPS = (
     "incubate",      # temperature and/or time
     "measure",       # e.g. Qubit, NanoDrop
     "manual",        # operator-only step (no liquid handling on the deck)
+    "repeat",        # repeat the steps first_step..last_step `times` more times
     # Macros: a fixed order of primitives.
     "pool",          # many samples into one container
     "bead_cleanup",  # SPRI-type clean-up: bind, wash, elute off the magnet, recover eluate
@@ -100,6 +101,10 @@ class SpecStep:
     proposed: list[str] = field(default_factory=list)
     # add: which head dispenses, when the request says so ("fca" / "mca").
     head: str | None = None
+    # repeat: the block of earlier steps to run again, and how many more times.
+    first_step: str | None = None
+    last_step: str | None = None
+    times: int | None = None
 
 
 @dataclass
@@ -184,6 +189,9 @@ def bench_spec_json_schema() -> dict[str, Any]:
                         "cycles": {"type": ["integer", "null"]},
                         "engage": {"type": ["boolean", "null"]},
                         "head": {"type": ["string", "null"], "enum": ["fca", "mca", None]},
+                        "first_step": {"type": ["string", "null"]},
+                        "last_step": {"type": ["string", "null"]},
+                        "times": {"type": ["integer", "null"]},
                         "proposed": {"type": "array", "items": {"type": "string",
                                                                  "enum": list(_NUMERIC_STEP_FIELDS)}},
                         "source_quote": {"type": ["string", "null"]},
@@ -286,6 +294,9 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
             engage=engage if isinstance(engage, bool) else None,
             proposed=proposed,
             head=str(item.get("head")).lower() if str(item.get("head") or "").lower() in {"fca", "mca"} else None,
+            first_step=str(item["first_step"]) if item.get("first_step") else None,
+            last_step=str(item["last_step"]) if item.get("last_step") else None,
+            times=int(item["times"]) if isinstance(item.get("times"), (int, float)) and not isinstance(item.get("times"), bool) else None,
         ))
     if not title:
         return None, problems
@@ -365,6 +376,29 @@ def check_locations(spec: BenchSpec) -> list[SpecProblem]:
                 f"step {step.id!r} mentions an off-deck action but is marked 'deck'",
             ))
     return problems
+
+
+def expand_repeats(spec: BenchSpec) -> tuple[BenchSpec, list[SpecProblem]]:
+    """Unroll ``repeat`` steps into copies of the steps they name (ids get
+    ``-2``, ``-3`` … suffixes), so every copy is built, simulated and checked
+    like any other step. A repeat naming unknown steps is a problem, not a guess."""
+    from dataclasses import replace as _replace
+
+    problems: list[SpecProblem] = []
+    out: list[SpecStep] = []
+    for i, step in enumerate(spec.steps):
+        if step.op != "repeat":
+            out.append(step)
+            continue
+        ids = [s.id for s in out]
+        if step.first_step not in ids or step.last_step not in ids                 or ids.index(step.first_step) > ids.index(step.last_step) or not step.times or step.times < 1:
+            problems.append(SpecProblem("schema", f"steps[{i}]",
+                                        f"repeat {step.id!r} needs first_step/last_step of earlier steps and times >= 1"))
+            continue
+        block = out[ids.index(step.first_step): ids.index(step.last_step) + 1]
+        for n in range(2, step.times + 2):
+            out.extend(_replace(s, id=f"{s.id}-{n}") for s in block if s.op != "repeat")
+    return _replace(spec, steps=out), problems
 
 
 def open_values(spec: BenchSpec) -> list[SpecProblem]:
@@ -516,6 +550,9 @@ currently working in (the samples at first; after a transfer, the new plate):
   The deck has a magnet: separate is a deck step even when the document uses a
   hand-held magnet (DynaMag); so are the removes and adds around it.
 - incubate: time and/or temperature (location off_deck when it needs a device).
+- repeat: run the earlier steps first_step..last_step again, times = how many MORE
+  times (3 washes: write one wash, then repeat it with times=2). Use it instead of
+  describing a repetition in text.
 - measure / manual: operator steps. Preparing a reagent away from the plate (mixing
   working reagent from A and B, reconstituting a substrate) is manual.
 A bead wash is: separate(engage=true), remove, separate(engage=false), add wash buffer, mix.
