@@ -252,3 +252,37 @@ def test_extraction_retries_an_empty_spec_and_drops_invented_supplies():
     assert "at least one step" in client.calls[1][-1]["content"]
     bw = next(r for r in spec.reagents if r.id == "BW")
     assert bw.supply_ul is None and any("treated as lab stock" in n for n in spec.notes)
+
+
+def test_spec_path_asks_revises_and_builds(profile, tmp_path):
+    from fluentvibe.authoring.spec_path import author_from_document
+
+    first = json.loads(json.dumps(_STREPTAVIDIN))
+    first["reagents"][0].update(supply_ul=2000, supply_count=1)
+    first["steps"][0]["volume_ul"] = 50  # 50 ul x 96 > 2000 ul
+    revised = json.loads(json.dumps(first))
+    revised["steps"][0]["volume_ul"] = 20
+    client = _ScriptedClient(first, revised)
+    asked = []
+
+    def ask(questions):
+        asked.append(questions)
+        return "Use 20 ul beads per well."
+
+    result = author_from_document(client, "Streptavidin beads, 2000 µl. 2 minutes. 15 minutes.", profile,
+                                  tmp_path / "out", ask=ask, examples=False)
+    assert result.stage == "done", (result.stage, result.error)
+    assert "BEADS is added at 4800" in asked[0][0]
+    assert result.rounds[0]["answer"] == "Use 20 ul beads per well."
+    assert "Use 20 ul beads per well." in client.calls[1][-1]["content"]
+    assert result.gate["success"] is True
+
+
+def test_spec_path_hands_questions_back_without_an_answer(profile, tmp_path):
+    from fluentvibe.authoring.spec_path import author_from_document
+
+    first = json.loads(json.dumps(_STREPTAVIDIN))
+    first["steps"][6]["volume_ul"] = None  # probe volume open
+    result = author_from_document(_ScriptedClient(first), "Streptavidin beads.", profile, tmp_path / "out",
+                                  ask=lambda questions: None, examples=False)
+    assert result.stage == "questions" and "PROBE" in result.open_questions[0]
