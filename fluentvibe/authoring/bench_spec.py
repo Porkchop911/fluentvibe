@@ -367,6 +367,13 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
     without one mixes most of the well, so those are not open.
     """
     problems: list[SpecProblem] = []
+    has_deck_liquid = any(s.location == "deck" and s.op not in {"incubate", "measure", "manual"}
+                          for s in spec.steps)
+    if spec.sample_volume_ul is None and has_deck_liquid and any(r.role == "sample" for r in spec.reagents):
+        problems.append(SpecProblem(
+            "open", "sample_volume_ul",
+            "the samples' volume per well is not given: how many µl of sample are in each well at the start?",
+        ))
     for i, step in enumerate(spec.steps):
         if step.location != "deck":
             continue
@@ -471,7 +478,9 @@ Read the document and describe WHAT the protocol does as a sequence of physical
 steps, not how a particular robot would do it.
 Call submit_bench_spec exactly once with:
 - samples: how many samples the document is written for (use the largest plate
-  format it supports, e.g. 96) and the per-sample input volume;
+  format it supports, e.g. 96) and sample_volume_ul, the volume of sample in
+  each well at the start (the request's volume when it states one, e.g. "PCR
+  products of 20 ul" -> 20);
 - reagents: every reagent used, with a short id (the document's acronym when it
   has one, e.g. AXP, EB), its name and a role (sample, reagent, bead_carrier,
   wash, eluent, per_sample for per-well reagents such as barcodes, product);

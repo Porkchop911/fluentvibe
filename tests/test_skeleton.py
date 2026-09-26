@@ -286,3 +286,57 @@ def test_spec_path_hands_questions_back_without_an_answer(profile, tmp_path):
     result = author_from_document(_ScriptedClient(first), "Streptavidin beads.", profile, tmp_path / "out",
                                   ask=lambda questions: None, examples=False)
     assert result.stage == "questions" and "PROBE" in result.open_questions[0]
+
+
+_SPRI_PRIMITIVES = {
+    "title": "PCR clean-up as primitives",
+    "sample_count": 96,
+    "sample_volume_ul": 20,
+    "reagents": [
+        {"id": "PCR", "name": "PCR product", "role": "sample"},
+        {"id": "AXP", "name": "AMPure XP beads", "role": "bead_carrier"},
+        {"id": "ETOH", "name": "70% ethanol", "role": "wash", "liquid_type": "ethanol"},
+        {"id": "EB", "name": "Elution buffer", "role": "eluent"},
+    ],
+    "steps": [
+        {"id": "s1", "op": "add", "text": "Beads 1.8x", "location": "deck", "reagent": "AXP", "volume_ul": 36},
+        {"id": "s2", "op": "mix", "text": "Mix", "location": "deck", "cycles": 10},
+        {"id": "s3", "op": "incubate", "text": "Bind 5 min", "location": "deck", "minutes": [5]},
+        {"id": "s4", "op": "separate", "text": "Magnet", "location": "deck", "engage": True, "minutes": [2]},
+        {"id": "s5", "op": "remove", "text": "Discard supernatant", "location": "deck"},
+        {"id": "s6", "op": "add", "text": "Ethanol", "location": "deck", "reagent": "ETOH", "volume_ul": 200},
+        {"id": "s7", "op": "remove", "text": "Discard ethanol", "location": "deck"},
+        {"id": "s8", "op": "separate", "text": "Off", "location": "deck", "engage": False},
+        {"id": "s9", "op": "add", "text": "Elution buffer", "location": "deck", "reagent": "EB", "volume_ul": 40},
+        {"id": "s10", "op": "mix", "text": "Resuspend", "location": "deck", "cycles": 10},
+        {"id": "s11", "op": "separate", "text": "Magnet", "location": "deck", "engage": True},
+        {"id": "s12", "op": "transfer", "text": "Eluate to a new plate", "location": "deck", "volume_ul": 38},
+    ],
+}
+
+
+def test_spri_written_as_primitives_is_checked_in_simulation(profile, tmp_path):
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    source = build_skeleton(_spec(_SPRI_PRIMITIVES), load_deck(profile))
+    assert "spri_cleanup(" not in source
+    path = tmp_path / "s.py"
+    path.write_text(source, encoding="utf-8")
+    result = score_protocol(source, filename=str(path), spec=_spec(_SPRI_PRIMITIVES))
+    assert result.failed == 0, [i for i in result.invariants if i.status == "fail"]
+    for key in ("magnet_roundtrip", "eluate_recovered", "analyte_not_in_waste", "spec_conformance"):
+        assert result.get(key).status == "pass", key
+    registry = AuthoringToolRegistry(output_dir=tmp_path / "out")
+    registry.lab_scope = load_lab_scope("skills")
+    gate = registry.compile_and_simulate(source)
+    assert gate["success"] is True, gate.get("failure_message")  # bound marker is not over-drawn
+
+
+def test_missing_sample_volume_is_a_question(profile):
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    raw = json.loads(json.dumps(_SPRI_PRIMITIVES))
+    raw["sample_volume_ul"] = None
+    with pytest.raises(OpenValues, match="volume per well is not given"):
+        build_skeleton(_spec(raw), load_deck(profile))
