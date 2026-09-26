@@ -94,6 +94,8 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/save-profile":
                 self._json(service.save_profile(self._read_json()))
+            elif parsed.path == "/api/job-answer":
+                self._json(service.answer_job(self._read_json()))
             elif parsed.path == "/api/propose-workspace-modules":
                 self._json(service.propose_workspace_modules(self._read_json()))
             elif parsed.path.startswith("/api/jobs/"):
