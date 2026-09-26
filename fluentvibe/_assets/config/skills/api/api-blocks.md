@@ -1,7 +1,7 @@
 ---
 name: api-blocks
 axis: api
-description: Verified building blocks (fluentvibe.blocks) — one call emits a whole, tested stage (bead cleanup, plate stamp, reagent addition, column pooling, operator hand-off) with correct tip use and derived volumes. Prefer them over writing those stages step by step.
+description: Verified building blocks (fluentvibe.blocks) — physical primitives (add, transfer, remove, mix, magnet on/off, operator hand-off) that compose any plate protocol, plus the spri_cleanup macro; correct tip use and derived volumes. Prefer them over writing stages step by step.
 always_on: true
 ---
 ## `fluentvibe.blocks` — call a block instead of writing the stage
@@ -15,6 +15,35 @@ waits). Import at the top of the file:
 ```python
 from fluentvibe.blocks import spri_cleanup, stamp, distribute_reagent, add_reagent, pool_columns, offdeck_step, thermal_step
 ```
+
+**Primitives first.** Any plate protocol is a sequence of physical primitives;
+write the document's steps with them in its order. `spri_cleanup` is a macro —
+use it only for a SPRI/AMPure clean-up that binds DNA, washes, **elutes** and
+recovers the eluate into a new plate. Bead work that keeps the beads
+(streptavidin capture, bead washes, probe immobilisation) is primitives:
+
+| Step | Block |
+|---|---|
+| add a reagent to every well | `distribute_reagent` (FCA) / `add_reagent` (MCA96, bulk liquids) |
+| wells → new plate, well to well | `stamp` |
+| liquid out to waste (supernatant, used wash) | `remove_liquid` |
+| mix in place (resuspend beads) | `mix_wells` |
+| magnet on / off | `separate` / `release` |
+| operator step (incubation off deck, spin) | `offdeck_step` |
+
+```python
+# Bead wash: magnet on, discard, magnet off, add buffer, resuspend.
+separate(wt, plate=work, magnet=magnet, settle_seconds=120, name="Wash 1: magnet")
+remove_liquid(wt, plate=work, waste=waste, volume_ul=18, tips=work_tips, liquid_class=LC, name="Wash 1: discard")
+release(wt, plate=work, to=("Nest61mm_Pos", 1), name="Wash 1: off magnet")
+add_reagent(wt, reagent_source=bw_trough, plate=work, volume_ul=20, reagent_tips=reagent_tips,
+            liquid_class=LC, name="Wash 1: B&W buffer")
+mix_wells(wt, plate=work, tips=work_tips, volume_ul=16, cycles=5, name="Wash 1: resuspend")
+```
+
+`work_tips` is the plate's own MCA96 box for everything that touches the wells
+(`remove_liquid`, `mix_wells`): channel *i* only ever meets well *i*. `release`
+moves the plate back to its home position (where it was placed).
 
 **Reagents go through the FCA, bulk liquids through the MCA96.** Beads,
 buffers, master mixes and kit reagents come from slim troughs (`25ml_short` /

@@ -718,6 +718,30 @@ def _check_spec_conformance(wt, spec) -> Invariant:
             if off and not in_stretch:
                 stretches += 1
             in_stretch = off
+    # Physical primitives: each must have its physical effect.
+    ops = {op for _, op in deck_ops}
+    if "separate" in ops and magnet_at is None:
+        problems.append("deck separate step: no plate is ever put on a magnet")
+    final = snapshots[-1] if snapshots else None
+    if "remove" in ops and final is not None and not any(
+        _is_waste(lw) and any(well.layers or getattr(well, "bead_phase", None) for well in lw.wells.values())
+        for lw in _iter_labware(final)
+    ):
+        problems.append("deck remove step: nothing ever reaches waste")
+    if final is not None:
+        for step in spec.steps:
+            if step.location != "deck" or step.op != "add" or not step.reagent:
+                continue
+            reagent = next((r for r in spec.reagents if r.id == step.reagent), None)
+            if reagent is None:
+                continue
+            holders = [lw.label for lw in _iter_labware(final)
+                       if any(_names_spec_reagent(str(getattr(r, "name", "")), reagent)
+                              for well in lw.wells.values() for r, _ in _well_reagents(well))]
+            # Unidentified (code names it differently): no verdict. Found only
+            # in one labware: its source, never added anywhere.
+            if len(holders) == 1:
+                problems.append(f"deck add {step.id}: {reagent.id} never leaves its source")
     prompts = sum(1 for snap in snapshots if type(snap.step).__name__ == "UserPromptStep")
     if prompts < stretches:
         problems.append(
@@ -729,6 +753,17 @@ def _check_spec_conformance(wt, spec) -> Invariant:
         "spec_conformance", _PASS,
         f"{len(deck_ops)} deck step(s) conform; {prompts} operator pause(s) for {stretches} off-deck stretch(es)",
     )
+
+
+def _names_spec_reagent(code_name: str, reagent) -> bool:
+    """Does a simulated reagent name refer to this spec reagent (by id or name)?"""
+    code = " ".join(code_name.lower().split())
+    name = " ".join(str(reagent.name).lower().split())
+    if not code:
+        return False
+    if re.search(rf"(?<![0-9a-z]){re.escape(str(reagent.id).lower())}(?![0-9a-z])", code):
+        return True
+    return code in name or name in code
 
 
 def _check_reagent_budget(wt, spec) -> Invariant:

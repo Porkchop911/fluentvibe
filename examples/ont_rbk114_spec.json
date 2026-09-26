@@ -71,7 +71,7 @@
   "steps": [
     {
       "id": "s1",
-      "op": "custom",
+      "op": "bead_cleanup",
       "text": "Optional PCR clean-up of amplicons with lab-stock AMPure beads and elution buffer (method left open by the document); do not use the kit's AXP or EB",
       "location": "deck",
       "source_quote": "We recommend performing a purification step following the PCR reaction",
