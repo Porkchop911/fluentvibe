@@ -16,7 +16,16 @@ Deterministic checks on a spec:
 * **numbers** — every number in the spec must appear in the source text, so an
   extracted "960 µl" can be traced and an invented "1.8×" is flagged;
 * **locations** — steps whose text names an off-deck device (thermal cycler,
-  centrifuge, Qubit …) but are marked ``deck`` are flagged.
+  centrifuge, Qubit …) but are marked ``deck`` are flagged;
+* **open values** — a deck step missing a number its physics needs (an ``add``
+  without a volume) is an open question, not a default.
+
+Steps are physical primitives (``add``, ``transfer``, ``remove``, ``mix``,
+``separate``, ``incubate``, ``manual`` …) with no chemistry in them, so any
+protocol is a sequence of known steps. ``bead_cleanup`` and ``pool`` are
+macros for the common bind-wash-elute clean-up and column pooling. A number
+the document does not give but the model chose is listed in the step's
+``proposed``; it is reviewed, not checked against the document.
 """
 
 from __future__ import annotations
@@ -32,20 +41,26 @@ SPEC_VERSION = 1
 SPEC_MARKER = "APPROVED BENCH SPEC"
 
 OPS = (
-    "add",           # reagent from a source into sample wells
-    "transfer",      # sample liquid from one container to another, 1:1
-    "mix",
-    "pool",          # many samples into one container
-    "bead_cleanup",  # magnetic bead bind / wash / elute / recover
+    # Physical primitives.
+    "add",           # reagent from a source into the working wells
+    "transfer",      # working wells into new labware, 1:1 (the new labware becomes the working plate)
+    "remove",        # liquid out of the working wells into waste (supernatant, wash)
+    "mix",           # mix the working wells in place (resuspend beads, mix a reaction)
+    "separate",      # magnet on (engage=true) or off (engage=false)
     "incubate",      # temperature and/or time
     "measure",       # e.g. Qubit, NanoDrop
     "manual",        # operator-only step (no liquid handling on the deck)
-    "custom",        # anything else; described in text
+    # Macros: a fixed order of primitives.
+    "pool",          # many samples into one container
+    "bead_cleanup",  # SPRI-type clean-up: bind, wash, elute off the magnet, recover eluate
+    "custom",        # no primitive fits; described in text, authored by hand
 )
+MACROS = ("pool", "bead_cleanup")
 LOCATIONS = ("deck", "off_deck", "manual")
 ROLES = ("sample", "reagent", "bead_carrier", "wash", "eluent", "per_sample", "product")
 
-_NUMERIC_STEP_FIELDS = ("volume_ul", "ratio", "washes", "elute_ul", "wash_ul", "temp_c", "minutes")
+_NUMERIC_STEP_FIELDS = ("volume_ul", "ratio", "washes", "elute_ul", "wash_ul", "residual_ul", "cycles",
+                        "temp_c", "minutes")
 
 
 @dataclass
@@ -77,6 +92,12 @@ class SpecStep:
     temp_c: list[float] = field(default_factory=list)
     minutes: list[float] = field(default_factory=list)
     source_quote: str | None = None
+    # remove: µl left in each well; mix: cycles; separate: magnet on (True) / off (False).
+    residual_ul: float | None = None
+    cycles: int | None = None
+    engage: bool | None = None
+    # Numeric fields the model chose because the document leaves them open.
+    proposed: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -155,6 +176,11 @@ def bench_spec_json_schema() -> dict[str, Any]:
                         "elute_ul": {"type": ["number", "null"]},
                         "temp_c": number_list,
                         "minutes": number_list,
+                        "residual_ul": {"type": ["number", "null"]},
+                        "cycles": {"type": ["integer", "null"]},
+                        "engage": {"type": ["boolean", "null"]},
+                        "proposed": {"type": "array", "items": {"type": "string",
+                                                                 "enum": list(_NUMERIC_STEP_FIELDS)}},
                         "source_quote": {"type": ["string", "null"]},
                     },
                 },
@@ -237,6 +263,9 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
         if reagent and reagent_ids and reagent not in reagent_ids:
             problems.append(SpecProblem("schema", f"{where}.reagent", f"reagent {reagent!r} is not declared"))
         washes = item.get("washes")
+        cycles = item.get("cycles")
+        engage = item.get("engage")
+        proposed = [str(f) for f in item.get("proposed") or [] if str(f) in _NUMERIC_STEP_FIELDS]
         steps.append(SpecStep(
             id=sid, op=op, text=str(item.get("text") or ""), location=location,
             reagent=reagent, target=item.get("target"),
@@ -246,6 +275,10 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
             temp_c=[v for v in (_num(x) for x in item.get("temp_c") or []) if v is not None],
             minutes=[v for v in (_num(x) for x in item.get("minutes") or []) if v is not None],
             source_quote=item.get("source_quote"),
+            residual_ul=_num(item.get("residual_ul")),
+            cycles=int(cycles) if isinstance(cycles, (int, float)) and not isinstance(cycles, bool) else None,
+            engage=engage if isinstance(engage, bool) else None,
+            proposed=proposed,
         ))
     if not title:
         return None, problems
@@ -304,6 +337,8 @@ def check_numbers(spec: BenchSpec, source_text: str) -> list[SpecProblem]:
             check(f"reagents[{i}].supply_count", float(reagent.supply_count))
     for i, step in enumerate(spec.steps):
         for name in _NUMERIC_STEP_FIELDS:
+            if name in step.proposed:
+                continue  # the model's choice for an open value; reviewed, not traced
             value = getattr(step, name)
             values: Iterable[float | None] = value if isinstance(value, list) else [value]
             for j, v in enumerate(values):
@@ -324,6 +359,26 @@ def check_locations(spec: BenchSpec) -> list[SpecProblem]:
     return problems
 
 
+def open_values(spec: BenchSpec) -> list[SpecProblem]:
+    """Deck steps missing a number the physics needs: questions for the user.
+
+    Only what cannot be derived: an ``add`` without a volume. A ``remove`` or
+    ``transfer`` without one takes everything above the residual, a ``mix``
+    without one mixes most of the well, so those are not open.
+    """
+    problems: list[SpecProblem] = []
+    for i, step in enumerate(spec.steps):
+        if step.location != "deck":
+            continue
+        if step.op == "add" and step.volume_ul is None:
+            reagent = step.reagent or "the reagent"
+            problems.append(SpecProblem(
+                "open", f"steps[{i}].volume_ul",
+                f"step {step.id!r} adds {reagent} but no volume is given: how many µl per well?",
+            ))
+    return problems
+
+
 def validate_bench_spec(raw: dict[str, Any], source_text: str | None = None) -> tuple[BenchSpec | None, list[SpecProblem]]:
     """Parse plus every deterministic check that applies."""
     spec, problems = parse_bench_spec(raw)
@@ -332,6 +387,7 @@ def validate_bench_spec(raw: dict[str, Any], source_text: str | None = None) -> 
     if source_text:
         problems += check_numbers(spec, source_text)
     problems += check_locations(spec)
+    problems += open_values(spec)
     return spec, problems
 
 
@@ -368,6 +424,9 @@ def spec_to_markdown(spec: BenchSpec, problems: Iterable[SpecProblem] = ()) -> s
                 f"{step.washes} washes" if step.washes else "",
                 f"ratio {step.ratio:g}" if step.ratio else "",
                 f"elute {step.elute_ul:g} µl" if step.elute_ul else "",
+                f"{step.cycles} cycles" if step.cycles else "",
+                {True: "magnet on", False: "magnet off"}.get(step.engage, "") if step.op == "separate" else "",
+                f"proposed: {', '.join(step.proposed)}" if step.proposed else "",
             ])
         )
         check = "; ".join(flagged.get(i, [])) or "ok"
@@ -408,7 +467,8 @@ EXTRACTION_TOOL_NAME = "submit_bench_spec"
 
 EXTRACTION_SYSTEM_PROMPT = """You extract a Bench Spec from a laboratory protocol document.
 
-Read the document and describe WHAT the protocol does, not how a robot would do it.
+Read the document and describe WHAT the protocol does as a sequence of physical
+steps, not how a particular robot would do it.
 Call submit_bench_spec exactly once with:
 - samples: how many samples the document is written for (use the largest plate
   format it supports, e.g. 96) and the per-sample input volume;
@@ -419,19 +479,47 @@ Call submit_bench_spec exactly once with:
   for plated reagents) and supply_count (number of vials or wells) exactly as
   the kit contents table states them;
 - steps: every step in the document's order. For each: a short plain text,
-  the op (add, transfer, mix, pool, bead_cleanup, incubate, measure, manual,
-  custom), the location (deck = liquid handling a robot can do on its worktable;
+  the op, the location (deck = liquid handling a robot can do on its worktable;
   off_deck = needs a device or place away from the worktable, e.g. thermal
   cycler, centrifuge, Qubit, ice; manual = operator-only, e.g. flow-cell
-  priming), volumes in µl, temperatures, minutes, washes, and a short quote
+  priming), volumes in µl per well, temperatures, minutes, and a short quote
   from the document as source_quote.
 
+Ops are physical primitives. The working wells are the plate the protocol is
+currently working in (the samples at first; after a transfer, the new plate):
+- add: a reagent (reagent id) from its source into the working wells; volume_ul per well.
+  Beads, buffers, probes, master mix: all "add".
+- transfer: the working wells' liquid into NEW labware, well to well; volume_ul
+  (null = all of it). The new labware becomes the working plate.
+- remove: liquid out of the working wells to waste (supernatant, used wash);
+  volume_ul (null = all but residual_ul).
+- mix: mix the working wells in place (resuspend beads); cycles.
+- separate: magnet. engage=true puts the plate on the magnet (beads collect,
+  minutes = settle time); engage=false takes it off so beads can be resuspended.
+- incubate: time and/or temperature (location off_deck when it needs a device).
+- measure / manual: operator steps.
+A bead wash is: separate(engage=true), remove, separate(engage=false), add wash buffer, mix.
+Macros, only when the document really does exactly this:
+- bead_cleanup: a SPRI/AMPure-type clean-up that binds DNA to beads, washes,
+  ELUTES off the magnet and recovers the eluate into new labware (ratio, washes,
+  wash_ul, elute_ul). Anything else with beads (streptavidin capture, bead
+  washes, keeping the beads) is written as primitives.
+- pool: samples combined into one container.
+- custom: only if no primitive fits; say why in text.
+
 Rules:
-- Use only numbers written in the document. If the document leaves a value
-  open, leave the field null and say so in notes.
+- Numbers from the document go in their fields as written.
+- If the document leaves a number open (e.g. "desired volume") and the request
+  asks you to choose, put your value in the field and list the field name in
+  that step's "proposed" (e.g. "proposed": ["volume_ul"]). If you cannot
+  choose, leave it null and say what is needed in notes.
+- Volumes are per well of a 96-well plate (at most ~300 µl per well); scale
+  tube volumes from the document down to one well.
 - Keep the document's order. If it pools samples before a cleanup, the pool
   step comes first.
-- One bead cleanup (bind, washes, elution, recovery) is ONE bead_cleanup step.
+- If the protocol starts from reagents (e.g. beads) rather than samples, give
+  no reagent the role sample: the working plate then starts empty and the first
+  add fills it.
 """
 
 

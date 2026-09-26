@@ -269,10 +269,14 @@ def test_lookup_api_describes_blocks_from_their_signatures(tmp_path):
     result = AuthoringToolRegistry(output_dir=tmp_path).lookup_api("fluentvibe.blocks")
     assert result["ok"] is True
     methods = {m["name"]: m for m in result["api"]["methods"]}
-    assert set(methods) == {"spri_cleanup", "stamp", "add_reagent", "pool_columns",
-                            "offdeck_step", "thermal_step"}
+    assert set(methods) >= {"spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns",
+                            "offdeck_step", "thermal_step", "remove_liquid", "mix_wells", "separate", "release"}
     assert "eluate_tips" in methods["spri_cleanup"]["signature"]
-    assert AuthoringToolRegistry(output_dir=tmp_path).lookup_api("pool_columns")["ok"] is True
+    registry = AuthoringToolRegistry(output_dir=tmp_path)
+    for name in ("pool_columns", "distribute_reagent", "fluentvibe.blocks.spri_cleanup", "Trough25mL",
+                 "MagnetRack", "FCA200Box", "MCA200Box", "Reagent", "fluentvibe.TipBox"):
+        assert registry.lookup_api(name)["ok"] is True, name
+    assert "wt.place(Trough25mL(" in registry.lookup_api("Trough25mL")["api"]["note"]
 
 
 def test_spec_conformance_against_the_gold_spec():

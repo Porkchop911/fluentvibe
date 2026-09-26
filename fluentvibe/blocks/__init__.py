@@ -1,8 +1,11 @@
 """Verified building blocks for common protocol stages.
 
 A block is a plain function that emits a whole, known-good stage onto a
-:class:`~fluentvibe.Worktable`: a bead cleanup, a plate stamp, a reagent
-addition, an operator pause. Blocks take **roles and scientific parameters**
+:class:`~fluentvibe.Worktable`. Most are physical primitives with no chemistry
+(add: ``distribute_reagent`` / ``add_reagent``; transfer: ``stamp`` /
+``pool_columns``; ``remove_liquid``; ``mix_wells``; magnet ``separate`` /
+``release``; operator: ``offdeck_step``); any plate protocol is a sequence of
+them. ``spri_cleanup`` is a macro: one fixed order of those primitives. Blocks take **roles and scientific parameters**
 (which plate holds the samples, how much beads to add), derive the dependent
 volumes themselves, and follow fixed tip rules so the stage cannot
 cross-contaminate samples. They lower to ordinary head / gripper calls, so the
@@ -32,6 +35,7 @@ from __future__ import annotations
 from .bead_cleanup import CleanupVolumes, spri_cleanup
 from .common import BlockError
 from .operator import offdeck_step, thermal_step
+from .primitives import mix_wells, release, remove_liquid, separate
 from .transfers import add_reagent, distribute_reagent, pool_columns, stamp
 
 __all__ = [
@@ -39,8 +43,12 @@ __all__ = [
     "CleanupVolumes",
     "add_reagent",
     "distribute_reagent",
+    "mix_wells",
     "offdeck_step",
     "pool_columns",
+    "release",
+    "remove_liquid",
+    "separate",
     "spri_cleanup",
     "stamp",
     "thermal_step",

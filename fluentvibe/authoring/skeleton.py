@@ -10,13 +10,19 @@ workspace-app profile, :func:`build_skeleton` writes Python source that:
   occupies;
 * fills reagents — kit reagents with their spec supply, lab stock with an
   estimate of what the run needs;
-* turns each spec step into a ``fluentvibe.blocks`` call (``stamp``,
-  ``add_reagent``, ``pool_columns``, ``spri_cleanup``), room-temperature
-  incubations into ``wt.wait``, and every stretch of off-deck/manual steps into
-  one ``offdeck_step``.
+* turns each spec step into a ``fluentvibe.blocks`` call: the physical
+  primitives (add: ``distribute_reagent`` / ``add_reagent``; transfer:
+  ``stamp``; ``remove_liquid``; ``mix_wells``; magnet ``separate`` /
+  ``release``), the macros (``spri_cleanup`` for a ``bead_cleanup`` step,
+  ``pool_columns`` for ``pool``), room-temperature incubations into
+  ``wt.wait``, and every stretch of off-deck/manual steps into one
+  ``offdeck_step``.
 
-Choices the spec does not fix (assumed ratios, mix counts, tip boxes) are
-marked ``# ASSUMED`` so a model or a person can review them. The skeleton is a
+A step is never mapped onto a block of another kind: a ``custom`` step stays a
+``TODO`` for hand authoring, and a spec with open values (an ``add`` without a
+volume) raises :class:`OpenValues` listing the questions to ask. Procedural
+choices the spec does not fix (mix counts, settle times, tip boxes) are marked
+``# ASSUMED`` so a model or a person can review them. The skeleton is a
 starting draft, not a verdict: authoring still simulates, compiles and checks it.
 """
 
@@ -28,7 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .bench_spec import BenchSpec, SpecReagent, SpecStep
+from .bench_spec import BenchSpec, SpecReagent, SpecStep, open_values
 
 SKELETON_MARKER = "# BENCH SPEC SKELETON"
 _PLATE_LOCATION = "Nest61mm_Pos"
@@ -281,6 +287,14 @@ class DeckMismatch(ValueError):
     """The spec cannot run on this deck as written (e.g. deep-well volumes)."""
 
 
+class OpenValues(ValueError):
+    """The spec leaves numbers open that the skeleton must not guess."""
+
+    def __init__(self, questions: list[str]) -> None:
+        self.questions = questions
+        super().__init__("skeleton: the spec leaves values open: " + " ".join(questions))
+
+
 _ROLE_FOR_SIM = {"sample": "analyte", "bead_carrier": "bead_carrier", "eluent": "eluent"}
 
 
@@ -304,17 +318,31 @@ def _pick(spec: BenchSpec, role: str, *, lab_stock: bool | None = None) -> SpecR
 
 
 def _is_cleanup(step: SpecStep, spec: BenchSpec) -> bool:
-    if step.op == "bead_cleanup":
-        return True
-    reagent = next((r for r in spec.reagents if r.id == step.reagent), None)
-    return bool(reagent and reagent.role == "bead_carrier") or bool(
-        re.search(r"clean-?up|ampure|spri|bead", step.text or "", re.IGNORECASE)
-        and step.op == "custom"
-    )
+    # Only the explicit macro. Beads added with ``add`` or described in a
+    # ``custom`` step are not a SPRI clean-up (a streptavidin bead wash keeps
+    # the beads and never elutes).
+    return step.op == "bead_cleanup"
+
+
+def _starts_empty(spec: BenchSpec) -> bool:
+    """No sample reagent and the first deck liquid step adds a reagent: the
+    protocol builds its wells from reagents (e.g. beads), so the plate starts empty."""
+    if any(r.role == "sample" for r in spec.reagents):
+        return False
+    first = next((s for s in spec.steps if s.location == "deck"
+                  and s.op not in {"incubate", "measure", "manual"}), None)
+    return first is not None and first.op == "add" and first.reagent is not None
 
 
 def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
-    """Python source for a first, runnable protocol draft."""
+    """Python source for a first, runnable protocol draft.
+
+    Raises :class:`OpenValues` when the spec leaves a number open that the
+    physics needs, and :class:`DeckMismatch` when the volumes do not fit.
+    """
+    questions = [p.message for p in open_values(spec)]
+    if questions:
+        raise OpenValues(questions)
     w = _Writer(deck=deck)
     # MCA96 blocks address the whole plate: every channel draws reagent.
     n = 96
@@ -375,8 +403,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
 
     # Samples.
     sample_reagent = _pick(spec, "sample")
-    samples = w.plate("Samples")
-    if spec.sample_volume_ul:
+    empty_start = _starts_empty(spec)
+    samples = w.plate("Work" if empty_start else "Samples")
+    if empty_start:
+        sample_ul = 0.0
+        w.notes.append("the protocol starts from reagents; the working plate starts empty")
+    elif spec.sample_volume_ul:
         sample_ul = float(spec.sample_volume_ul)
     else:
         # Enough for the largest volume a step takes from the samples.
@@ -384,19 +416,22 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         sample_ul = round(max([10.0, *(v * 1.1 for v in drawn)]), 1)
         w.notes.append(f"no sample volume in the spec; {sample_ul:g} ul per well is ASSUMED")
     current = samples
-    if sample_reagent is not None:
-        analyte_var = reagent_var(sample_reagent)
-        matrix_name = f"{sample_reagent.name} matrix"
+    if empty_start:
+        pass
     else:
-        w.notes.append("no sample reagent in the spec; the sample fill is ASSUMED")
-        analyte_var = 'Reagent("Sample", role="analyte")'
-        matrix_name = "Sample matrix"
-    # The simulator takes bound analyte out of the free liquid, so the analyte
-    # is a small marker in plain sample liquid; copies of the plate (stamps)
-    # then keep their volume through a clean-up too.
-    marker_ul = min(2.0, sample_ul / 10)
-    w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
-    w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
+        if sample_reagent is not None:
+            analyte_var = reagent_var(sample_reagent)
+            matrix_name = f"{sample_reagent.name} matrix"
+        else:
+            w.notes.append("no sample reagent in the spec; the sample fill is ASSUMED")
+            analyte_var = 'Reagent("Sample", role="analyte")'
+            matrix_name = "Sample matrix"
+        # The simulator takes bound analyte out of the free liquid, so the analyte
+        # is a small marker in plain sample liquid; copies of the plate (stamps)
+        # then keep their volume through a clean-up too.
+        marker_ul = min(2.0, sample_ul / 10)
+        w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+        w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
     well_ul = sample_ul
     pooled = False
 
@@ -408,22 +443,46 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             )
 
     magnet_var = waste_var = None
+    on_magnet = False
 
-    def ensure_magnet_and_waste() -> tuple[str, str]:
-        nonlocal magnet_var, waste_var
+    def ensure_magnet() -> str:
+        nonlocal magnet_var
         if magnet_var is None:
             if deck.magnet is None:
-                raise ValueError("skeleton: the spec has a deck bead clean-up but the profile has no magnet")
+                raise ValueError("skeleton: the spec separates on a magnet but the profile has no magnet")
             cat, loc, pos = deck.magnet
             magnet_var = w.var("magnet")
             w.placements.append(f'    {magnet_var} = wt.place(MagnetRack("Magnet", catalog="{cat}"), "{loc}", {pos})')
+        return magnet_var
+
+    def ensure_waste() -> str:
+        nonlocal waste_var
         if waste_var is None:
             if deck.waste is None:
                 raise ValueError("skeleton: the profile has no waste reservoir")
             cat, loc, pos = deck.waste
             waste_var = w.var("waste")
             w.placements.append(f'    {waste_var} = wt.place(Trough25mL("Waste", catalog="{cat}"), "{loc}", {pos})')
-        return magnet_var, waste_var
+        return waste_var
+
+    def ensure_magnet_and_waste() -> tuple[str, str]:
+        return ensure_magnet(), ensure_waste()
+
+    def plate_tips(plate: str) -> str:
+        """The working plate's sample tip box (MCA96: channel i only ever meets well i)."""
+        nonlocal carry
+        if carry and carry[1] == plate:
+            return carry[0]
+        tips = w.mca_box(f"{w.labels.get(plate, plate)}_SampleTips")
+        carry = (tips, plate)
+        return tips
+
+    def release_current(label: str) -> None:
+        nonlocal on_magnet
+        if on_magnet:
+            loc, pos = w.positions[current]
+            w.body.append(f'    release(wt, plate={current}, to=("{loc}", {pos}), name={label})')
+            on_magnet = False
 
     def ensure_handoff() -> tuple[str, int]:
         if w.handoff is None:
@@ -441,6 +500,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         if final:
             w.body.append(f"    offdeck_step(wt, {json.dumps(text)}, name={json.dumps(name)})")
         else:
+            release_current(json.dumps(f"{name}: plate off the magnet"))
             loc, pos = ensure_handoff()
             w.body.append(
                 f"    offdeck_step(wt, {json.dumps(text)}, labware={current}, "
@@ -464,7 +524,60 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             w.body.append(f"    wt.add_comment({json.dumps('TODO (LiHa, pooled column 1) ' + step.text)})")
             continue
 
+        if step.op == "separate":
+            if step.engage is False:
+                if not on_magnet:
+                    w.notes.append(f"{step.id}: magnet off, but the plate is not on the magnet; skipped")
+                    continue
+                release_current(label)
+                continue
+            if on_magnet:
+                w.notes.append(f"{step.id}: magnet on, but the plate is already on the magnet; skipped")
+                continue
+            magnet = ensure_magnet()
+            settle = int(step.minutes[0] * 60) if step.minutes else 120
+            assumed_settle = "" if step.minutes else "  # ASSUMED: settle time"
+            w.body.append(f"    separate(wt, plate={current}, magnet={magnet}, settle_seconds={settle}, "
+                          f"name={label}){assumed_settle}")
+            on_magnet = True
+            continue
+
+        if step.op == "remove":
+            waste = ensure_waste()
+            residual = step.residual_ul if step.residual_ul is not None else 2.0
+            vol = step.volume_ul if step.volume_ul is not None else well_ul - residual
+            if vol > well_ul:
+                w.notes.append(f"{step.id}: removing {vol:g} ul but the wells hold {well_ul:g} ul; removing {well_ul:g} ul")
+                vol = well_ul
+            if vol <= 0:
+                w.notes.append(f"{step.id}: nothing to remove ({well_ul:g} ul in the wells); skipped")
+                continue
+            if not on_magnet and any(s.op == "separate" for s in spec.steps):
+                w.notes.append(f"{step.id}: removing liquid off the magnet takes suspended beads along")
+            comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
+            w.body.append(
+                f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol:g}, tips={plate_tips(current)},\n"
+                f"                  liquid_class={json.dumps(lc)}, name={label}){comment}"
+            )
+            well_ul -= vol
+            continue
+
+        if step.op == "mix" and not (reagent is not None and reagent.role == "per_sample"):
+            if well_ul <= 0:
+                w.notes.append(f"{step.id}: nothing to mix; skipped")
+                continue
+            cycles = step.cycles if step.cycles is not None else 10
+            vol = step.volume_ul if step.volume_ul is not None else round(0.8 * well_ul, 1)
+            comment = "  # ASSUMED: cycles" if step.cycles is None else ""
+            w.body.append(
+                f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol:g}, "
+                f"cycles={cycles}, name={label}){comment}"
+            )
+            continue
+
         if _is_cleanup(step, spec):
+            if on_magnet:
+                release_current(json.dumps(f"{step.id}: magnet off before the clean-up"))
             magnet, waste = ensure_magnet_and_waste()
             beads = reagent if reagent and reagent.role == "bead_carrier" else _pick(spec, "bead_carrier")
             lab = _is_lab_stock(beads) if beads else True
@@ -585,6 +698,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
                 f"          liquid_class={json.dumps(lc)}, name={label})"
             )
+            # The emptied plate leaves the magnet so the next separation can use it.
+            release_current(json.dumps(f"{step.id}: spent plate off the magnet"))
             w.retire(current)
             carry = (tips, dest)
             current, well_ul = dest, vol
@@ -626,7 +741,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         for cls in re.findall(r"wt\.place\((\w+)\(", line)
     } | {"Reagent", "Worktable"})
     used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns",
-                                      "offdeck_step")
+                                      "offdeck_step", "remove_liquid", "mix_wells", "separate", "release")
                           if any(f"{b}(" in line for line in w.body)})
     header = [
         SKELETON_MARKER,

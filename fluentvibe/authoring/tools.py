@@ -2452,11 +2452,14 @@ class AuthoringToolRegistry:
             return {"ok": True, "api": _blocks_api_entry()}
         entry = _API_LOOKUPS.get(key)
         if entry is None:
+            generated = _class_api_entry(object_or_class)
+            if generated is not None:
+                return {"ok": True, "api": generated}
             return {
                 "ok": False,
                 "category": "unknown_api_object",
                 "message": f"No API grounding entry for {object_or_class!r}.",
-                "available": sorted(_API_LOOKUPS),
+                "available": sorted({*_API_LOOKUPS, "blocks", *_exported_classes()}),
             }
         api = dict(entry)
         recipes = retrieve_dsl_recipes(
@@ -4181,6 +4184,15 @@ def _looks_like_guid(value: str) -> bool:
 
 def _normalize_api_lookup(value: str) -> str:
     cleaned = (value or "").strip().lower()
+    # Fully qualified names: fluentvibe.blocks.spri_cleanup, fluentvibe.Trough25mL.
+    if cleaned.startswith("fluentvibe.blocks."):
+        cleaned = cleaned[len("fluentvibe.blocks."):]
+    elif cleaned.startswith("fluentvibe.") and cleaned != "fluentvibe.blocks":
+        cleaned = cleaned[len("fluentvibe."):]
+    from .. import blocks
+
+    if cleaned in {name.lower() for name in blocks.__all__}:
+        return "blocks"
     aliases = {
         "gripper": "wt.gripper",
         "wt.gripper": "wt.gripper",
@@ -4209,6 +4221,46 @@ def _normalize_api_lookup(value: str) -> str:
     return aliases.get(cleaned, cleaned)
 
 
+def _exported_classes() -> list[str]:
+    import fluentvibe
+
+    return sorted(name for name in getattr(fluentvibe, "__all__", dir(fluentvibe))
+                  if name[:1].isupper() and isinstance(getattr(fluentvibe, name, None), type))
+
+
+def _class_api_entry(value: str) -> dict[str, Any] | None:
+    """lookup_api entry for any class ``fluentvibe`` exports (Trough25mL,
+    MagnetRack, FCA200Box, Reagent …), generated from its signature and
+    docstring so it never drifts from the code."""
+    import inspect
+
+    import fluentvibe
+
+    name = (value or "").strip().split(".")[-1]
+    match = next((c for c in _exported_classes() if c.lower() == name.lower()), None)
+    if match is None:
+        return None
+    cls = getattr(fluentvibe, match)
+    try:
+        signature = f"{match}{inspect.signature(cls)}"
+    except (TypeError, ValueError):
+        signature = match
+    doc = inspect.getdoc(cls) or ""
+    entry: dict[str, Any] = {
+        "object": f"fluentvibe.{match}",
+        "import": f"from fluentvibe import {match}",
+        "signature": signature,
+        "description": " ".join(doc.split("\n\n")[0].split()),
+    }
+    labware = getattr(fluentvibe, "Labware", None)
+    if labware is not None and issubclass(cls, labware) and cls is not labware:
+        entry["note"] = (
+            f"Labware: place with wt.place({match}('<unique name>', catalog='<catalog name>'), "
+            "'<location>', <position>); lookup_api('labware') explains placement and filling."
+        )
+    return entry
+
+
 def _blocks_api_entry() -> dict[str, Any]:
     """lookup_api entry for fluentvibe.blocks, generated from the code so the
     signatures and descriptions never drift from the implementation."""
@@ -4217,8 +4269,10 @@ def _blocks_api_entry() -> dict[str, Any]:
     from .. import blocks
 
     methods = []
-    for name in ("spri_cleanup", "stamp", "add_reagent", "pool_columns", "offdeck_step", "thermal_step"):
+    for name in blocks.__all__:
         fn = getattr(blocks, name)
+        if not callable(fn) or isinstance(fn, type):
+            continue
         doc = inspect.getdoc(fn) or ""
         methods.append({
             "name": name,
@@ -4229,8 +4283,10 @@ def _blocks_api_entry() -> dict[str, Any]:
         "object": "fluentvibe.blocks",
         "note": (
             "Verified building blocks: one call emits a whole tested stage with safe "
-            "tip handling and derived volumes. Import with "
-            "`from fluentvibe.blocks import spri_cleanup, stamp, add_reagent, pool_columns, offdeck_step`. "
+            "tip handling and derived volumes. Physical primitives (distribute_reagent / add_reagent, "
+            "stamp / pool_columns, remove_liquid, mix_wells, separate / release, offdeck_step) compose "
+            "any plate protocol; spri_cleanup is a macro for a bind-wash-elute clean-up. Import with "
+            "`from fluentvibe.blocks import <names>`. "
             "Volumes are plain numbers. A BlockError message says how to fix the setup."
         ),
         "methods": methods,
