@@ -101,6 +101,8 @@ def test_shipped_catalog_is_well_formed():
     """
     config_dir = REPO_ROOT / "fluentvibe" / "_assets" / "config" / "skills"
     md_files = sorted(config_dir.rglob("*.md"))  # recurse category subfolders
+    # Experimental skills gated by ``requires_env`` are absent unless switched on.
+    md_files = [p for p in md_files if "\nrequires_env:" not in p.read_text(encoding="utf-8").split("\n---", 2)[0]]
     catalog = discover_skills(config_dir)
     # no file silently dropped for malformed frontmatter
     assert len(catalog) == len(md_files), "a shipped skill failed to parse"
@@ -479,3 +481,12 @@ def test_skills_come_from_an_approved_spec_without_a_model_call():
     assert "device-odtc" in names             # 30 C / 80 C step
     assert "family-elisa" not in names
     assert "family-cell-seeding" not in names
+
+
+def test_env_gated_skill_loads_only_when_switched_on(monkeypatch):
+    config_dir = REPO_ROOT / "fluentvibe" / "_assets" / "config" / "skills"
+    monkeypatch.delenv("FLUENTVIBE_RESOLVER", raising=False)
+    assert "api-add-resolver" not in {s.name for s in discover_skills(config_dir)}
+    monkeypatch.setenv("FLUENTVIBE_RESOLVER", "1")
+    gated = {s.name: s for s in discover_skills(config_dir)}
+    assert gated["api-add-resolver"].always_on and gated["api-add-resolver"].axis == "api"
