@@ -217,7 +217,9 @@ def test_workbench_job_unknown_kind_raises() -> None:
         raise AssertionError("unknown job kind should raise")
 
 
-def test_workbench_authoring_session_job_finishes_without_model_call() -> None:
+def test_workbench_authoring_session_job_finishes_without_model_call(tmp_path, monkeypatch) -> None:
+    # A session makes an output folder: keep it out of the real build/workbench.
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path / "workbench")
     created = service.submit_job("authoring-session", {"retry_budget": 1})
     job = _wait_job(created["job"]["id"])
     # Session creation is local and should not contact the model endpoint.
