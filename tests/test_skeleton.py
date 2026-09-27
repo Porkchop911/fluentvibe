@@ -901,3 +901,34 @@ def test_an_operator_incubation_counts_as_waiting():
     assert _stated_seconds("Incubate 15 min at room temperature using gentle rotation.") == 900
     assert _stated_seconds("30 °C for 2 minutes, then 80 °C for 2 minutes") == 240
     assert _stated_seconds("Spin down briefly") == 0
+
+
+def test_normalisation_asks_for_the_sheet_and_takes_it_from_the_chat(profile, tmp_path):
+    """The concentrations are the user's data: asked for, parsed, never sent
+    to the model; every normalised well ends at the target volume."""
+    from fluentvibe.authoring.spec_path import author_from_document
+
+    raw = {
+        "title": "Rapid barcoding", "sample_count": 8,
+        "reagents": [{"id": "dna", "name": "Amplicon DNA", "role": "sample"},
+                     {"id": "water", "name": "Nuclease-free water", "role": "reagent"}],
+        "steps": [{"id": "norm", "op": "normalize", "text": "50 ng in 9 ul per sample", "location": "deck",
+                   "reagent": "water", "target_ng": 50, "volume_ul": 9}],
+    }
+    client = _ScriptedClient(raw)
+    asked = []
+
+    def ask(questions):
+        asked.append(questions)
+        return "A1 45, B1 10, C1 4.5, D1 100, E1 20, F1 30, G1 60, H1 8"
+
+    result = author_from_document(client, "Rapid barcoding", profile, tmp_path / "out", ask=ask, examples=False)
+    assert result.stage == "done", (result.stage, result.error)
+    assert len(client.calls) == 1 and "sample sheet" in asked[0][0]
+    namespace: dict = {}
+    exec(compile(result.source, str(tmp_path / "d.py"), "exec"), namespace)
+    wt = namespace["build_worktable"]()
+    wt.simulate()
+    final = wt.snapshots[-1].labware("norm_Plate")
+    volumes = [sum(layer.volume_ul for layer in final.well(f"{row}1").layers) for row in "ABCDEFGH"]
+    assert all(abs(v - 9) < 0.01 for v in volumes), volumes

@@ -231,6 +231,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_author_spec.add_argument("--choose", action="store_true",
                                help="do not ask: the model chooses open values within the deck and kit limits")
     p_author_spec.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
+    p_author_spec.add_argument("--sample-sheet", type=Path, default=None,
+                               help="CSV with each sample's concentration (well or sample number, ng/ul) "
+                                    "for a normalisation step")
     p_author_spec.add_argument("--check-instructions", action="store_true",
                                help="extract the request's instructions (separate model call) and check them on the protocol")
     p_author_spec.add_argument("--endpoint", default=None)
@@ -1180,6 +1183,8 @@ def _cmd_author_spec(args) -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     kwargs["trace_recorder"] = ModelTraceRecorder(ModelTraceConfig.from_env(output_dir=args.output, enabled=True))
 
+    from .authoring.sample_sheet import parse_sample_sheet
+
     def ask_terminal(questions: list[str]) -> str | None:
         from .authoring.spec_path import ACCEPT
 
@@ -1200,6 +1205,8 @@ def _cmd_author_spec(args) -> int:
         progress=lambda message: print(f"progress: {message}", flush=True),
         check_requirements=args.check_instructions,
         understand=not args.choose,
+        sample_sheet=(parse_sample_sheet(args.sample_sheet.read_text(encoding="utf-8-sig"))
+                      if args.sample_sheet else None),
         # Reuse a finished read of the same document, request and answers (the
         # web app's cache, when it exists).
         spec_cache=(Path("build/workbench/spec_cache.json") if Path("build/workbench").is_dir() else None),

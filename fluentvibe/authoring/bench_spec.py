@@ -53,14 +53,15 @@ OPS = (
     "repeat",        # repeat the steps first_step..last_step `times` more times
     # Macros: a fixed order of primitives.
     "pool",          # many samples into one container
+    "normalize",     # every sample to target_ng in volume_ul, diluted with `reagent` (per-well volumes)
     "bead_cleanup",  # SPRI-type clean-up: bind, wash, elute off the magnet, recover eluate
     "custom",        # no primitive fits; described in text, authored by hand
 )
-MACROS = ("pool", "bead_cleanup")
+MACROS = ("pool", "bead_cleanup", "normalize")
 LOCATIONS = ("deck", "off_deck", "manual")
 ROLES = ("sample", "reagent", "bead_carrier", "wash", "eluent", "per_sample", "product")
 
-_NUMERIC_STEP_FIELDS = ("volume_ul", "ratio", "washes", "elute_ul", "wash_ul", "residual_ul", "cycles",
+_NUMERIC_STEP_FIELDS = ("volume_ul", "ratio", "washes", "elute_ul", "wash_ul", "residual_ul", "cycles", "target_ng",
                         "temp_c", "minutes")
 
 
@@ -105,6 +106,8 @@ class SpecStep:
     first_step: str | None = None
     last_step: str | None = None
     times: int | None = None
+    # normalize: DNA mass per sample (ng) in volume_ul.
+    target_ng: float | None = None
 
 
 @dataclass
@@ -189,6 +192,7 @@ def bench_spec_json_schema() -> dict[str, Any]:
                         "temp_c": number_list,
                         "minutes": number_list,
                         "residual_ul": {"type": ["number", "null"]},
+                        "target_ng": {"type": ["number", "null"]},
                         "cycles": {"type": ["integer", "null"]},
                         "engage": {"type": ["boolean", "null"]},
                         "head": {"type": ["string", "null"], "enum": ["fca", "mca", None]},
@@ -294,6 +298,7 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
             minutes=[v for v in (_num(x) for x in item.get("minutes") or []) if v is not None],
             source_quote=item.get("source_quote"),
             residual_ul=_num(item.get("residual_ul")),
+            target_ng=_num(item.get("target_ng")),
             cycles=int(cycles) if isinstance(cycles, (int, float)) and not isinstance(cycles, bool) else None,
             engage=engage if isinstance(engage, bool) else None,
             proposed=proposed,
@@ -417,7 +422,9 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
     has_deck_liquid = any(s.location == "deck" and s.op not in {"incubate", "measure", "manual"}
                           for s in spec.steps)
     # (A plate that starts empty gets its samples from an add step with its own volume.)
+    # (Normalisation takes its draws from the sample sheet: the builder sizes the wells.)
     if spec.sample_volume_ul is None and has_deck_liquid and not spec.starts_empty \
+            and not any(s.op == "normalize" for s in spec.steps) \
             and any(r.role == "sample" for r in spec.reagents):
         problems.append(SpecProblem(
             "open", "sample_volume_ul",
@@ -590,6 +597,10 @@ Macros, only when the document really does exactly this:
   wash_ul, elute_ul). Anything else with beads (streptavidin capture, bead
   washes, keeping the beads) is written as primitives.
 - pool: samples combined into one container.
+- normalize: every sample brought to the same amount (target_ng) in the same
+  volume (volume_ul) with a diluent (reagent, e.g. water), when the document
+  gives the DNA and water volume per sample from its concentration (e.g. "50 ng
+  in 9 ul"). The concentrations come from the user's sample sheet; do not list them.
 - custom: only if no primitive fits; say why in text. NOT for a step whose
   reagent, volume or time is unknown: write the primitive, leave that field null,
   and the user is asked.

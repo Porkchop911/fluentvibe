@@ -562,20 +562,43 @@ def _drop_unused_volumes(vols: dict[str, Any], w: Any) -> None:
                 break
 
 
-def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
+SAMPLE_SHEET_QUESTION = (
+    "Normalisation needs each sample's concentration: attach a sample sheet (CSV with the well or "
+    "sample number and ng/µl) or give them here, e.g. \"A1 45, A2 30.5, B1 12\"."
+)
+
+
+def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, float] | None = None) -> str:
     """Python source for a first, runnable protocol draft.
 
-    Raises :class:`OpenValues` when the spec leaves a number open that the
-    physics needs, and :class:`DeckMismatch` when the volumes do not fit.
+    ``sample_sheet`` (well -> ng/µl) drives a ``normalize`` step's per-well
+    volumes. Raises :class:`OpenValues` when the spec leaves a number open that
+    the physics needs, and :class:`DeckMismatch` when the volumes do not fit.
     """
+    from .sample_sheet import normalisation
+
     repeats = _repeat_groups(spec)
     spec, repeat_problems = expand_repeats(spec)
     # Repetitions written out step by step ("wash 1", "wash 2") loop too.
     repeats += _implicit_repeats(spec.steps, {c for g in repeats for p in g["passes"] for c in p})
     questions = [p.message for p in repeat_problems] + [p.message for p in open_values(spec)]
+    # Per-sample normalisation: the volumes come from the sample sheet, not the model.
+    norm_step = next((s for s in spec.steps if s.op == "normalize" and s.location == "deck"), None)
+    norm_plan = None
+    if norm_step is not None:
+        if not sample_sheet:
+            questions.append(SAMPLE_SHEET_QUESTION)
+        elif not norm_step.target_ng or not norm_step.volume_ul:
+            questions.append(f"“{norm_step.text[:70]}”: how many ng per sample, in how many µl?")
+        else:
+            norm_plan = normalisation(sample_sheet, float(norm_step.target_ng), float(norm_step.volume_ul))
+            questions += norm_plan.problems
     # Partial plate: the samples fill the first columns; MCA96 steps pipette
     # whole columns, so every well of a used column is addressed.
     sample_n = max(1, min(int(spec.sample_count or 96), 96))
+    if sample_sheet:
+        # The sheet says which wells hold samples (column-major, as FluentControl counts).
+        sample_n = max((int(w[1:]) - 1) * 8 + "ABCDEFGH".index(w[0]) + 1 for w in sample_sheet)
     used_columns = -(-sample_n // 8)
     n = 8 * used_columns
     column_list = list(range(1, used_columns + 1))
@@ -684,6 +707,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         w.notes.append("the protocol starts from reagents; the working plate starts empty")
     elif spec.sample_volume_ul:
         sample_ul = float(spec.sample_volume_ul)
+    elif norm_plan is not None:
+        # Enough for the largest draw of the normalisation, plus a dead volume.
+        draws = [*norm_plan.sample_ul.values(), *(s for s, _ in norm_plan.predilute.values())]
+        sample_ul = round(max(draws, default=10.0) + 5.0, 1)
+        w.notes.append(f"no sample volume in the spec; {sample_ul:g} ul per well is ASSUMED "
+                       "(the largest normalisation draw + 5 ul)")
     else:
         # Enough for the largest volume a step takes from the samples.
         drawn = [s.volume_ul for s in spec.steps if s.op == "transfer" and s.volume_ul]
@@ -996,6 +1025,55 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             well_terms[:] = [f"{well_ul:g}"]
             continue
 
+        if step.op == "normalize" and norm_plan is not None:
+            # Per-well volumes from the sample sheet: diluent by the FCA into a
+            # new plate, then each sample's volume (fresh tips per column);
+            # samples too concentrated for a direct draw via a pre-dilution.
+            diluent = reagent or _pick(spec, "reagent")
+            if diluent is None:
+                raise OpenValues([f"“{step.text[:70]}”: which diluent (water, EB)?"])
+            final = float(step.volume_ul)
+            dest = w.plate(_label(f"{step.id}_Plate"))
+            need = sum(norm_plan.diluent_ul.values()) + sum(d for _, d in norm_plan.predilute.values())
+            trough = fca_trough_for(diluent, need * 1.1 + 2000)
+            w.notes.extend(f"{step.id}: {note}" for note in norm_plan.notes)
+
+            def per_well(values: dict[str, float]) -> str:
+                return "{" + ", ".join(f'"{k}": {v:g}' for k, v in values.items()) + "}"
+
+            if norm_plan.predilute:
+                inter = w.plate(_label(f"{step.id}_Predilution"))
+                w.body.append(
+                    f"    distribute_volumes(wt, source={trough}, plate={inter}, "
+                    f"volumes={per_well({k: d for k, (_, d) in norm_plan.predilute.items()})},\n"
+                    f"                       tips={w.fca_reagent_tips()}, liquid_class={lc_for('add', diluent)}, "
+                    f"name={json.dumps(f'{step.id}: pre-dilute concentrated samples (diluent)')})")
+                w.body.append(
+                    f"    transfer_volumes(wt, source={current}, dest={inter}, "
+                    f"volumes={per_well({k: s for k, (s, _) in norm_plan.predilute.items()})},\n"
+                    f"                     tips={w.fca_box(f'{step.id}_PreTips')}, liquid_class={lc_for('sample')}, "
+                    f"name={json.dumps(f'{step.id}: pre-dilute concentrated samples (sample)')})")
+            if norm_plan.diluent_ul:
+                w.body.append(
+                    f"    distribute_volumes(wt, source={trough}, plate={dest}, volumes={per_well(norm_plan.diluent_ul)},\n"
+                    f"                       tips={w.fca_reagent_tips()}, liquid_class={lc_for('add', diluent)}, "
+                    f"name={json.dumps(f'{step.id}: diluent per sample')})")
+            if norm_plan.sample_ul:
+                w.body.append(
+                    f"    transfer_volumes(wt, source={current}, dest={dest}, volumes={per_well(norm_plan.sample_ul)},\n"
+                    f"                     tips={w.fca_box(f'{step.id}_Tips')}, liquid_class={lc_for('sample')}, "
+                    f"name={json.dumps(f'{step.id}: sample per well (' + ' '.join(step.text.split())[:40] + ')')})")
+            if norm_plan.predilute:
+                w.body.append(
+                    f"    transfer_volumes(wt, source={inter}, dest={dest}, "
+                    f"volumes={per_well({k: final for k in norm_plan.predilute})},\n"
+                    f"                     tips={w.fca_box(f'{step.id}_DilTips')}, liquid_class={lc_for('sample')}, "
+                    f"name={json.dumps(f'{step.id}: {final:g} ul of each pre-dilution')})")
+            w.retire(current)
+            current, well_ul = dest, final
+            well_terms[:] = [f"{final:g}"]
+            continue
+
         if step.op == "pool":
             pool = w.plate(f"{step.id}_Pool")
             tips = w.fca_box(f"{step.id}_Tips")
@@ -1199,7 +1277,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         for cls in re.findall(r"wt\.place\((\w+)\(", line)
     } | {"Reagent", "Worktable"})
     used_blocks = sorted({b for b in ("spri_cleanup", "stamp", "add_reagent", "distribute_reagent", "pool_columns", "pool_wells",
-                                      "offdeck_step", "remove_liquid", "mix_wells", "separate", "release")
+                                      "offdeck_step", "remove_liquid", "mix_wells", "separate", "release",
+                                      "distribute_volumes", "transfer_volumes")
                           if any(f"{b}(" in line for line in w.body)})
     header = [
         SKELETON_MARKER,

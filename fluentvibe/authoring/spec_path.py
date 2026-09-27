@@ -275,6 +275,7 @@ def author_from_document(
     check_requirements: bool = False,
     understand: bool = False,
     spec_cache: Path | str | None = None,
+    sample_sheet: dict[str, float] | None = None,
 ) -> SpecPathResult:
     """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl).
 
@@ -399,10 +400,13 @@ def author_from_document(
                 spec, raw, problems = revised, revised_raw, revised_problems
                 result.spec, result.problems, result.spec_raw = spec, problems, raw
 
+    from .sample_sheet import parse_concentrations
+    from .skeleton import SAMPLE_SHEET_QUESTION
+
     deck = load_deck(profile_dir)
     for _ in range(max_rounds + 1):
         try:
-            result.source = build_skeleton(spec, copy.deepcopy(deck))
+            result.source = build_skeleton(spec, copy.deepcopy(deck), sample_sheet=sample_sheet)
             break
         except (OpenValues, DeckMismatch) as exc:
             questions = list(getattr(exc, "questions", None) or [str(exc).replace("skeleton: ", "")])
@@ -411,6 +415,19 @@ def author_from_document(
             if ask is None or len(result.rounds) > max_rounds:
                 result.stage = "questions"
                 return result
+            if SAMPLE_SHEET_QUESTION in questions and ask is not choose_yourself:
+                # Concentrations are the user's data: always asked, never
+                # chosen by the model; they go to the builder, not the model.
+                answer = ask([SAMPLE_SHEET_QUESTION])
+                if answer is None:
+                    result.stage = "questions"
+                    return result
+                found = parse_concentrations(answer)
+                round_["answer"] = answer
+                if found:
+                    sample_sheet = found
+                    note(f"sample sheet from your answer: {len(found)} concentration(s)")
+                    continue
             answer = CHOOSE_YOURSELF_ANSWER if asked_up_front else ask(questions)
             if answer is None:
                 result.stage = "questions"
