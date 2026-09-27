@@ -510,6 +510,8 @@ def _loop_repeats(body: list[str], repeats: list[dict[str, Any]], notes: list[st
         texts = ["\n".join(body[a:b]) for a, b in spans]
         if any("offdeck_step(" in t or "wt.place(" in t for t in texts):
             continue   # an operator step or a labware swap: not the same every pass
+        if not any(line.strip() and not line.startswith(_STEP_MARK) for t in texts for line in t.split("\n")):
+            continue   # no deck code (e.g. repeats the operator does after pooling): nothing to loop
         def with_definitions(text: str) -> str:
             # The same variable names can hide different formulas (the first
             # wash removes sample + buffer, the next ones buffer + residual):
