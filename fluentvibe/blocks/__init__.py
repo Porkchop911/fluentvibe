@@ -36,13 +36,22 @@ from .bead_cleanup import CleanupVolumes, spri_cleanup
 from .common import BlockError
 from .operator import offdeck_step, thermal_step
 from .primitives import mix_wells, release, remove_liquid, separate
-from .transfers import add_reagent, distribute_reagent, pool_columns, pool_wells, stamp
+from .transfers import (
+    add_reagent,
+    distribute_reagent,
+    distribute_volumes,
+    pool_columns,
+    pool_wells,
+    stamp,
+    transfer_volumes,
+)
 
 __all__ = [
     "BlockError",
     "CleanupVolumes",
     "add_reagent",
     "distribute_reagent",
+    "distribute_volumes",
     "mix_wells",
     "offdeck_step",
     "pool_columns",
@@ -53,4 +62,5 @@ __all__ = [
     "spri_cleanup",
     "stamp",
     "thermal_step",
+    "transfer_volumes",
 ]

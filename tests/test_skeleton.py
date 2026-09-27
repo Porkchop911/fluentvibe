@@ -589,3 +589,42 @@ def test_custom_steps_get_model_code_only_when_it_is_clean(profile, tmp_path):
     assert (n_filled, n_left) == (1, 0) and "TODO" not in filled and "wt.wait(duration_seconds=60)" in filled
     broken, n_filled, n_left = fill_custom_steps(_TextClient("    wt.wait(duration_seconds=60"), source, path)
     assert (n_filled, n_left) == (0, 1) and broken == source
+
+
+def test_per_well_volumes_normalise_a_plate(profile, tmp_path):
+    """Normalisation: a different buffer volume per well, then a different sample
+    volume per well, each well on the channel of its row."""
+    import html
+    import re
+
+    from fluentvibe import FCA200Box, Plate96, Reagent, Trough25mL, Worktable
+    from fluentvibe.blocks import distribute_volumes, transfer_volumes
+
+    deck = load_deck(profile)
+    wt = Worktable.from_workspace(deck.workspace_name, workspace_guid=deck.workspace_guid, auto_place=False)
+    wt.group("Setup")
+    stock = wt.place(Plate96("Stock", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
+    norm = wt.place(Plate96("Norm", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
+    buffer = wt.place(Trough25mL("Buffer", catalog="25ml_short"), "WS_100ml_1", 2)
+    tips = wt.place(FCA200Box("Tips", catalog="FCA, 200ul SBS"), "Nest61mm_Pos", 3)
+    sample_tips = wt.place(FCA200Box("SampleTips", catalog="FCA, 200ul SBS"), "Nest61mm_Pos", 4)
+    stock.fill_all(Reagent("DNA"), 50)
+    buffer.fill_all(Reagent("TE"), 10000)
+    buffer_ul = {"C1": 10.0, "E1": 25.0, "A2": 40.0, "B2": 5.0}
+    sample_ul = {"C1": 20.0, "E1": 5.0, "A2": 250.0 / 2, "B2": 30.0}
+    distribute_volumes(wt, source=buffer, plate=norm, volumes=buffer_ul, tips=tips,
+                       liquid_class="Water Free Single", name="Buffer")
+    transfer_volumes(wt, source=stock, dest=norm, volumes={w: min(v, 45.0) for w, v in sample_ul.items()},
+                     tips=sample_tips, liquid_class="Water Free Single", name="Samples")
+    wt.simulate(strict=True)
+    final = wt.snapshots[-1].labware("Norm")
+    for well in buffer_ul:
+        assert final.well(well).volume_ul == pytest.approx(buffer_ul[well] + min(sample_ul[well], 45.0))
+    assert final.well("D1").volume_ul == 0
+    xml = html.unescape(html.unescape(wt.compile(tmp_path / "n.xscr").read_text(encoding="utf-8")))
+    dispense = xml[xml.index("LihaDispenseScriptCommandData"):][:12000]
+    assert "<SelectedWellsString>C1, E1</SelectedWellsString>" in dispense
+    tips_block = re.search(r"<SelectedTipsIndexes>(.*?)</SelectedTipsIndexes>", dispense, re.S).group(1)
+    assert re.findall(r"<int>(\d+)</int>", tips_block) == ["2", "4"]          # rows C and E
+    volumes = re.search(r"<Volumes>(.*?)</Volumes>", dispense, re.S).group(1)
+    assert re.findall(r"<string>([^<]*)</string>", volumes) == ["0", "0", "10", "0", "25", "0", "0", "0"]

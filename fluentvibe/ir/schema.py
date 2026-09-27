@@ -296,6 +296,14 @@ class LihaAspirateStep(BaseStep):
         description="Deprecated; selection is auto-derived. Use well_offset inside loops."
     )
     liquid_class: Optional[str] = None
+    volumes: Optional[list[Union[float, str]]] = Field(
+        default=None,
+        description="Per-channel volumes (one per selected well); overrides volume for the used channels",
+    )
+    channels: Optional[list[int]] = Field(
+        default=None,
+        description="LiHa channels (0-7) used for the selected wells, in order (default: inferred)",
+    )
     device_alias: Optional[str] = None
     available_id: Optional[str] = None
 
@@ -314,6 +322,14 @@ class LihaDispenseStep(BaseStep):
         description="Deprecated; selection is auto-derived. Use well_offset inside loops."
     )
     liquid_class: Optional[str] = None
+    volumes: Optional[list[Union[float, str]]] = Field(
+        default=None,
+        description="Per-channel volumes (one per selected well); overrides volume for the used channels",
+    )
+    channels: Optional[list[int]] = Field(
+        default=None,
+        description="LiHa channels (0-7) used for the selected wells, in order (default: inferred)",
+    )
     device_alias: Optional[str] = None
     available_id: Optional[str] = None
 

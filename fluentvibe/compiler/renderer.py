@@ -1816,6 +1816,24 @@ class Renderer:
         return indexes, wells
 
     @staticmethod
+    def _liha_channels_for(selection: Optional[str], count: int) -> list[int]:
+        """Channels for per-channel wells: distinct wells of one column use the
+        channel of their row (the tips sit 9 mm apart, one per row); anything
+        else (a trough, one well several times) uses channels 0..n-1."""
+        addresses = [a.strip().upper() for a in (selection or "").replace(",", ";").split(";") if a.strip()]
+        rows = [ord(a[0]) - ord("A") for a in addresses]
+        same_column = len({a[1:] for a in addresses}) == 1 and len(set(addresses)) == len(addresses)
+        if addresses and same_column and all(0 <= r < 8 for r in rows):
+            return rows[:count]
+        return list(range(count))
+
+    @staticmethod
+    def _format_volume_value(value) -> str:
+        if isinstance(value, (int, float)):
+            return f"{float(value):g}"
+        return str(value)
+
+    @staticmethod
     def _liha_explicit_wells(selection: str, labware_wells, single_well: bool) -> tuple[int, str, str]:
         """(channels, SerializedWellIndexes, SelectedWellsString) for per-channel wells.
 
@@ -1872,6 +1890,17 @@ class Renderer:
         # Replace hardcoded volumes block (8 entries of <string>NNN</string>)
         if step.step_type in (StepType.LIHA_ASPIRATE, StepType.LIHA_DISPENSE, StepType.LIHA_MIX):
             new_volumes = self._build_liha_volumes_xml(volume, num_channels)
+            per_channel = getattr(step, "volumes", None)
+            if per_channel:
+                channels = getattr(step, "channels", None) or \
+                    self._liha_channels_for(getattr(step, "selection", None), len(per_channel))
+                values = ["0"] * num_channels
+                for channel, value in zip(channels, per_channel):
+                    values[channel] = self._format_volume_value(value)
+                new_volumes = "\n".join(
+                    f'          <Object Type="System.String">\n            <string>{v}</string>\n          </Object>'
+                    for v in values
+                )
             # Match the <Volumes>...</Volumes> block and replace its content
             xml = re.sub(
                 r'(<Volumes>\s*)(?:<Object Type="System\.String">\s*<string>[^<]*</string>\s*</Object>\s*)+(\s*</Volumes>)',
@@ -1891,7 +1920,14 @@ class Renderer:
 
         # Replace hardcoded SelectedTipsIndexes block
         # First, find how many tips are in the template and replace with all 8
-        new_tips = self._build_liha_tips_xml(explicit[0] if explicit else num_channels)
+        if explicit:
+            chans = getattr(step, "channels", None) or self._liha_channels_for(selection, explicit[0])
+            new_tips = "\n".join(
+                f'                  <Object Type="System.Int32">\n                    <int>{c}</int>\n                  </Object>'
+                for c in chans
+            )
+        else:
+            new_tips = self._build_liha_tips_xml(num_channels)
         xml = re.sub(
             r'(<SelectedTipsIndexes>\s*)(?:<Object Type="System\.Int32">\s*<int>\d+</int>\s*</Object>\s*)+(\s*</SelectedTipsIndexes>)',
             lambda m: m.group(1) + "\n" + new_tips + "\n                " + m.group(2).strip(),
