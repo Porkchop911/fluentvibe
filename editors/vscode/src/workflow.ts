@@ -43,11 +43,15 @@ function cliEnv(): NodeJS.ProcessEnv {
 function runCli(
   args: string[],
   onLine: (line: string) => void,
-  onPrompt?: (child: cp.ChildProcess, buffered: string) => void
+  onPrompt?: (child: cp.ChildProcess, buffered: string) => void,
+  extraEnv: NodeJS.ProcessEnv = {}
 ): Promise<{ code: number; stdout: string }> {
   const python = settings().get<string>("pythonPath", "python");
   return new Promise((resolve) => {
-    const child = cp.spawn(python, ["-m", "fluentvibe.cli", ...args], { cwd: workspaceRoot(), env: cliEnv() });
+    const child = cp.spawn(python, ["-m", "fluentvibe.cli", ...args], {
+      cwd: workspaceRoot(),
+      env: { ...cliEnv(), ...extraEnv },
+    });
     let stdout = "";
     let pending = "";
     const feed = (chunk: Buffer) => {
@@ -99,21 +103,46 @@ export async function generateFromDocument(): Promise<void> {
   if (request === undefined) {
     return;
   }
+  const mode = await vscode.window.showQuickPick(
+    [
+      { label: "Fast", description: "document → spec → protocol from checked building blocks (~3 min)", value: "fast" },
+      { label: "Full Python", description: "the model writes the protocol in the DSL (~15-25 min)", value: "full" },
+    ],
+    { title: "How should the protocol be written?", ignoreFocusOut: true }
+  );
+  if (!mode) {
+    return;
+  }
   const stem = path.basename(doc, path.extname(doc)).replace(/[^0-9A-Za-z_-]+/g, "_").slice(0, 40);
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const outDir = resolveInRoot(path.join(settings().get<string>("outputDir", "build/eval"), `${stem}-${stamp}`));
-  const args = ["author-spec", doc, "--profile", resolveInRoot(settings().get<string>("profile", "")), "-o", outDir];
-  if (request.trim()) {
-    args.push("--request", request.trim());
-    if (settings().get<boolean>("checkInstructions", true)) {
+  const profile = resolveInRoot(settings().get<string>("profile", ""));
+  const checkInstructions = request.trim() && settings().get<boolean>("checkInstructions", true);
+  let args: string[];
+  let extraEnv: NodeJS.ProcessEnv = {};
+  if (mode.value === "fast") {
+    args = ["author-spec", doc, "--profile", profile, "-o", outDir];
+    if (request.trim()) {
+      args.push("--request", request.trim());
+    }
+    if (checkInstructions) {
       args.push("--check-instructions");
     }
-  }
-  if (settings().get<boolean>("fluentControlCheck", true)) {
-    args.push("--fc-check");
-  }
-  if (settings().get<boolean>("chooseOpenValues", false)) {
-    args.push("--choose");
+    if (settings().get<boolean>("fluentControlCheck", true)) {
+      args.push("--fc-check");
+    }
+    if (settings().get<boolean>("chooseOpenValues", false)) {
+      args.push("--choose");
+    }
+  } else {
+    args = ["author", request.trim() || "Automate this protocol on this deck.", "--document", doc,
+            "--profile", profile, "--output-dir", outDir, "--lab-scope", "skills", "--model-trace"];
+    if (checkInstructions) {
+      args.push("--check-instructions");
+    }
+    if (settings().get<boolean>("fluentControlCheck", true)) {
+      extraEnv = { FLUENTVIBE_FC_CHECK: "1" };
+    }
   }
   output.clear();
   output.show(true);
@@ -128,7 +157,7 @@ export async function generateFromDocument(): Promise<void> {
         args,
         (line) => {
           output.appendLine(line);
-          const m = /^progress: (.*)$/.exec(line);
+          const m = /^progress: (.*)$/.exec(line) || /^\[(?:lm|graph)\] (.{0,80})/.exec(line);
           if (m) {
             const secs = Math.round((Date.now() - started) / 1000);
             progress.report({ message: `${m[1]} (${secs} s)` });
@@ -146,7 +175,8 @@ export async function generateFromDocument(): Promise<void> {
           });
           questions.length = 0;
           child.stdin?.write(`${answer ?? ""}\n`);
-        }
+        },
+        extraEnv
       )
   );
 
@@ -159,7 +189,7 @@ export async function generateFromDocument(): Promise<void> {
   const summary = JSON.parse(fs.readFileSync(resultPath, "utf8"));
   const specMd = path.join(outDir, "spec.md");
   const reqMd = path.join(outDir, "requirements.md");
-  const draft = path.join(outDir, "draft.py");
+  const draft = summary.draft ? summary.draft : path.join(outDir, "draft.py");
   if (fs.existsSync(specMd)) {
     await vscode.commands.executeCommand("markdown.showPreviewToSide", vscode.Uri.file(specMd));
   }
