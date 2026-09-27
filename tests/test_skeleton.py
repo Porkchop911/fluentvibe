@@ -650,3 +650,15 @@ def test_volumes_are_a_fluentcontrol_variables_block(profile, tmp_path):
     assert f"<Name>{name}</Name><Value>{expr}</Value>" in text      # unquoted expression
     volumes = set(re.findall(r"<Volume>([^<]*)</Volume>", text))
     assert volumes and not [v for v in volumes if re.fullmatch(r"[0-9.]+", v)]
+
+
+def test_simulation_marker_is_zero_on_the_instrument(profile, tmp_path):
+    """The analyte marker is a simulator device: FluentControl volumes must be
+    the bench volumes (marker 0), the simulator's must include it."""
+    source = build_skeleton(_spec(_SPRI_PRIMITIVES), load_deck(profile))
+    namespace: dict = {}
+    exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
+    wt = namespace["build_worktable"]()
+    assert wt.protocol_variables["SIM_ANALYTE_UL"] == 0 and wt.sim_values["SIM_ANALYTE_UL"] > 0
+    assert "SIM_ANALYTE_UL" in source and " - 2 " not in source.split('wt.group("Labware Placement")')[0]
+    wt.simulate()

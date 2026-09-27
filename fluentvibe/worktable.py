@@ -306,10 +306,11 @@ class Worktable:
 
         if not _is_fc_identifier(name):
             raise ValueError(f"wt.volume: {name!r} is not a valid FluentControl variable name")
+        default = round(float(value), 6)   # no float noise in FluentControl
         existing = self.protocol_variables.get(name)
-        if existing is not None and existing != float(value):
+        if existing is not None and existing != default:
             raise ValueError(f"wt.volume: {name} is already declared as {existing!r}")
-        self.declare_variable(name, float(value))
+        self.declare_variable(name, default)
         if isinstance(value, Volume):
             self._emit(SetVariableStep(variable_name=name, value=value.expr, expression=True))
         return Volume(float(value), name)
