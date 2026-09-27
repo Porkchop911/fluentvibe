@@ -497,7 +497,9 @@ def _merge(steps: list[dict]) -> list[dict]:
         merged.append(step)
     for i, step in enumerate(merged, 1):
         step["id"] = f"s{i}"
-        step.pop("_route", None)
+        route = step.pop("_route", None)
+        if step["op"] == "add" and route:
+            step["_source"] = route[0]
     return merged
 
 
@@ -540,11 +542,29 @@ def convert(protocol_dir: Path, hardware_dir: Path | None = None) -> dict:
         if e.get("labware") and e["kind"] in ("dispense", "aspirate"):
             wells[e["labware"]].add(e["well"])
     sample_count = max((len(w) for w in wells.values()), default=1)
+    # Reagents: one per source labware an add step draws from, named after the
+    # step's own heading ("Adding Acetone (...)" -> "Acetone") when it has one.
+    reagents, by_source = [], {}
+    for step in steps:
+        source = step.pop("_source", None)
+        if step["op"] != "add" or not source:
+            continue
+        if source not in by_source:
+            heading = re.sub(r"\s*\(.*$", "", step["text"]).strip()
+            heading = re.sub(r"^(adding|add|dispensing|dispense|transferring|transfer)\s+", "", heading, flags=re.I)
+            name = heading if heading and len(heading) <= 60 and not heading.lower().startswith("step") else source
+            rid = f"R{len(reagents) + 1}"
+            kind = "ethanol" if re.search(r"ethanol|etoh", name + source, re.I) else                 "water" if re.search(r"water|h2o", name + source, re.I) else None
+            reagents.append({"id": rid, "name": f"{name} ({source})", "role": "reagent", "liquid_type": kind})
+            by_source[source] = rid
+        step["reagent"] = by_source[source]
     return {
         "title": title,
         "sample_count": max(sample_count, 1),
         "sample_volume_ul": None,
-        "reagents": [],
+        # Opentrons protocols work on samples already in the plate.
+        "starts_empty": False,
+        "reagents": reagents,
         "steps": steps,
         "notes": [
             f"Draft converted from Opentrons protocol {protocol_dir.name}/{protocol.name} via the Opentrons "

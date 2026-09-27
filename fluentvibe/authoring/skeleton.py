@@ -347,6 +347,8 @@ def _is_cleanup(step: SpecStep, spec: BenchSpec) -> bool:
 def _starts_empty(spec: BenchSpec) -> bool:
     """No sample reagent and the first deck liquid step adds a reagent: the
     protocol builds its wells from reagents (e.g. beads), so the plate starts empty."""
+    if spec.starts_empty is not None:
+        return spec.starts_empty
     if any(r.role == "sample" for r in spec.reagents):
         return False
     first = next((s for s in spec.steps if s.location == "deck"
