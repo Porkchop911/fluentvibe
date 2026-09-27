@@ -49,7 +49,7 @@ Status terms:
 | XSCR to Python | Partial | Known commands are reconstructed; unknown commands become explicit unsupported/opaque output |
 | XSCR round trip | Partial | Covered for curated workflows; broader real-world command corpora are needed |
 | Simulation reports | Supported | Includes coverage classification, state summaries, warnings, and unsupported command IDs |
-| GWL worklists | Supported | Construction, import, load, execution IR, and format validation exist |
+| GWL worklists | Supported | Construction, import, load, execution IR, format validation; the simulator applies A/D/W records of CSV/GWL files present at simulation time (R/T records not yet) |
 | Datastore deployment | External | Refuses unsafe conditions, rewrites identifiers, and verifies checksum through the local bridge |
 
 ## Catalog and workspace integration
