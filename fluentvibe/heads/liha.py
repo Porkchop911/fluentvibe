@@ -61,7 +61,17 @@ class LiHa:
         liquid_class: Optional[str] = None,
         well_offset: Optional[Union[int, str]] = None,
         wells: Optional[Sequence[str]] = None,
+        volumes: Optional[Sequence[Union[float, str]]] = None,
+        channels: Optional[Sequence[int]] = None,
     ) -> None:
+        """``volumes`` (with ``wells``): one volume per well/channel (normalisation, dilutions).
+        ``channels``: which LiHa channels (0-7) serve the wells, in order (default:
+        the row of each well within one column, else 0..n-1)."""
+        if volumes is not None and (wells is None or len(volumes) != len(wells)):
+            raise ValueError("volumes= needs wells= of the same length (one volume per well)")
+        if channels is not None and (wells is None or len(channels) != len(wells)
+                                     or any(not 0 <= int(c) <= 7 for c in channels)):
+            raise ValueError("channels= needs wells= of the same length and channels 0-7")
         self.worktable._emit(
             LihaAspirateStep(
                 labware_name=self._label(labware) or "",
@@ -69,6 +79,8 @@ class LiHa:
                 liquid_class=liquid_class,
                 well_offset=well_offset,
                 selection=_selection(wells, well_offset),
+                volumes=list(volumes) if volumes is not None else None,
+                channels=[int(c) for c in channels] if channels is not None else None,
             )
         )
 
@@ -80,7 +92,17 @@ class LiHa:
         liquid_class: Optional[str] = None,
         well_offset: Optional[Union[int, str]] = None,
         wells: Optional[Sequence[str]] = None,
+        volumes: Optional[Sequence[Union[float, str]]] = None,
+        channels: Optional[Sequence[int]] = None,
     ) -> None:
+        """``volumes`` (with ``wells``): one volume per well/channel (normalisation, dilutions).
+        ``channels``: which LiHa channels (0-7) serve the wells, in order (default:
+        the row of each well within one column, else 0..n-1)."""
+        if volumes is not None and (wells is None or len(volumes) != len(wells)):
+            raise ValueError("volumes= needs wells= of the same length (one volume per well)")
+        if channels is not None and (wells is None or len(channels) != len(wells)
+                                     or any(not 0 <= int(c) <= 7 for c in channels)):
+            raise ValueError("channels= needs wells= of the same length and channels 0-7")
         self.worktable._emit(
             LihaDispenseStep(
                 labware_name=self._label(labware) or "",
@@ -88,6 +110,8 @@ class LiHa:
                 liquid_class=liquid_class,
                 well_offset=well_offset,
                 selection=_selection(wells, well_offset),
+                volumes=list(volumes) if volumes is not None else None,
+                channels=[int(c) for c in channels] if channels is not None else None,
             )
         )
 

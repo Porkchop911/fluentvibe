@@ -772,22 +772,29 @@ class Simulator:
     def _on_liha_aspirate(self, step: LihaAspirateStep) -> None:
         target = self._require_labware(step.labware_name, "LiHa aspirate")
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
-        wells = self._liha_wells(target, step.well_offset, step.selection)
+        wells = self._liha_wells(target, step.well_offset, step.selection, getattr(step, "channels", None))
         pairs: list[tuple[object, Tip]] = []
         for ch, well in wells:
             tip = self._require_liha_tip(ch, "Aspirate")
             pairs.append((well, tip))
-        self._preflight_aspirates(target, pairs, volume)
-        for well, tip in pairs:
-            self._aspirate_one(target, well, volume, tip)
+        per_channel = self._per_channel_volumes(step, len(pairs))
+        if per_channel is None:
+            self._preflight_aspirates(target, pairs, volume)
+            for well, tip in pairs:
+                self._aspirate_one(target, well, volume, tip)
+        else:
+            for (well, tip), v in zip(pairs, per_channel):
+                self._preflight_aspirates(target, [(well, tip)], v)
+                self._aspirate_one(target, well, v, tip)
 
     def _on_liha_dispense(self, step: LihaDispenseStep) -> None:
         target = self._require_labware(step.labware_name, "LiHa dispense")
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
-        wells = self._liha_wells(target, step.well_offset, step.selection)
-        for ch, well in wells:
+        wells = self._liha_wells(target, step.well_offset, step.selection, getattr(step, "channels", None))
+        per_channel = self._per_channel_volumes(step, len(wells))
+        for k, (ch, well) in enumerate(wells):
             tip = self._require_liha_tip(ch, "Dispense")
-            self._dispense_one(target, well, volume, tip)
+            self._dispense_one(target, well, per_channel[k] if per_channel else volume, tip)
 
     def _on_liha_mix(self, step: LihaMixStep) -> None:
         target = self._require_labware(step.labware_name, "LiHa mix")
@@ -1343,6 +1350,12 @@ class Simulator:
                 selected.append(well)
         return selected
 
+    def _per_channel_volumes(self, step, count: int) -> list[float] | None:
+        values = getattr(step, "volumes", None)
+        if not values:
+            return None
+        return [float(v) if not isinstance(v, str) else self._resolve_sim_number(v) for v in values][:count]
+
     def _liha_channels(self, tip_index: int | None = None) -> list[int]:
         if tip_index is None:
             return list(range(8))
@@ -1350,7 +1363,8 @@ class Simulator:
             raise MissingTipsError(f"LiHa channel index {tip_index} is outside 0..7")
         return [tip_index]
 
-    def _liha_wells(self, labware: Labware, well_offset, selection: str | None) -> list[tuple[int, object]]:
+    def _liha_wells(self, labware: Labware, well_offset, selection: str | None,
+                    channels: list[int] | None = None) -> list[tuple[int, object]]:
         wells = self._iter_aspirate_wells(labware)
         if not wells:
             raise InsufficientVolumeError(f"{labware.label!r} has no pipettable wells")
@@ -1368,6 +1382,15 @@ class Simulator:
                 offset = int(well_offset) if not isinstance(well_offset, str) else int(self._resolve_sim_number(well_offset))
             indexes = [offset + i for i in range(len(selected_channels))]
         out: list[tuple[int, object]] = []
+        if channels:
+            selected_channels = list(channels)
+        elif selection:
+            # Distinct wells of one column: each is reached by the channel of its row.
+            addresses = [wells[i].address for i in indexes if 0 <= i < len(wells)]
+            rows = [ord(a[0].upper()) - ord("A") for a in addresses]
+            if (len(set(addresses)) == len(addresses) and len({a[1:] for a in addresses}) == 1
+                    and all(r in selected_channels for r in rows)):
+                selected_channels = rows
         for channel, index in zip(selected_channels, indexes):
             if index < 0 or index >= len(wells):
                 raise InsufficientVolumeError(

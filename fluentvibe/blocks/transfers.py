@@ -186,6 +186,91 @@ def add_reagent(
     head.drop_adapter()
 
 
+def _by_column(volumes: dict[str, float]) -> list[list[tuple[str, float]]]:
+    columns: dict[int, list[tuple[str, float]]] = {}
+    for well, volume in volumes.items():
+        address = str(well).strip().upper()
+        if float(volume) <= 0:
+            continue
+        columns.setdefault(int(address[1:]), []).append((address, float(volume)))
+    return [sorted(columns[c], key=lambda item: item[0][0]) for c in sorted(columns)]
+
+
+def distribute_volumes(
+    wt,
+    *,
+    source,
+    plate,
+    volumes: dict[str, float],
+    tips,
+    liquid_class: str,
+    name: str | None = None,
+) -> None:
+    """Add a different volume of a reagent to each well (normalisation, dilution
+    series) with the FCA (LiHa): ``volumes`` maps well -> ul.
+
+    Column by column, each well is served by the channel of its row, with its
+    own volume (FluentControl stores one volume per channel). One tip set for
+    all columns: the tips only take reagent and dispense from above. Volumes
+    above the tip capacity go in equal trips. ``tips`` is an FCA tip box.
+    """
+    batches = _by_column(volumes)
+    if not batches:
+        raise BlockError("distribute_volumes: give at least one well with a volume above 0.")
+    capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
+    if name:
+        wt.group(name)
+    head = wt.liha
+    head.get_tips(tips)
+    for batch in batches:
+        wells = [w for w, _ in batch]
+        channels = [ord(w[0]) - ord("A") for w in wells]
+        trips = max(1, math.ceil(max(v for _, v in batch) / capacity))
+        per_trip = [round(v / trips, 2) for _, v in batch]
+        for _ in range(trips):
+            head.aspirate(source, per_trip[0], liquid_class=liquid_class, wells=["A1"] * len(wells),
+                          volumes=per_trip, channels=channels)
+            head.dispense(plate, per_trip[0], liquid_class=liquid_class, wells=wells,
+                          volumes=per_trip, channels=channels)
+    head.drop_tips()
+
+
+def transfer_volumes(
+    wt,
+    *,
+    source,
+    dest,
+    volumes: dict[str, float],
+    tips,
+    liquid_class: str,
+    name: str | None = None,
+) -> None:
+    """Move a different volume from each well of ``source`` to the same well of
+    ``dest`` (e.g. normalising samples) with the FCA (LiHa): ``volumes`` maps
+    well -> ul. Column by column, fresh tips per column (they touch samples),
+    each well on the channel of its row. ``tips`` is an FCA tip box.
+    """
+    batches = _by_column(volumes)
+    if not batches:
+        raise BlockError("transfer_volumes: give at least one well with a volume above 0.")
+    capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
+    if name:
+        wt.group(name)
+    head = wt.liha
+    for batch in batches:
+        wells = [w for w, _ in batch]
+        channels = [ord(w[0]) - ord("A") for w in wells]
+        trips = max(1, math.ceil(max(v for _, v in batch) / capacity))
+        per_trip = [round(v / trips, 2) for _, v in batch]
+        head.get_tips(tips)
+        for _ in range(trips):
+            head.aspirate(source, per_trip[0], liquid_class=liquid_class, wells=wells, volumes=per_trip,
+                          channels=channels)
+            head.dispense(dest, per_trip[0], liquid_class=liquid_class, wells=wells, volumes=per_trip,
+                          channels=channels)
+        head.drop_tips()
+
+
 def pool_wells(
     wt,
     *,
