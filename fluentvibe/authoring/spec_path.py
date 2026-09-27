@@ -62,6 +62,7 @@ class SpecPathResult:
     # The request's instructions (a separate model call) and their verdicts.
     requirements: list[dict[str, Any]] = field(default_factory=list)
     requirements_markdown: str | None = None
+    custom_steps: dict[str, int] = field(default_factory=dict)
     error: str | None = None
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -80,6 +81,7 @@ class SpecPathResult:
             "steps": [s.op for s in self.spec.steps] if self.spec else [],
             # Deck steps the skeleton could not map (left as TODO comments): not a finished protocol.
             "todo_steps": (self.source or "").count('wt.add_comment("TODO'),
+            "custom_steps": self.custom_steps,
             "instructions": {
                 "total": len(self.requirements),
                 "verified": sum(1 for r in self.requirements if r["status"] == "pass"),
@@ -228,6 +230,11 @@ def author_from_document(
     registry = AuthoringToolRegistry(output_dir=out)
     registry.lab_scope = load_lab_scope("skills")
     t0 = time.monotonic()
+    if 'wt.add_comment("TODO' in result.source:
+        t0 = time.monotonic()
+        result.source, filled, left = fill_custom_steps(client, result.source, str(out / "draft.py"), note)
+        result.timings["custom_s"] = time.monotonic() - t0
+        result.custom_steps = {"filled": filled, "left": left}
     note("compiling and simulating")
     result.gate = registry.compile_and_simulate(result.source)
     result.timings["gate_s"] = time.monotonic() - t0
@@ -272,3 +279,51 @@ def author_from_document(
     result.stage = "done"
     result.timings["total_s"] = time.monotonic() - started
     return result
+
+
+def fill_custom_steps(client: Any, source: str, path: str = "<draft>",
+                      progress: Callable[[str], None] | None = None) -> tuple[str, int, int]:
+    """Let the model write DSL code for each step the skeleton left as a TODO.
+
+    Each TODO comment is replaced like a Ctrl+I edit ("implement this step
+    with the objects defined above"); the edit is kept only if it adds no new
+    errors (build or simulation), otherwise the TODO stays. Returns
+    ``(source, filled, left)``.
+    """
+    from ..copilot.analyzer import analyze_source
+    from ..copilot.edit import _replace_lines, edit_region
+
+    filled = left = 0
+    tried: set[str] = set()
+    while True:
+        lines = source.splitlines()
+        index = next((i for i, text in enumerate(lines, 1)
+                      if text.strip().startswith('wt.add_comment("TODO') and text not in tried), None)
+        if index is None:
+            return source, filled, left
+        tried.add(lines[index - 1])
+        step_text = lines[index - 1].strip()[len('wt.add_comment("TODO'):].strip(' ")')
+        if progress is not None:
+            progress(f"writing code for a step the primitives do not cover: {step_text[:60]}")
+        baseline = {(d.line, d.code) for d in analyze_source(source, path) if d.severity == "error"}
+        try:
+            result = edit_region(
+                source, index, index,
+                "Implement this protocol step in fluentvibe Python, replacing this TODO comment. Use the "
+                "labware, tips and reagents already defined above (place new labware with wt.place only if "
+                "needed); keep it to this one step. Step: " + step_text,
+                client=client, path=path, revalidate=False,
+            )
+        except Exception:  # noqa: BLE001 - a failed call leaves the TODO
+            left += 1
+            continue
+        if not result.new_text.strip():
+            left += 1
+            continue
+        candidate = _replace_lines(lines, index, index, result.new_text)
+        errors = [d for d in analyze_source(candidate, path) if d.severity == "error"]
+        if any((d.line, d.code) not in baseline for d in errors) or 'add_comment("TODO' in result.new_text:
+            left += 1
+            continue
+        source = candidate
+        filled += 1
