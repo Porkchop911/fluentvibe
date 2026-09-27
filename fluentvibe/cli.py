@@ -1023,8 +1023,16 @@ def _cmd_requirements(args) -> int:
             from .authoring.attachments import extract_file_text
 
             document = extract_file_text(args.document)[0]
-        requirements, _dispositions = extract_requirements(LMStudioChatClient(request_timeout_s=1800),
-                                                           args.request, document)
+        client = LMStudioChatClient(request_timeout_s=1800)
+        requirements, _dispositions = extract_requirements(client, args.request, document)
+        if document:
+            # The document's own steps, in order (a separate spec extraction).
+            from .authoring.bench_spec import extract_bench_spec
+            from .authoring.requirements import requirements_from_spec
+
+            spec, _problems, _raw = extract_bench_spec(client, document)
+            if spec is not None:
+                requirements += requirements_from_spec(spec)
         save_requirements(sidecar, requirements)
     if not sidecar.exists():
         print(f"error: no checklist {sidecar}; give --request", file=sys.stderr)

@@ -242,6 +242,9 @@ def author_from_document(
         note("checking your instructions on the protocol")
         try:
             reqs, dispositions = pending_requirements.result(timeout=1800)
+            from .requirements import requirements_from_spec
+
+            reqs = reqs + requirements_from_spec(result.spec)  # the document's steps, in order
             wt = build_worktable_from_source(result.source, str(out / "draft.py"))
             wt.simulate()
             verdicts = verify_all(wt, reqs)
