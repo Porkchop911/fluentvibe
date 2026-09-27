@@ -122,10 +122,12 @@ class _RepetitionWatch:
     TAIL = 6000          # characters examined
     MIN_REPEATS = 8
 
-    def __init__(self) -> None:
+    def __init__(self, *, min_repeats: int | None = None, share: float = 0.5) -> None:
         self._text: list[str] = []
         self._size = 0
         self._checked_at = 0
+        self.min_repeats = min_repeats or self.MIN_REPEATS
+        self.share = share
 
     def feed(self, piece: str) -> None:
         self._text.append(piece)
@@ -141,15 +143,15 @@ class _RepetitionWatch:
             from collections import Counter
 
             line, count = Counter(lines).most_common(1)[0]
-            if count >= self.MIN_REPEATS and count * len(line) >= 0.4 * len(tail):
+            if count >= self.min_repeats and count * len(line) >= min(0.4, self.share) * len(tail):
                 return line
         # The same phrase over and over without line breaks.
         for size in (20, 40, 80, 160, 320):
-            if len(tail) < size * self.MIN_REPEATS:
+            if len(tail) < size * self.min_repeats:
                 break
             phrase = tail[-size:]
-            if phrase.strip() and tail.count(phrase) >= self.MIN_REPEATS and \
-                    tail.count(phrase) * size >= 0.5 * len(tail):
+            if phrase.strip() and tail.count(phrase) >= self.min_repeats and \
+                    tail.count(phrase) * size >= self.share * len(tail):
                 return phrase.strip()
         return None
 
@@ -416,6 +418,9 @@ class LMStudioChatClient:
         finish_reason: str | None = None
         reasoning_parts: dict[str, list[str]] = {}
         watch = _RepetitionWatch() if _loop_guard_enabled() else None
+        # Tool-call arguments (a whole spec, a draft) can loop too; JSON repeats
+        # structure legitimately, so this watch asks for more before it calls it.
+        args_watch = _RepetitionWatch(min_repeats=12, share=0.6) if _loop_guard_enabled() else None
 
         for raw_line in response:
             if deadline is not None and time.monotonic() > deadline:
@@ -488,6 +493,14 @@ class LMStudioChatClient:
                     existing["function"]["name"] += function["name"]
                 if function.get("arguments"):
                     existing["function"]["arguments"] += function["arguments"]
+                    if args_watch is not None:
+                        args_watch.feed(function["arguments"])
+                        looping = args_watch.looping_line()
+                        if looping is not None:
+                            if self.trace_recorder is not None:
+                                self.trace_recorder.record("request_error", error_type="repetition",
+                                                           line=looping, where="tool_call_arguments")
+                            raise LMRepetitionError(looping)
 
         message = {
             "role": "assistant",
