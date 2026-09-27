@@ -68,6 +68,9 @@ def main() -> int:
                 check_requirements=bool(request),
             )
             summary = result.summary()
+            if result.spec_raw is not None:   # to replay a failing build without the model
+                (Path(out_dir) / "spec.json").write_text(json.dumps(result.spec_raw, indent=1, ensure_ascii=False),
+                                                         encoding="utf-8")
             row.update(stage=summary["stage"], error=summary["error"], fc_ok=summary["fc_ok"],
                        todo_steps=summary["todo_steps"], instructions=summary["instructions"],
                        custom_steps=summary.get("custom_steps"), timings=summary["timings"],
