@@ -1,7 +1,7 @@
 ---
 name: api-add-resolver
 axis: api
-description: wt.add(reagent, to=plate, volume_ul=...) — REQUIRED for reagent additions: the deck resolves the source trough, head, tips and fill; explicit head= / liquid_class_var= are honoured or refused.
+description: "wt.add(reagent, to=plate, volume_ul=...) is REQUIRED for reagent additions; the deck resolves the source trough, head, tips and fill; explicit head= / liquid_class_var= are honoured or refused."
 always_on: true
 requires_env: FLUENTVIBE_RESOLVER
 ---
