@@ -288,6 +288,15 @@ def author_from_document(
             progress(message)
 
     result = SpecPathResult(stage="spec")
+    # Long vendor documents: the model gets the procedure, not the flow-cell
+    # loading, data analysis and troubleshooting chapters (it has reasoned for
+    # minutes over those without producing a spec).
+    from .doc_trim import trim_document
+
+    trimmed = trim_document(source_text)
+    if trimmed.left_out:
+        source_text = trimmed.text
+        note(trimmed.note)
     request_has_instructions = True
     context_parts = [f"Request: {request}"] if request else []
     if understand and ask is not None and ask is not choose_yourself:

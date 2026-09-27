@@ -17,3 +17,16 @@ def test_volumes_follow_the_ont_table():
     plan = normalisation({"A1": 45, "C1": 4.5, "D1": 100}, 50, 9)
     assert plan.sample_ul == {"A1": 1.11, "C1": 9} and plan.diluent_ul == {"A1": 7.89}
     assert plan.predilute == {"D1": (2.0, 34.0)} and not plan.problems
+
+
+def test_long_documents_keep_the_procedure_only():
+    from fluentvibe.authoring.doc_trim import trim_document
+
+    body = "x " * 9000
+    text = ("1. Overview\n2. Library preparation\n3. Priming and loading the flow cell\n4. Troubleshooting\n"
+            f"1. Overview\n{body}\n2. Library preparation\nPool all samples\n{body}\n"
+            "3. Priming and loading the flow cell\nFlush the flow cell\n4. Troubleshooting\nNo reads\n")
+    trimmed = trim_document(text)
+    assert "Pool all samples" in trimmed.text and "Flush the flow cell" not in trimmed.text
+    assert trimmed.left_out == ["3. Priming and loading the flow cell", "4. Troubleshooting"]
+    assert trim_document("short protocol").text == "short protocol"
