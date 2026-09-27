@@ -16,6 +16,7 @@ import math
 
 from typing import Iterable
 
+from ..variables import num, per_trip, vround
 from .common import (
     DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     DEFAULT_MIX_LIQUID_CLASS,
@@ -54,7 +55,7 @@ def remove_liquid(
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
     trips = math.ceil(float(volume_ul) / capacity)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="remove_liquid")
-    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", per_trip(volume_ul, trips))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     empty_lc = v.ref("EMPTY_LIQUID_CLASS", empty_liquid_class)
     if name:
@@ -92,7 +93,7 @@ def mix_wells(
     if int(cycles) < 1:
         raise BlockError(f"mix_wells: cycles must be 1 or more, got {cycles!r}.")
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
-    mix_ul = round(min(float(volume_ul), 0.9 * capacity), 2)
+    mix_ul = vround(min(num(volume_ul), 0.9 * capacity))
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="mix_wells")
     volume = v.ref("MIX_UL", mix_ul)
     lc = v.ref("MIX_LIQUID_CLASS", liquid_class)

@@ -457,7 +457,8 @@ def _emit_steps(
             continue
 
         if isinstance(step, SetVariableStep):
-            out.append(indent + f"wt.set_variable({step.variable_name!r}, {step.value!r})")
+            expression = ", expression=True" if getattr(step, "expression", False) else ""
+            out.append(indent + f"wt.set_variable({step.variable_name!r}, {step.value!r}{expression})")
             i += 1
             continue
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import Iterable
 
+from ..variables import num, per_trip
 from .common import (
     DEFAULT_MIX_LIQUID_CLASS,
     BlockError,
@@ -52,11 +53,11 @@ def stamp(
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 0.0)
     trips = math.ceil(float(volume_ul) / capacity) if capacity else 1
     if mix_cycles and mix_volume_ul is None:
-        mix_volume_ul = 0.8 * float(volume_ul)
+        mix_volume_ul = 0.8 * num(volume_ul)
     if mix_cycles and capacity:
-        mix_volume_ul = min(float(mix_volume_ul), 0.9 * capacity)
+        mix_volume_ul = min(num(mix_volume_ul), 0.9 * capacity)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="stamp")
-    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", per_trip(volume_ul, trips))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
@@ -67,7 +68,7 @@ def stamp(
         head.aspirate(source, volume, liquid_class=lc, columns=cols)
         head.dispense(dest, volume, liquid_class=lc, columns=cols)
     if mix_cycles:
-        head.mix(dest, v.ref("MIX_UL", float(mix_volume_ul)), cycles=mix_cycles,
+        head.mix(dest, v.ref("MIX_UL", num(mix_volume_ul)), cycles=mix_cycles,
                  liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class), columns=cols)
     head.return_tips(tips, columns=cols)
     head.drop_adapter()
@@ -118,7 +119,7 @@ def distribute_reagent(
     capacity = float(getattr(tips, "capacity_ul", 0.0) or 200.0)
     trips = max(1, math.ceil(float(volume_ul) / capacity))
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="distribute_reagent")
-    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", per_trip(volume_ul, trips))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
@@ -162,7 +163,7 @@ def add_reagent(
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="add_reagent")
     capacity = float(getattr(reagent_tips, "capacity_ul", 0.0) or 0.0)
     trips = math.ceil(float(volume_ul) / capacity) if capacity else 1
-    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", round(float(volume_ul) / trips, 2))
+    volume = v.ref("VOLUME_UL" if trips == 1 else "TRIP_VOLUME_UL", per_trip(volume_ul, trips))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
@@ -177,7 +178,7 @@ def add_reagent(
         head.pick_up(mix_tips, columns=cols)
         head.mix(
             plate,
-            v.ref("MIX_UL", float(mix_volume_ul if mix_volume_ul is not None else 0.8 * float(volume_ul))),
+            v.ref("MIX_UL", num(mix_volume_ul if mix_volume_ul is not None else 0.8 * num(volume_ul))),
             cycles=mix_cycles,
             liquid_class=v.ref("MIX_LIQUID_CLASS", mix_liquid_class),
             columns=cols,
@@ -192,7 +193,7 @@ def _by_column(volumes: dict[str, float]) -> list[list[tuple[str, float]]]:
         address = str(well).strip().upper()
         if float(volume) <= 0:
             continue
-        columns.setdefault(int(address[1:]), []).append((address, float(volume)))
+        columns.setdefault(int(address[1:]), []).append((address, num(volume)))
     return [sorted(columns[c], key=lambda item: item[0][0]) for c in sorted(columns)]
 
 
@@ -226,12 +227,12 @@ def distribute_volumes(
         wells = [w for w, _ in batch]
         channels = [ord(w[0]) - ord("A") for w in wells]
         trips = max(1, math.ceil(max(v for _, v in batch) / capacity))
-        per_trip = [round(v / trips, 2) for _, v in batch]
+        per_trip_ul = [per_trip(v, trips) for _, v in batch]
         for _ in range(trips):
-            head.aspirate(source, per_trip[0], liquid_class=liquid_class, wells=["A1"] * len(wells),
-                          volumes=per_trip, channels=channels)
-            head.dispense(plate, per_trip[0], liquid_class=liquid_class, wells=wells,
-                          volumes=per_trip, channels=channels)
+            head.aspirate(source, per_trip_ul[0], liquid_class=liquid_class, wells=["A1"] * len(wells),
+                          volumes=per_trip_ul, channels=channels)
+            head.dispense(plate, per_trip_ul[0], liquid_class=liquid_class, wells=wells,
+                          volumes=per_trip_ul, channels=channels)
     head.drop_tips()
 
 
@@ -261,12 +262,12 @@ def transfer_volumes(
         wells = [w for w, _ in batch]
         channels = [ord(w[0]) - ord("A") for w in wells]
         trips = max(1, math.ceil(max(v for _, v in batch) / capacity))
-        per_trip = [round(v / trips, 2) for _, v in batch]
+        per_trip_ul = [per_trip(v, trips) for _, v in batch]
         head.get_tips(tips)
         for _ in range(trips):
-            head.aspirate(source, per_trip[0], liquid_class=liquid_class, wells=wells, volumes=per_trip,
+            head.aspirate(source, per_trip_ul[0], liquid_class=liquid_class, wells=wells, volumes=per_trip_ul,
                           channels=channels)
-            head.dispense(dest, per_trip[0], liquid_class=liquid_class, wells=wells, volumes=per_trip,
+            head.dispense(dest, per_trip_ul[0], liquid_class=liquid_class, wells=wells, volumes=per_trip_ul,
                           channels=channels)
         head.drop_tips()
 
@@ -302,7 +303,7 @@ def pool_wells(
     for well in wells:
         by_column.setdefault(well[1:], []).append(well)
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="pool_wells")
-    volume = v.ref("VOLUME_UL", float(volume_ul))
+    volume = v.ref("VOLUME_UL", num(volume_ul))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)
@@ -347,7 +348,7 @@ def pool_columns(
     if not 1 <= int(dest_column) <= 12:
         raise BlockError(f"pool_columns: dest_column must be 1..12, got {dest_column!r}.")
     v = BlockVariables(wt, variable_prefix(name) if variables else None, block="pool_columns")
-    volume = v.ref("VOLUME_UL", float(volume_ul))
+    volume = v.ref("VOLUME_UL", num(volume_ul))
     lc = v.ref("LIQUID_CLASS", liquid_class)
     if name:
         wt.group(name)

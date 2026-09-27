@@ -507,10 +507,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 w.fills.append(f"    {samples}.fill_wells({samples}.first_wells({n})[{sample_n}:], "
                                f"Reagent(\"Blank (unused well of a pipetted column)\"), SAMPLE_UL)")
     well_ul = sample_ul
-    # Dependent volumes are written as expressions of named per-well volumes
-    # (SAMPLE_UL, S3_AXP_UL, ...), so changing one in the Python carries
-    # through to every removal, mix and transfer that depends on it.
-    vols: dict[str, float] = {}
+    # Every per-well volume is a FluentControl variable in a variables group
+    # at the top (SAMPLE_UL, S3_AXP_UL, ...); dependent volumes are variables
+    # set from expressions of those, so an edit in the Python or in
+    # FluentControl carries through to every removal, mix and transfer.
+    vols: dict[str, float | str] = {}
     well_terms: list[str] = []
     if not empty_start:
         vols["SAMPLE_UL"] = sample_ul
@@ -523,8 +524,16 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             name, k = f"{base}_{k}", k + 1
         return name
 
+    def derive(step: SpecStep, what: str, expr: str) -> str:
+        """A dependent volume: a named variable set from ``expr``."""
+        if expr.isidentifier():
+            return expr
+        name = vol_name(step, what)
+        vols[name] = expr
+        return name
+
     def well_expr(minus: float | None = None) -> str:
-        terms = well_terms or ["0"]
+        terms = [t for t in well_terms if t not in {"0", "-0"}] or ["0"]
         out = terms[0]
         for term in terms[1:]:
             out += f" - {term[1:]}" if term.startswith("-") else f" + {term}"
@@ -671,10 +680,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 vols[vol_text] = vol
                 well_terms.append(f"-{vol_text}")
             elif step.volume_ul is not None:      # more than the wells hold: all of it
-                vol_text = well_expr()
+                vol_text = derive(step, "remove", well_expr())
                 well_terms[:] = []
             else:                                 # all but the residual
-                vol_text = well_expr(residual)
+                vol_text = derive(step, "remove", well_expr(residual))
                 well_terms[:] = [f"{residual:g}"]
             w.body.append(
                 f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol_text}, tips={plate_tips(current)},\n"
@@ -689,7 +698,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 continue
             cycles = step.cycles if step.cycles is not None else 10
             vol = step.volume_ul if step.volume_ul is not None else round(0.8 * well_ul, 1)
-            vol_text = f"{vol:g}" if step.volume_ul is not None else f"round(0.8 * ({well_expr()}), 1)"
+            if step.volume_ul is not None:
+                vol_text = vol_name(step, "mix")
+                vols[vol_text] = vol
+            else:
+                terms = well_expr()
+                vol_text = derive(step, "mix", f"0.8 * {terms}" if terms.isidentifier() else f"0.8 * ({terms})")
             comment = "  # ASSUMED: cycles" if step.cycles is None else ""
             w.body.append(
                 f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol_text}, "
@@ -850,14 +864,15 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             # Sample-lineage tips: channel i only ever meets sample i.
             tips = carry[0] if carry and carry[1] == current else w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else well_ul
-            vol_text = well_expr()
             if step.volume_ul is not None and vol <= well_ul - 1.0:
                 vol_text = vol_name(step, "transfer")
                 vols[vol_text] = vol
-            if vol > well_ul - 1.0:
+            elif vol > well_ul - 1.0:
                 w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; moving {well_ul - 1.0:g} ul")
                 vol = well_ul - 1.0
-                vol_text = well_expr(1.0)
+                vol_text = derive(step, "transfer", well_expr(1.0))
+            else:
+                vol_text = derive(step, "transfer", well_expr())
             fits(step, vol)
             w.body.append(
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol_text}, tips={tips},\n"
@@ -940,9 +955,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         *[line for name, default in lc_vars.items()
           for line in (f"    wt.declare_variable({json.dumps(name)}, {json.dumps(default)})",
                        f"    wt.set_sim_value({json.dumps(name)}, {json.dumps(default)})")],
-        *(["", "    # Per-well volumes (ul). Removals, mixes and transfers below are computed",
-           "    # from these, so a change here carries through."]
-          + [f"    {name} = {value:g}" for name, value in vols.items()] if vols else []),
+        *(["", '    wt.group("Variables")',
+           "    # Per-well volumes (ul) as FluentControl variables. Removals, mixes and",
+           "    # transfers are variables computed from these, so a change here or in",
+           "    # FluentControl carries through."]
+          + [f"    {name} = wt.volume({json.dumps(name)}, {value if isinstance(value, str) else format(value, 'g')})"
+             for name, value in vols.items()] if vols else []),
         "",
         '    wt.group("Labware Placement")',
         *w.placements,

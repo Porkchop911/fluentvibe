@@ -46,24 +46,27 @@ then make every entry exactly:
 matching `wt.declare_variable("LIQUID_CLASS_<ROLE>", "Water Free Single")`
 + `wt.set_sim_value(...)`.
 
-**One rule for FluentControl variables.** Blocks (`fluentvibe.blocks`) take
-plain numbers and declare their own variables (`<NAME>_BEAD_VOLUME_UL` …), so
-never declare variables for a block's values yourself. For head calls you
-write by hand, **pass declared variables BY NAME — as a string — for both
-`volume` and `liquid_class`.** The renderer emits a FluentControl variable reference
-*only* when the argument string equals a declared variable name. Passing
-the Python value bakes a literal into the protocol and leaves the FC
-variable dead, defeating the point of declaring it.
-- Right: `head.aspirate(trough, "BEAD_VOLUME_UL", liquid_class="LIQUID_CLASS_BEADS")`
-- Wrong: `head.aspirate(trough, BEAD_VOLUME_UL, liquid_class=LIQUID_CLASS_BEADS)`
-  (here `BEAD_VOLUME_UL` is `36.0` and `LIQUID_CLASS_BEADS` is
-  `"Water Free Single"`, so both render as literals).
+**Volumes: a variables group with `wt.volume`.** Every per-well volume is a
+FluentControl variable, declared in a `Variables` group before placement;
+a volume computed from others keeps its calculation (a Set Variable step
+FluentControl re-evaluates when someone edits a base volume):
+```python
+wt.group("Variables")
+SAMPLE_UL = wt.volume("SAMPLE_UL", 20)
+BEADS_UL = wt.volume("BEADS_UL", 36)
+SUPERNATANT_UL = wt.volume("SUPERNATANT_UL", SAMPLE_UL + BEADS_UL - 5)
+wt.group("Labware Placement")
+```
+Pass the returned values themselves (not strings) to blocks and head calls:
+`head.aspirate(plate, SUPERNATANT_UL, liquid_class="LIQUID_CLASS_SAMPLE")`,
+`spri_cleanup(..., sample_volume_ul=SAMPLE_UL, ...)`. They are numbers for
+Python arithmetic and fills, and the steps reference the variable. Blocks
+declare variables for anything else they need (`<NAME>_BEAD_VOLUME_UL` …).
 
-You still compute derived values as Python numbers and
-`wt.declare_variable("SUPERNATANT_ASPIRATE_UL", sample + beads - retain)` +
-`wt.set_sim_value(...)`; the simulator resolves the name-string back to the
-seeded value. Pass the **name string** in every `aspirate` / `dispense` /
-`mix` / `empty_tips` call.
+**Liquid classes by name.** For head calls you write by hand, pass a declared
+liquid-class variable **as a string**: `liquid_class="LIQUID_CLASS_BEADS"`,
+not the Python value (that bakes a literal into the protocol). The same holds
+for any other variable declared with `wt.declare_variable` + `wt.set_sim_value`.
 
 **Never change approved labware across staged groups.** The `catalog=`,
 `python_class`, and label of every object are locked at object-draft

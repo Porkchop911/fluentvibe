@@ -43,6 +43,13 @@ from .ir.schema import (
 from .ir.source_pos import capture_source_pos
 from .labware.base import Labware
 
+_FC_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _is_fc_identifier(name: str) -> bool:
+    return isinstance(name, str) and bool(_FC_IDENTIFIER.fullmatch(name))
+
+
 if TYPE_CHECKING:
     from .simulator.report import SimulationReport
     from .simulator.snapshots import Snapshot
@@ -280,8 +287,32 @@ class Worktable:
         references (loop counts, conditional predicates, imports)."""
         self.sim_values[name] = value
 
-    def set_variable(self, name: str, value: Union[float, int, str]) -> None:
-        self._emit(SetVariableStep(variable_name=name, value=value))
+    def set_variable(self, name: str, value: Union[float, int, str], *, expression: bool = False) -> None:
+        """Set a variable; ``expression=True``: ``value`` is a numeric expression
+        FluentControl evaluates at run time (``"SAMPLE_UL + BEADS_UL - 5"``)."""
+        self._emit(SetVariableStep(variable_name=name, value=value, expression=expression))
+
+    def volume(self, name: str, value: Union[float, int, "Volume"]) -> "Volume":
+        """A per-well volume (ul) as a FluentControl variable.
+
+        A number declares the variable with that default (editable in
+        FluentControl). A value computed from other volumes
+        (``wt.volume("REMOVE_UL", SAMPLE_UL + BEADS_UL - 2)``) is also a Set
+        Variable step with that expression, so FluentControl recomputes it at
+        run time when a base volume is edited. Steps given the result
+        reference the variable. Call it in a variables group at the top.
+        """
+        from .variables import Volume
+
+        if not _is_fc_identifier(name):
+            raise ValueError(f"wt.volume: {name!r} is not a valid FluentControl variable name")
+        existing = self.protocol_variables.get(name)
+        if existing is not None and existing != float(value):
+            raise ValueError(f"wt.volume: {name} is already declared as {existing!r}")
+        self.declare_variable(name, float(value))
+        if isinstance(value, Volume):
+            self._emit(SetVariableStep(variable_name=name, value=value.expr, expression=True))
+        return Volume(float(value), name)
 
     def wait(self, duration_seconds: Union[int, float, str]) -> None:
         self._emit(WaitStep(duration_seconds=duration_seconds))

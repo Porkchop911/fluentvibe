@@ -356,9 +356,13 @@ def _parse_step_object(obj: ET.Element) -> Optional[Step]:
     if step_type == StepType.CGA_DROP_FINGERS:
         return CgaDropFingersStep()
     if step_type == StepType.SET_VARIABLE:
+        raw_value = (_extract_field(obj, "Value") or "").strip()
+        value = _coerce_scalar(_strip_wrapping_quotes(raw_value))
         return SetVariableStep(
             variable_name=_extract_field(obj, "VariableName") or _extract_field(obj, "Name") or "",
-            value=_coerce_scalar(_strip_wrapping_quotes(_extract_field(obj, "Value") or "")),
+            value=value,
+            # unquoted and not a number: an expression FluentControl evaluates
+            expression=isinstance(value, str) and bool(raw_value) and not raw_value.startswith('"'),
         )
     if step_type == StepType.COMMENT:
         return CommentStep(comment=_extract_field(obj, "Text") or _extract_field(obj, "Comment") or "")

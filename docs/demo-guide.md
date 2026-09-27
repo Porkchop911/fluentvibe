@@ -27,7 +27,7 @@ What works end to end, how to start it, and what to leave out of a live demo.
 | Edits in FluentControl | *fluentvibe: Pull FluentControl edits* | seconds | which Python variable a FluentControl edit changed |
 | Opentrons → Tecan | *fluentvibe: Convert Opentrons protocol* | ~10 s | an Opentrons .py becomes a checked FluentControl protocol, no model |
 | Instructions for hand-written code | *fluentvibe: Set instructions for this protocol* | 15-60 s | a checklist beside the file, checked on every save |
-| Change one volume | edit `S2_..._UL = 36` → `30` in a generated protocol | save | nothing breaks: removals and mixes follow |
+| Change one volume | edit `wt.volume("S3_AXP_UL", 36)` → `30` in a generated protocol, or `S3_AXP_UL` in FluentControl's Variables group | save | nothing breaks: removals and mixes are Set Variable calculations of the base volumes |
 
 Suggested 90 s cut: Generate (time-lapse) → checklist 10/10 → Replay, Play → break
 an instruction (squiggle) → Opentrons → Tecan.
@@ -38,8 +38,9 @@ an instruction (squiggle) → Opentrons → Tecan.
 - Protocols whose steps need loops over data, worklists or devices on the fast path:
   such a step becomes model-written code or stays a marked TODO (reported, never hidden).
 - FluentControl check timing: ~25 s is FluentControl loading the script.
-- The FluentControl-level volume dependencies: edits of a volume *in FluentControl*
-  do not update dependent volumes (they do in the Python).
+- Claiming a FluentControl *run* recomputes dependent volumes: the InfoPad parses
+  the Set Variable expressions (a broken one is flagged), but no instrument run
+  has confirmed the run-time values yet.
 
 ## Numbers (for the post, from the benchmarks)
 

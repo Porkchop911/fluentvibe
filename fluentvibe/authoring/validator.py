@@ -290,9 +290,16 @@ def _check_intent_against_final_labware(
 def _check_staged_source_contract(source: str) -> str | None:
     if ".worklist(" in source or ".load_worklist(" in source:
         return None
-    first_group_match = re.search(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)", source)
+    group_pattern = re.compile(r"wt\.group\(\s*['\"]([^'\"]+)['\"]\s*\)")
+    first_group_match = group_pattern.search(source)
     if first_group_match is None:
         return "Generated source must start executable steps with wt.group('Labware Placement')."
+    if first_group_match.group(1) == "Variables":
+        # A variables group (wt.volume: volume variables and their
+        # calculations) may come first; placement follows it.
+        next_group = group_pattern.search(source, first_group_match.end())
+        if next_group is not None and "wt.place(" not in source[first_group_match.end():next_group.start()]:
+            first_group_match = next_group
     first_group_start = first_group_match.start()
     first_declare = source.find("wt.declare_variable(")
     if first_declare < 0:
