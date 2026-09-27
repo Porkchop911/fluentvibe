@@ -526,3 +526,27 @@ def test_add_without_a_reagent_is_a_question(profile):
     raw["steps"].append({"id": "s11", "op": "add", "text": "Resuspend in buffer", "location": "deck", "volume_ul": 20})
     with pytest.raises(OpenValues, match="which reagent or buffer"):
         build_skeleton(_spec(raw), load_deck(profile))
+
+
+def test_document_sequence_catches_a_missing_wait_and_a_skipped_step(profile, tmp_path):
+    import re
+
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import requirements_from_spec, verify_all
+
+    spec = _spec(_SPRI_PRIMITIVES)
+    (req,) = requirements_from_spec(spec)
+    source = build_skeleton(spec, load_deck(profile))
+
+    def verdict(src):
+        wt = build_worktable_from_source(src, str(tmp_path / "d.py"))
+        wt.simulate()
+        return verify_all(wt, [req])[0]
+
+    assert verdict(source).status == "pass"
+    no_wait = re.sub(r"    wt\.wait\(duration_seconds=300\)[^\n]*\n", "    wt.add_comment('bind 5 min')\n", source, count=1)
+    assert "duration_seconds=300" not in no_wait
+    missing = verdict(no_wait)
+    assert missing.status == "fail" and "300 s" in missing.evidence
+    no_transfer = re.sub(r"    stamp\(.*?name=[^\n]*\n", "", source, count=1, flags=re.S)
+    assert verdict(no_transfer).status == "fail"

@@ -488,3 +488,118 @@ def requirements_markdown(requirements: list[Requirement], verdicts: list[Verdic
         lines += [f"- *{d.get('disposition')}*: {d.get('clause')}" + (f" — {d['reason']}" if d.get("reason") else "")
                   for d in other]
     return "\n".join(lines) + "\n"
+
+
+# ── document completeness: the spec's deck steps, in order ──────────────
+
+
+def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple[str, float, int | None]]:
+    """The protocol as a sequence of physical events: (token, seconds, line)."""
+    holders = {name: _initial_holders(wt, name) for name in reagent_names}
+    placed = getattr(wt, "_placed", {})
+
+    def category(label):
+        return getattr(placed.get(label or ""), "category", "")
+
+    def is_waste(label):
+        return "waste" in str(label or "").lower()
+
+    tokens: list[tuple[str, float, int | None]] = []
+    last_source = None
+    on_magnet: set[str] = set()
+    for op in ops:
+        kind = type(op.step).__name__
+        if op.action == "aspirate":
+            last_source = op.labware
+        elif op.action == "dispense" and last_source is not None:
+            if is_waste(op.labware):
+                tokens.append(("waste", 0.0, op.line))
+            else:
+                reagent = next((n for n, h in holders.items() if last_source in h), None)
+                if reagent is not None:
+                    tokens.append((f"add:{_norm(reagent)}", 0.0, op.line))
+                elif category(last_source) == "plate" and category(op.labware) == "plate" and op.labware != last_source:
+                    tokens.append(("transfer", 0.0, op.line))
+        elif kind in ("Mca384EmptyTipsStep", "LihaEmptyTipsStep") and is_waste(op.labware):
+            tokens.append(("waste", 0.0, op.line))
+        elif op.action == "mix":
+            tokens.append(("mix", 0.0, op.line))
+        elif op.action == "move":
+            onto = getattr(op.step, "stack_onto", None)
+            if _is_magnet(wt, onto):
+                on_magnet.add(op.labware)
+                tokens.append(("mag_on", 0.0, op.line))
+            elif op.labware in on_magnet:
+                on_magnet.discard(op.labware)
+                tokens.append(("mag_off", 0.0, op.line))
+        elif op.action == "wait":
+            step = op.step
+            seconds = float(step.delay) / 1000.0 if kind == "DelayStep" else (_seconds(wt, step.duration_seconds) or 0.0)
+            tokens.append(("wait", seconds, op.line))
+    collapsed: list[tuple[str, float, int | None]] = []
+    for token in tokens:
+        if collapsed and collapsed[-1][0] == token[0]:
+            if token[0] == "wait":
+                collapsed[-1] = ("wait", collapsed[-1][1] + token[1], collapsed[-1][2])
+            continue
+        collapsed.append(token)
+    return collapsed
+
+
+def requirements_from_spec(spec) -> list[Requirement]:
+    """The document's deck steps as one ordered completeness requirement."""
+    reagents = {r.id: r.name for r in spec.reagents}
+    expected: list[dict[str, Any]] = []
+
+    def push(token, text, seconds=0.0):
+        if expected and expected[-1]["token"] == token and token != "wait":
+            return
+        expected.append({"token": token, "text": text[:80], "seconds": seconds})
+
+    for step in spec.steps:
+        if step.location != "deck":
+            continue
+        text = f"{step.id}: {step.text}"
+        if step.op == "add" and step.reagent in reagents:
+            push(f"add:{_norm(reagents[step.reagent])}", text)
+        elif step.op == "separate":
+            push("mag_off" if step.engage is False else "mag_on", text)
+        elif step.op == "remove":
+            push("waste", text)
+        elif step.op in ("transfer", "pool"):
+            push("transfer", text)
+        elif step.op == "mix":
+            push("mix", text)
+        elif step.op == "incubate" and step.minutes:
+            push("wait", text, sum(step.minutes) * 60.0)
+        elif step.op == "bead_cleanup":
+            for token in ("mix", "mag_on", "waste", "mag_off", "mix", "mag_on", "transfer"):
+                push(token, text)
+    return [Requirement(
+        id="DOC", text="every deck step of the document, in order", kind="document_sequence",
+        # Samples are not a reagent source: moving them is a transfer.
+        params={"expected": expected,
+                "reagents": [r.name for r in spec.reagents if r.role not in ("sample", "product")]},
+    )]
+
+
+def _check_document_sequence(wt, ops: list[_Op], req: Requirement) -> Verdict:
+    expected = req.params.get("expected") or []
+    if not expected:
+        return Verdict(req.id, UNKNOWN, "the document has no deck steps to check")
+    tokens = _protocol_tokens(wt, ops, list(req.params.get("reagents") or []))
+    i = 0
+    for exp in expected:
+        while i < len(tokens) and not (
+            tokens[i][0] == exp["token"] and (exp["token"] != "wait" or tokens[i][1] + 1e-6 >= 0.9 * exp["seconds"])
+        ):
+            i += 1
+        if i == len(tokens):
+            what = f"a wait of {exp['seconds']:g} s" if exp["token"] == "wait" else exp["token"].replace(":", " ")
+            last_line = tokens[-1][2] if tokens else None
+            return Verdict(req.id, FAIL, f"missing or out of order: {what} ({exp['text']})", last_line)
+        i += 1
+    return Verdict(req.id, PASS, f"all {len(expected)} deck steps of the document occur in order")
+
+
+_CHECKS["document_sequence"] = _check_document_sequence
