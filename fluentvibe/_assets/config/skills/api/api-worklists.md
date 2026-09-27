@@ -95,15 +95,16 @@ wt.worklist(r"C:\ProgramData\Tecan\VisionX\Worklists\computed.gwl")
 `sample_transfer(...)` (replicated transfers), and `flush` / `comment` /
 `start_timer` / `wait_for_timer` records.
 
-## Simulator caveat (important)
+## Simulation
 
-Worklist steps (`convert_csv_to_gwl` / `load_worklist` / `execute_worklist`) are
-**VALIDATION_ONLY** in the simulator: the protocol renders and validates, but the
-simulator does **not** walk the per-well volume changes the worklist performs, so
-`wt.snapshots` will not reflect them. State this in any skill that relies on a
-worklist — the recipe is correct and compiles, but post-worklist well volumes are
-not modelled. (Contrast with scalar `aspirate`/`dispense`, which the simulator
-does walk well-by-well.)
+When the CSV or GWL exists at simulation time, the simulator applies its
+aspirate / dispense records to the wells (new tips at each `W;`, tip capacity
+from `diti_type`), so a worklist is checked for volumes like any other
+pipetting: the source wells must hold the liquid, and the CSV/GWL labels must
+be the placed labware labels (missing labware is skipped, as FluentControl
+does with `SkipWithoutWarning`, and reported as a warning). A file that only
+exists at run time is not simulated (a warning says so). `R` / `T` records
+are not simulated yet.
 
 ## Choosing scalar vs worklist
 

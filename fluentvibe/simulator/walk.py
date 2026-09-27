@@ -6,6 +6,7 @@ import ast
 import copy
 import operator
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from ..heads.mca96 import Tip
@@ -56,6 +57,7 @@ from ..ir.schema import (
 )
 from ..labware.base import Labware, Layer
 from ..labware.tipboxes import TipBox
+from . import worklist_sim
 from .contamination import ContaminationTracker
 from .invariants import (
     CannotAspirateError,
@@ -110,6 +112,10 @@ class Simulator:
         self._step_index = 0
         self._current_step = None
         self._strict = False
+        # Worklists: GWL path -> records made by a Worklist Import; the
+        # worklists loaded since the last Execute Worklist.
+        self._worklist_files: dict[str, list] = {}
+        self._loaded_worklists: list[tuple[LoadWorklistStep, list]] = []
 
     def run(
         self,
@@ -271,8 +277,12 @@ class Simulator:
             effect = EffectKind.VALIDATION_ONLY
         elif isinstance(step, (ImportVariableStep, QueryVariableStep, ExecuteApplicationStep)):
             message = "runtime/user/external side effect is not modeled"
-        elif isinstance(step, (WorklistImportStep, LoadWorklistStep, ExecuteWorklistStep)):
-            effect = EffectKind.VALIDATION_ONLY
+        elif isinstance(step, WorklistImportStep):
+            effect, message = self._on_worklist_import(step)
+        elif isinstance(step, LoadWorklistStep):
+            effect, message = self._on_load_worklist(step)
+        elif isinstance(step, ExecuteWorklistStep):
+            effect, message = self._on_execute_worklist(step)
         elif isinstance(step, LegacyDriverMacroStep):
             # External device driver macro (e.g. ODTC SiLA-ODTC); no twin effect.
             effect = EffectKind.VALIDATION_ONLY
@@ -850,6 +860,78 @@ class Simulator:
             value = self._eval_numeric_expr(value)
         self._wt.protocol_variables[step.variable_name] = value
         self._wt.sim_values[step.variable_name] = value
+
+    # ── Worklists ───────────────────────────────────────────────────
+
+    def _worklist_base(self):
+        base = getattr(self._wt, "worklist_dir", None)
+        return Path(base) if base else None
+
+    def _on_worklist_import(self, step: WorklistImportStep) -> tuple[EffectKind, str]:
+        path = worklist_sim.resolve(step.csv_path, self._worklist_base())
+        if path is None:
+            message = f"worklist {step.csv_path!r} does not exist at simulation time; its transfers are not simulated"
+            self._warn(message)
+            return EffectKind.VALIDATION_ONLY, message
+        records = worklist_sim.records_from_csv(
+            path, columns=step.columns, start_line=step.start_line, separator=step.separator,
+            stop_with_last_line=step.stop_with_last_line, stop_with_line=step.stop_with_line,
+        )
+        self._worklist_files[_worklist_key(step.gwl_path)] = records
+        return EffectKind.VALIDATION_ONLY, f"{path.name}: {sum(r.code == 'A' for r in records)} transfer(s)"
+
+    def _on_load_worklist(self, step: LoadWorklistStep) -> tuple[EffectKind, str]:
+        records = self._worklist_files.get(_worklist_key(step.gwl_path))
+        if records is None:
+            path = worklist_sim.resolve(step.gwl_path, self._worklist_base())
+            if path is None:
+                message = f"worklist {step.gwl_path!r} does not exist at simulation time; its transfers are not simulated"
+                self._warn(message)
+                return EffectKind.VALIDATION_ONLY, message
+            records, skipped = worklist_sim.records_from_gwl(path)
+            if skipped:
+                self._warn(f"{path.name}: records not simulated: {', '.join(skipped[:5])}")
+        self._loaded_worklists.append((step, records))
+        return EffectKind.VALIDATION_ONLY, f"{sum(r.code == 'A' for r in records)} transfer(s) loaded"
+
+    def _on_execute_worklist(self, step: ExecuteWorklistStep) -> tuple[EffectKind, str]:
+        loaded, self._loaded_worklists = self._loaded_worklists, []
+        if not loaded:
+            return EffectKind.VALIDATION_ONLY, "no worklist loaded"
+        moved = 0
+        for load, records in loaded:
+            capacity = self._infer_liha_tip_capacity(load.diti_type)
+            skip_missing = str(load.handle_missing_labware).lower().startswith("skip")
+            tip = Tip(capacity_ul=capacity)
+            skipping = False   # an aspirate skipped for missing labware skips its dispenses
+            for record in records:
+                if record.code == "W":
+                    tip = Tip(capacity_ul=capacity)   # FluentControl drops the DiTis and takes new ones
+                    skipping = False
+                    continue
+                if record.code == "A":
+                    skipping = False
+                elif skipping:
+                    continue
+                action = f"Worklist {load.gwl_path} line {record.line} ({'aspirate' if record.code == 'A' else 'dispense'})"
+                labware = self._twin.get(record.label)
+                if labware is None:
+                    if skip_missing:
+                        self._warn(f"{action}: {record.label!r} is not on the worktable; FluentControl skips it")
+                        skipping = record.code == "A"
+                        continue
+                    raise InsufficientVolumeError(f"{action}: {record.label!r} is not on the worktable")
+                address = worklist_sim.well_address(labware, record.position)
+                if address is None:
+                    raise InsufficientVolumeError(
+                        f"{action}: {record.label!r} has no well at position {record.position!r}")
+                well = labware.well(address)
+                if record.code == "A":
+                    self._aspirate_one(labware, well, record.volume, tip)
+                    moved += 1
+                else:
+                    self._dispense_one(labware, well, record.volume, tip)
+        return EffectKind.LIQUID_TRANSFER, f"{moved} worklist transfer(s) simulated"
 
     def _on_set_location(self, step: SetLocationStep) -> None:
         labware = self._twin.get(step.labware)
@@ -1756,6 +1838,10 @@ def _with_sim_details(exc: Exception, *, category: str, **details):
     setattr(exc, "sim_category", category)
     setattr(exc, "sim_details", {key: value for key, value in details.items() if value is not None})
     return exc
+
+
+def _worklist_key(path: str) -> str:
+    return str(path).strip().replace("\\", "/").rsplit("/", 1)[-1].lower()
 
 
 def _looks_like_numeric_expr(value: str) -> bool:
