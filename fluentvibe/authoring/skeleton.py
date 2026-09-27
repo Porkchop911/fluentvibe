@@ -572,12 +572,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     n = 8 * used_columns
     column_list = list(range(1, used_columns + 1))
     cols_arg = "" if used_columns == 12 else f", columns={column_list}"
-    # A kit reagent the deck steps draw beyond its supply.
+    # A kit reagent the deck steps draw beyond its supply. After a pool step
+    # an addition goes into the one pool, not into every sample well.
+    pool_at = next((i for i, st in enumerate(spec.steps) if st.op == "pool"), len(spec.steps))
     for reagent in spec.reagents:
         supply = _supply(reagent)
         if supply is None:
             continue
-        drawn = sum(float(st.volume_ul) * n for st in spec.steps
+        drawn = sum(float(st.volume_ul) * (n if i < pool_at else 1) for i, st in enumerate(spec.steps)
                     if st.location == "deck" and st.op == "add" and st.reagent == reagent.id and st.volume_ul)
         if drawn > supply:
             questions.append(
@@ -747,6 +749,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     free_marker_ul, bound_marker_ul = marker_ul, 0.0
     sim_analyte_ul = 0.0     # > 0 once the marker term appears in a volume
     pooled = False
+    pool_desc = ""      # where the pool is and how much it holds, for the first operator step
 
     def fits(step: SpecStep, volume: float) -> None:
         if volume > _PLATE_MAX_UL:
@@ -832,6 +835,19 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             # The deck has no heater: a warm incubation is an operator step.
             w.notes.append(f"{step.id}: {max(step.temp_c):g} C incubation handed to the operator")
             step = replace(step, location="off_deck")
+        if pooled:
+            # After pooling, the work is on one pool (often hundreds of µl plus
+            # as much bead suspension and ml of ethanol: a tube, a tube magnet,
+            # a rotator). The plate blocks do not apply, and model-written code
+            # for it took most of an hour and was wrong: the operator does it,
+            # in one hand-off, told where the pool is and how much it holds.
+            if pool_desc:
+                step = replace(step, text=f"{pool_desc} {step.text}")
+                pool_desc = ""
+            if step.location == "deck":
+                w.notes.append(f"{step.id} ({step.op}) is done by the operator on the pool")
+            pending_offdeck.append(step)
+            continue
         if step.location != "deck" or step.op in {"measure", "manual"}:
             pending_offdeck.append(step)
             continue
@@ -849,14 +865,6 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             w.notes.append(f"{step.id}: the wells are still empty, so this transfer adds {liquid.id}")
             step = replace(step, op="add", reagent=liquid.id)
             reagent = liquid
-
-        if pooled and step.op != "incubate":
-            # The pool plate holds 8 wells in column 1; MCA96 full-plate
-            # blocks would address 96. Leave the step for LiHa authoring.
-            w.notes.append(f"{step.id} ({step.op}) runs on the pooled column; author it with the LiHa")
-            w.body.append(f"    wt.group({label})")
-            w.body.append(f"    wt.add_comment({json.dumps('TODO (LiHa, pooled column 1) ' + step.text)})")
-            continue
 
         if step.op == "separate":
             if step.engage is False:
@@ -1001,6 +1009,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 current, well_ul = pool, vol * sample_n
                 well_terms[:] = [f"{well_ul:g}"]
                 pooled = True
+                pool_desc = (f"The pool ({sample_n} samples x {vol:g} µl = {well_ul:g} µl) is in well A1 of "
+                             f"{w.labels.get(pool, pool)}; continue with it in a tube.")
                 continue
             if vol * used_columns > _POOL_WELL_UL:
                 w.notes.append(f"{step.id}: {used_columns} x {vol:g} ul overflows one pool well; "
@@ -1014,6 +1024,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             current, well_ul = pool, vol * used_columns
             well_terms[:] = [f"{well_ul:g}"]
             pooled = True
+            pool_desc = (f"The samples are pooled into column 1 of {w.labels.get(pool, pool)} "
+                         f"(8 wells x {well_ul:g} µl = {8 * well_ul:g} µl): combine column 1 into one tube "
+                         "(the document's LoBind tube) and continue with the pool.")
             continue
 
         if step.op in {"add", "transfer", "mix"} and reagent is not None and reagent.role == "per_sample":

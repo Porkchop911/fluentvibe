@@ -828,3 +828,33 @@ def test_repeats_become_native_loops_when_every_pass_is_the_same(profile, tmp_pa
     namespace = {}
     exec(compile(source, str(tmp_path / "e.py"), "exec"), namespace)
     namespace["build_worktable"]().simulate()
+
+
+def test_steps_after_pooling_are_one_operator_hand_off(profile, tmp_path):
+    """ONT rapid barcoding: after pooling 48 barcoded samples the clean-up and
+    adapter steps are tube work. They go to the operator in one hand-off that
+    says where the pool is, not to TODOs for the model (which took 48 min)."""
+    raw = {
+        "title": "Rapid barcoding", "sample_count": 48, "sample_volume_ul": 9,
+        "reagents": [{"id": "dna", "name": "Amplicon DNA", "role": "sample"},
+                     {"id": "rb", "name": "Rapid Barcodes", "role": "per_sample"},
+                     {"id": "axp", "name": "AMPure XP", "role": "bead_carrier", "supply_ul": 2400},
+                     {"id": "ra", "name": "Rapid Adapter", "role": "reagent", "supply_ul": 15}],
+        "steps": [
+            {"id": "bc", "op": "add", "text": "Add 1 µl Rapid Barcode", "location": "deck", "reagent": "rb",
+             "volume_ul": 1},
+            {"id": "pool", "op": "pool", "text": "Pool all barcoded samples", "location": "deck", "volume_ul": 10},
+            {"id": "axp", "op": "add", "text": "Add an equal volume of AXP to the pool", "location": "deck",
+             "reagent": "axp", "volume_ul": 480},
+            {"id": "mag", "op": "separate", "text": "Pellet on a magnet", "location": "deck", "minutes": [2]},
+            {"id": "ra", "op": "add", "text": "Add 1 µl diluted RA", "location": "deck", "reagent": "ra",
+             "volume_ul": 1.5},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))   # RA 1.5 µl once, not 48 x
+    assert "TODO" not in source
+    hand_offs = [line for line in source.splitlines() if "offdeck_step(" in line]
+    assert len(hand_offs) == 1 and "column 1 of" in hand_offs[0] and "equal volume of AXP" in hand_offs[0]
+    namespace: dict = {}
+    exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
+    namespace["build_worktable"]().simulate()
