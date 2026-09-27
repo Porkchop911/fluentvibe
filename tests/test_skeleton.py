@@ -566,3 +566,26 @@ def test_named_volumes_carry_a_change_through(profile, tmp_path):
         edited = source.replace(old, new)
         assert edited != source
         assert not [d for d in analyze_source(edited, path) if d.severity == "error"], old
+
+
+class _TextClient:
+    def __init__(self, text):
+        self.text = text
+
+    def complete(self, *, messages, tools):
+        return {"content": self.text}
+
+
+def test_custom_steps_get_model_code_only_when_it_is_clean(profile, tmp_path):
+    from fluentvibe.authoring.spec_path import fill_custom_steps
+
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    raw["steps"].insert(7, {"id": "c1", "op": "custom", "text": "Let the probe bind for one minute on the deck",
+                            "location": "deck"})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert 'wt.add_comment("TODO' in source
+    path = str(tmp_path / "d.py")
+    filled, n_filled, n_left = fill_custom_steps(_TextClient("    wt.wait(duration_seconds=60)"), source, path)
+    assert (n_filled, n_left) == (1, 0) and "TODO" not in filled and "wt.wait(duration_seconds=60)" in filled
+    broken, n_filled, n_left = fill_custom_steps(_TextClient("    wt.wait(duration_seconds=60"), source, path)
+    assert (n_filled, n_left) == (0, 1) and broken == source
