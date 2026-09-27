@@ -213,3 +213,23 @@ def test_otherwise_mca_excludes_reagents_the_checklist_gives_the_fca():
             Requirement("m", "otherwise the MCA", "head_for_other_steps", {"head": "mca"})]   # no "except"
     verdicts = {v.id: v.status for v in verify_all(wt, reqs)}
     assert verdicts == {"f1": "pass", "f2": "pass", "f3": "pass", "m": "pass"}
+
+
+def test_full_path_checklist_is_checked_on_the_authored_draft(tmp_path):
+    import json as _json
+    from concurrent.futures import Future
+    from types import SimpleNamespace
+
+    from fluentvibe.cli import _author_checklist
+
+    reqs = load_requirements(LEDGER)
+    future: Future = Future()
+    future.set_result((reqs, [{"clause": "thanks", "disposition": "excluded"}]))
+    result = SimpleNamespace(status=SimpleNamespace(value="success"))
+    args = SimpleNamespace(output_dir=tmp_path)
+    (tmp_path / "fluentcontrol_check.json").write_text('{"ok": true}', encoding="utf-8")
+    _author_checklist(args, result, EXAMPLE, future, 12.0)
+    summary = _json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    assert summary["instructions"] == {"total": 5, "verified": 5, "failed": 0, "unverified": 0}
+    assert summary["fc_ok"] is True and summary["todo_steps"] == 0
+    assert "✅" in (tmp_path / "requirements.md").read_text(encoding="utf-8")

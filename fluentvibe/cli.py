@@ -155,6 +155,12 @@ def main(argv: Optional[list[str]] = None) -> int:
                           help="maximum seconds across all model calls in this run")
     p_author.add_argument("--json", dest="as_json", action="store_true",
                           help="emit a JSON summary of the authoring result")
+    p_author.add_argument("--document", type=Path, default=None,
+                          help="protocol document (PDF, DOCX, text) attached to the prompt")
+    p_author.add_argument("--check-instructions", action="store_true",
+                          help="extract the prompt's instructions and the document's steps (separate model "
+                               "calls, in parallel) and check them on the authored protocol "
+                               "(<output-dir>/requirements.md, result.json)")
     p_author.add_argument("--model-trace", action="store_true",
                           help="write model request traces under <output-dir>/model_traces")
     p_author.add_argument("--model-trace-live", action="store_true",
@@ -696,11 +702,86 @@ def _activate_profile(args):
     return rp
 
 
+def _author_checklist(args, result, python_path, pending, seconds: float) -> None:
+    """Check the instruction/document checklist on the authored protocol and
+    write requirements.md + result.json (same shape as author-spec)."""
+    import json as _json
+
+    from .authoring.eval_rubric import build_worktable_from_source
+    from .authoring.requirements import requirements_markdown, verify_all
+
+    out = Path(args.output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    summary: dict[str, Any] = {"stage": result.status.value, "error": None, "fc_ok": None, "todo_steps": 0,
+                               "draft": str(python_path) if python_path else None,
+                               "timings": {"total_s": round(seconds, 1)}}
+    try:
+        reqs, dispositions = pending.result(timeout=1800)
+    except Exception as exc:  # noqa: BLE001
+        summary["error"] = f"checklist: {type(exc).__name__}: {exc}"[:300]
+        reqs, dispositions = [], []
+    verdicts = []
+    if python_path and Path(python_path).exists() and reqs:
+        try:
+            wt = build_worktable_from_source(Path(python_path).read_text(encoding="utf-8"), str(python_path))
+            wt.simulate()
+            verdicts = verify_all(wt, reqs)
+        except Exception as exc:  # noqa: BLE001
+            summary["error"] = f"check: {type(exc).__name__}: {exc}"[:300]
+    if verdicts:
+        (out / "requirements.md").write_text(requirements_markdown(reqs, verdicts, dispositions), encoding="utf-8")
+    fc_file = out / "fluentcontrol_check.json"
+    if fc_file.exists():
+        try:
+            summary["fc_ok"] = _json.loads(fc_file.read_text(encoding="utf-8")).get("ok")
+        except ValueError:
+            pass
+    if python_path and Path(python_path).exists():
+        summary["todo_steps"] = Path(python_path).read_text(encoding="utf-8").count('wt.add_comment("TODO')
+    statuses = [v.status for v in verdicts]
+    summary["instructions"] = {"total": len(statuses), "verified": statuses.count("pass"),
+                               "failed": statuses.count("fail"), "unverified": statuses.count("unknown")}
+    (out / "result.json").write_text(_json.dumps(summary, indent=2), encoding="utf-8")
+
+
 def _cmd_author(args) -> int:
     from .authoring import PromptAuthoringService
 
     _activate_profile(args)
     prompt = " ".join(args.prompt).strip()
+    request = prompt
+    document_text = None
+    if getattr(args, "document", None) is not None:
+        from .authoring.attachments import extract_file_text
+
+        document_text, method, pages, warnings = extract_file_text(args.document)
+        prompt = "\n".join([
+            prompt, "", "Attached file context:", "", f"--- Attached file: {args.document.name} ---",
+            f"Extraction method: {method}", *([f"Page count: {pages}"] if pages is not None else []),
+            *[f"Extraction warning: {w}" for w in warnings], "Extracted text follows:", document_text,
+            f"--- End attached file: {args.document.name} ---",
+        ])
+    pending_checklist = None
+    if getattr(args, "check_instructions", False):
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .authoring.lm_client import LMStudioChatClient
+
+        def _checklist():
+            from .authoring.bench_spec import extract_bench_spec
+            from .authoring.requirements import extract_requirements, requirements_from_spec
+
+            client = LMStudioChatClient(request_timeout_s=1800)
+            reqs, dispositions = extract_requirements(client, request, document_text)
+            if document_text:
+                spec, _problems, _raw = extract_bench_spec(client, document_text)
+                if spec is not None:
+                    reqs = reqs + requirements_from_spec(spec)
+            return reqs, dispositions
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        pending_checklist = pool.submit(_checklist)
+        pool.shutdown(wait=False)
     if getattr(args, "spec", None) is not None:
         import json as _json
 
@@ -740,10 +821,15 @@ def _cmd_author(args) -> int:
     _scope_mode = resolve_lab_scope_mode(args.lab_scope)
     if _scope_mode != "off":
         print(f"Lab scope: {_scope_mode}", file=sys.stderr)
+    started = __import__("time").monotonic()
     result = service.author(
         prompt,
         **kwargs,
     )
+    python_path = result.validation.python_path if result.validation else None
+    if pending_checklist is not None:
+        _author_checklist(args, result, python_path, pending_checklist,
+                          __import__("time").monotonic() - started)
     if args.as_json:
         print(json.dumps(result.to_dict(), indent=2))
     elif result.status.value == "success":
