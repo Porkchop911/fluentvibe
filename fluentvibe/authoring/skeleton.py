@@ -389,6 +389,14 @@ def _repeat_groups(spec: BenchSpec) -> list[dict[str, Any]]:
     return groups
 
 
+_SAMPLE_WORDS = re.compile(r"(?i)\b(dna|rna|nucleic acids?|template|amplicons?|lysates?|samples?|specimens?)\b")
+
+
+def _looks_like_samples(reagent: SpecReagent) -> bool:
+    """Sample material by its name (the DNA to bind, a lysate), not a kit reagent."""
+    return bool(_SAMPLE_WORDS.search(f"{reagent.id} {reagent.name}"))
+
+
 def _unnumbered(text: str) -> str:
     """A step name without its pass number ("Discard (wash 2 of 3)" -> "Discard")."""
     text = re.sub(r"\s*\([^()]*\d[^()]*\)", "", text)
@@ -747,6 +755,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     # The analyte marker binds to beads added to its wells and leaves the free
     # liquid (the simulator counts it as bound), and comes back with an eluent.
     free_marker_ul, bound_marker_ul = marker_ul, 0.0
+    beads_in_wells = False   # bead suspension already in the working wells
     sim_analyte_ul = 0.0     # > 0 once the marker term appears in a volume
     pooled = False
     pool_desc = ""      # where the pool is and how much it holds, for the first operator step
@@ -1029,10 +1038,33 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                          "(the document's LoBind tube) and continue with the pool.")
             continue
 
-        if step.op in {"add", "transfer", "mix"} and reagent is not None and reagent.role == "per_sample":
+        # Samples added to the working plate (DNA onto washed beads) are 96
+        # different liquids: they come from a sample plate, one well each,
+        # stamped 1:1 -- never one trough into every well.
+        adds_samples = step.op == "add" and reagent is not None and (
+            reagent.role == "sample"
+            # A spec that marks no reagent as the samples but counts samples
+            # on an empty-start plate: the nucleic acid it adds is the samples.
+            or (empty_start and sample_reagent is None and spec.sample_count and _looks_like_samples(reagent)))
+        if adds_samples and reagent.role != "sample":
+            w.notes.append(f"{step.id}: {reagent.id} is the samples (one per well, from a sample plate)")
+            reagent = replace(reagent, role="sample")
+        if (step.op in {"add", "transfer", "mix"} and reagent is not None and reagent.role == "per_sample") \
+                or adds_samples:
             source = w.plate(_label(f"{reagent.id}_Plate"))
-            per_well = reagent.supply_ul if reagent.supply_ul is not None else (step.volume_ul or 1.0) * 2
-            w.fills.append(f"    {source}.fill_all({reagent_var(reagent)}, {per_well:g})")
+            per_well = reagent.supply_ul if reagent.supply_ul is not None and not adds_samples \
+                else (step.volume_ul or 1.0) * 2
+            if adds_samples:
+                # As on a sample plate: plain liquid with a small analyte marker
+                # on top (the simulator takes bound analyte out of the free
+                # liquid; a whole well of analyte would vanish on the beads).
+                m = marker_ul or min(2.0, per_well / 10)
+                wells = f"{source}.first_wells({sample_n})"
+                w.fills.append(f"    {source}.fill_wells({wells}, Reagent({json.dumps(reagent.name + ' matrix')}), "
+                               f"{per_well - m:g})")
+                w.fills.append(f"    {source}.layer_wells({wells}, {reagent_var(reagent)}, {m:g})")
+            else:
+                w.fills.append(f"    {source}.fill_all({reagent_var(reagent)}, {per_well:g})")
             tips = w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else 1.0
             vol_text = vol_name(step, reagent.id)
@@ -1045,6 +1077,16 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             )
             w.retire(source, tips)
             well_ul += vol
+            if adds_samples:
+                if beads_in_wells:
+                    # The marker binds to the beads already there at once: it
+                    # leaves the (simulated) free liquid now.
+                    well_ul -= m
+                    well_terms.append(f"-{_SIM_ANALYTE}")
+                    sim_analyte_ul = m
+                    bound_marker_ul += m
+                else:
+                    free_marker_ul += m
             fits(step, well_ul)
             continue
 
@@ -1075,6 +1117,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 )
             well_ul += vol
             well_terms.append(vol_text)
+            if reagent.role == "bead_carrier":
+                beads_in_wells = True
             if reagent.role == "bead_carrier" and free_marker_ul:
                 well_ul -= free_marker_ul
                 well_terms.append(f"-{_SIM_ANALYTE}")

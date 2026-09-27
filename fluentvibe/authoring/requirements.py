@@ -31,6 +31,7 @@ Kinds (``params``):
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -241,12 +242,27 @@ def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
         return _seconds(wt, op.step.duration_seconds) or 0.0
 
     total = sum(seconds(op) for op in waits)
+    # An incubation the operator does (on a rotator, in a thermal cycler)
+    # waits too: its prompt states the time ("... 15 min with gentle rotation").
+    handed = sum(_stated_seconds(getattr(op.step, "prompt", "") or "")
+                 for op in ops[first.index + 1:last.index] if type(op.step).__name__ == "UserPromptStep")
     # Both ends inside one block call (e.g. a clean-up): name the line once.
     where = (f"in the call on line {first.line}" if first.line == last.line
              else f"between line {first.line} and line {last.line}")
-    if total + 1e-9 < minimum:
-        return Verdict(req.id, FAIL, f"{total:g} s of waiting {where}; {minimum:g} s required", last.line)
-    return Verdict(req.id, PASS, f"{total:g} s of waiting {where}")
+    by_operator = f" (+{handed:g} s by the operator)" if handed else ""
+    if total + handed + 1e-9 < minimum:
+        return Verdict(req.id, FAIL, f"{total:g} s of waiting {where}{by_operator}; {minimum:g} s required",
+                       last.line)
+    return Verdict(req.id, PASS, f"{total:g} s of waiting {where}{by_operator}")
+
+
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)\s*(h|hrs?|hours?|min|mins|minutes?|s|secs?|seconds?)\b", re.IGNORECASE)
+
+
+def _stated_seconds(text: str) -> float:
+    """Durations written in an operator prompt, in seconds ("2 min", "30 s")."""
+    factor = {"h": 3600, "m": 60, "s": 1}
+    return sum(float(n) * factor[unit[0].lower()] for n, unit in _DURATION.findall(text))
 
 
 def _check_step_present(wt, ops: list[_Op], req: Requirement) -> Verdict:
