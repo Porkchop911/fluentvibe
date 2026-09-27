@@ -1076,6 +1076,11 @@ def _cmd_author_spec(args) -> int:
     if args.model:
         kwargs["model"] = args.model
     kwargs["request_timeout_s"] = args.request_timeout
+    # Model traces in <output>/model_traces, so a slow or stuck request can be read back.
+    from .authoring.trace import ModelTraceConfig, ModelTraceRecorder
+
+    args.output.mkdir(parents=True, exist_ok=True)
+    kwargs["trace_recorder"] = ModelTraceRecorder(ModelTraceConfig.from_env(output_dir=args.output, enabled=True))
 
     def ask_terminal(questions: list[str]) -> str | None:
         print("\nThe spec leaves these open:")

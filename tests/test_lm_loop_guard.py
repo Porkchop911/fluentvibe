@@ -114,3 +114,33 @@ def test_temperature_comes_from_the_environment_when_not_given(monkeypatch):
     assert _client().temperature == 1.0
     monkeypatch.delenv("FLUENTVIBE_LM_TEMPERATURE")
     assert _client().temperature == 0.2
+
+
+def _stream(arguments_chunks):
+    import json as _json
+
+    lines = []
+    for i, chunk in enumerate(arguments_chunks):
+        delta = {"tool_calls": [{"index": 0, "function": {"name": "submit_bench_spec" if i == 0 else "",
+                                                           "arguments": chunk}}]}
+        lines.append(("data: " + _json.dumps({"choices": [{"delta": delta}]})).encode())
+    lines.append(b"data: [DONE]")
+    return lines
+
+
+def test_looping_tool_call_arguments_are_stopped():
+    chunks = ['{"title": "AMPure", "notes": ["'] + ["!!!!!!!!!!"] * 1500
+    with pytest.raises(LMRepetitionError):
+        _client()._read_stream(_stream(chunks))
+
+
+def test_a_long_spec_with_repeated_structure_is_not_a_loop():
+    import json as _json
+
+    spec = {"title": "wash x40", "steps": [
+        {"id": f"s{i}", "op": ["separate", "remove", "separate", "add", "mix"][i % 5], "text": f"wash {i // 5} step {i % 5}",
+         "location": "deck", "volume_ul": 20 + i % 3, "engage": i % 5 == 0} for i in range(200)]}
+    text = _json.dumps(spec)
+    chunks = [text[i:i + 40] for i in range(0, len(text), 40)]
+    message = _client()._read_stream(_stream(chunks))
+    assert _json.loads(message["tool_calls"][0]["function"]["arguments"])["title"] == "wash x40"
