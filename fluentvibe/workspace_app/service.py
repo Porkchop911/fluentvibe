@@ -267,13 +267,46 @@ def job_status(job_id: str) -> dict[str, Any]:
         return {"ok": True, "job": _public_job(job)}
 
 
+_CANCEL_TOKENS: dict[str, Any] = {}
+
+
+def cancel_job(payload: dict[str, Any]) -> dict[str, Any]:
+    """Stop a running job: the open model request is cut, a waiting question
+    is dropped, and the job ends as "stopped"."""
+    job_id = str(payload.get("id") or "")
+    with _JOB_LOCK:
+        job = _JOBS.get(job_id)
+        token = _CANCEL_TOKENS.get(job_id)
+        if job is None:
+            raise ValueError("no such job")
+        if token is None or job["status"] not in {"queued", "running"}:
+            return {"ok": True, "job": _public_job(job)}
+        job["stopping"] = True
+    token.cancel()
+    return {"ok": True, "job": _public_job(job)}
+
+
 def _run_job(job_id: str, handler: Any, payload: dict[str, Any]) -> None:
+    from .. import cancel
+
+    token = cancel.CancelToken()
     with _JOB_LOCK:
         job = _JOBS[job_id]
         job["status"] = "running"
         job["started_at"] = time.time()
+        _CANCEL_TOKENS[job_id] = token
     try:
-        result = handler(payload)
+        with cancel.bound(token):
+            result = handler(payload)
+    except cancel.Cancelled:
+        with _JOB_LOCK:
+            job = _JOBS[job_id]
+            job["status"] = "stopped"
+            job["error"] = {"message": "Stopped.", "type": "Stopped"}
+            job["question"] = None
+            job["finished_at"] = time.time()
+            _CANCEL_TOKENS.pop(job_id, None)
+        return
     except Exception as exc:
         with _JOB_LOCK:
             job = _JOBS[job_id]
@@ -286,6 +319,8 @@ def _run_job(job_id: str, handler: Any, payload: dict[str, Any]) -> None:
             job["status"] = "success"
             job["result"] = result
             job["finished_at"] = time.time()
+    with _JOB_LOCK:
+        _CANCEL_TOKENS.pop(job_id, None)
 
 
 def _public_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -307,6 +342,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "progress": list(job.get("progress") or []),
         "question": job.get("question"),
         "error": job["error"],
+        "stopping": bool(job.get("stopping")),
         "queue_s": round(queue_s, 3),
         "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
     }
@@ -358,8 +394,20 @@ def _job_ask(payload: dict[str, Any], questions: list[str], timeout_s: float = 1
         job["question"] = list(questions)
         job["answer"] = None
         _ANSWER_EVENTS[job_id] = event
+    from .. import cancel
+
     _job_progress(payload, "waiting for your answer")
-    answered = event.wait(timeout_s)
+    token = cancel.current()
+    deadline = time.time() + timeout_s
+    answered = False
+    while time.time() < deadline:
+        if event.wait(0.5):
+            answered = True
+            break
+        if token is not None and token.cancelled:
+            with _JOB_LOCK:
+                _ANSWER_EVENTS.pop(job_id, None)
+            raise cancel.Cancelled("stopped by the user")
     with _JOB_LOCK:
         _ANSWER_EVENTS.pop(job_id, None)
         job = _JOBS.get(job_id) or {}

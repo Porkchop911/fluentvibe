@@ -538,6 +538,22 @@
     .fast-path table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
     .fast-path td, .fast-path th { border-bottom: 1px solid var(--line, #d0d7de); padding: 4px 6px; text-align: left; vertical-align: top; }
     .fast-path .fp-summary { font-weight: 600; margin-top: 6px; }
+    .fast-path .fp-title { font-size: 16px; margin: 0 0 4px; }
+    .fast-path .fp-help, .author-advanced .fp-help { color: var(--muted); font-size: 13px; margin: 0 0 8px; max-width: 980px; }
+    .fast-path .fp-field { display: flex; flex-direction: column; min-width: 280px; }
+    .fp-questions { border: 1px solid #f0c36d; background: #fffbeb; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+    .fp-questions .fp-q { margin: 8px 0; }
+    .fp-questions .fp-q label { display: block; font-size: 13px; margin-bottom: 3px; }
+    .fp-questions .fp-q textarea { min-height: 34px; width: 100%; }
+    .author-advanced { border: 1px solid var(--line, #d0d7de); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+    .author-advanced > summary { cursor: pointer; font-weight: 600; }
+    #tab-author .author-shell { display: block; height: auto; min-height: 0; }
+    #tab-author .author-shell > * { margin-bottom: 10px; }
+    .author-advanced .author-sb-fields { grid-template-columns: .8fr .65fr 1fr .7fr auto auto; }
+    .author-advanced .author-chat { min-height: 220px; max-height: 55vh; margin: 10px 0; }
+    .fast-path .fp-row label { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
+    .fast-path .fp-row input[type=checkbox] { width: auto; margin: 0; }
+    .fast-path .fp-row > button { width: auto; min-width: 160px; }
     .author-extras {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -645,76 +661,95 @@
 
     <div class="panel" id="tab-author">
       <div class="author-shell">
-        <div class="author-sessionbar">
-          <div class="author-sb-fields">
-            <div>
-              <label for="authorProfile">Profile</label>
+        <section class="fast-path" id="fastPath">
+          <h2 class="fp-title">Generate a protocol from a document</h2>
+          <p class="fp-help">Choose the deck, attach the protocol (PDF or text), say what you need, then <b>Generate</b> (about 3–5 minutes).
+            Before it builds anything it shows what it assumed and asks you to confirm: answer only what you want to change.
+            <b>Stop</b> ends the run at any time.</p>
+          <div class="fp-row">
+            <div class="fp-field">
+              <label for="authorProfile">Deck profile</label>
               <select id="authorProfile"></select>
             </div>
-            <div>
-              <label for="authorLabScope">Lab scope</label>
-              <select id="authorLabScope">
-                <option value="skills">skills</option>
-                <option value="enforce">enforce</option>
-                <option value="cheatsheet">cheatsheet</option>
-                <option value="off">off</option>
-              </select>
-            </div>
-            <div>
-              <label for="authorRetry">Retry budget</label>
-              <input id="authorRetry" type="number" min="1" value="8">
-            </div>
-            <div>
-              <label for="authorModel">Model</label>
-              <input id="authorModel" placeholder="default">
-            </div>
-            <div>
-              <label for="authorTimeout">Response limit (s)</label>
-              <input id="authorTimeout" type="number" min="15" step="15" value="240">
-            </div>
-            <div class="author-sb-action">
-              <label>&nbsp;</label>
-              <button id="startAuthor">Start session</button>
+            <div class="author-attachbar">
+              <label class="attach-button secondary" for="authorAttachments">Attach files</label>
+              <input id="authorAttachments" type="file" multiple accept=".pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.py,application/pdf,text/*">
+              <div class="attachment-list" id="authorAttachmentList"></div>
             </div>
           </div>
-          <div class="status" id="authorStatus" aria-live="polite"></div>
-        </div>
-
-        <details class="fast-path" id="fastPath" open>
-          <summary>Document → protocol (fast path, instructions checked)</summary>
-          <label for="fastRequest">What should be automated? Instructions here are checked on the protocol.</label>
+          <label for="fastRequest">What should be automated? (Instructions written here are checked on the finished protocol.)</label>
           <textarea id="fastRequest" placeholder="e.g. 20 ul PCR samples, whole plate, Abgene plates, beads/ethanol/elution buffer via the FCA, liquid classes as string variables"></textarea>
           <div class="fp-row">
-            <span>Document: the files under “Attach files” below, and the Profile above.</span>
             <label><input type="checkbox" id="fastCheckInstructions" checked> check my instructions</label>
             <label><input type="checkbox" id="fastFcCheck"> check in FluentControl</label>
-            <label><input type="checkbox" id="fastChoose"> let the model choose open values</label>
+            <label title="No questions: the model decides every open value itself"><input type="checkbox" id="fastChoose"> don't ask me, let the model decide</label>
+          </div>
+          <div class="fp-row">
             <button id="fastGenerate">Generate protocol</button>
+            <button id="fastStop" class="danger" hidden>Stop</button>
             <button id="fastReplay" class="secondary" disabled>Show replay</button>
           </div>
           <div class="status" id="fastStatus" aria-live="polite"></div>
           <div class="fp-progress" id="fastProgress"></div>
-          <div id="fastQuestion" hidden>
-            <div class="fp-summary" id="fastQuestionText"></div>
-            <div class="fp-row"><input id="fastAnswer" style="flex:1" placeholder="Your answer">
-              <button id="fastAnswerSend">Answer</button></div>
+          <div id="fastQuestion" class="fp-questions" hidden>
+            <div class="fp-summary">Please check. Change only what is wrong; a blank field keeps the assumption (or lets the model decide).</div>
+            <div id="fastQuestionList"></div>
+            <div class="fp-row">
+              <button id="fastAnswerSend">Continue with my changes</button>
+              <button id="fastAccept" class="secondary">Keep everything and continue</button>
+            </div>
           </div>
           <div class="fp-summary" id="fastSummary"></div>
           <div id="fastInstructions"></div>
-          <details><summary>Bench Spec</summary><div class="pre" id="fastSpec"></div></details>
+          <details><summary>Bench Spec (what the model read from the document)</summary><div class="pre" id="fastSpec"></div></details>
+        </section>
+
+        <details class="author-advanced" id="authorAdvanced">
+          <summary>Advanced: chat with the model (it writes the Python itself; slow, 15–60 min)</summary>
+          <p class="fp-help">For protocols the fast path cannot express. <b>Start session</b>, then write in the message box:
+            <b>Ctrl+Enter</b> sends, Enter starts a new line. <b>Stop</b> ends the model's current turn. It uses the deck profile and the files attached above.</p>
+          <div class="author-sessionbar">
+            <div class="author-sb-fields">
+              <div>
+                <label for="authorLabScope">Lab scope</label>
+                <select id="authorLabScope">
+                  <option value="skills">skills</option>
+                  <option value="enforce">enforce</option>
+                  <option value="cheatsheet">cheatsheet</option>
+                  <option value="off">off</option>
+                </select>
+              </div>
+              <div>
+                <label for="authorRetry">Retry budget</label>
+                <input id="authorRetry" type="number" min="1" value="8">
+              </div>
+              <div>
+                <label for="authorModel">Model</label>
+                <input id="authorModel" placeholder="default">
+              </div>
+              <div>
+                <label for="authorTimeout">Response limit (s)</label>
+                <input id="authorTimeout" type="number" min="15" step="15" value="240">
+              </div>
+              <div class="author-sb-action">
+                <label>&nbsp;</label>
+                <button id="startAuthor">Start session</button>
+              </div>
+              <div class="author-sb-action">
+                <label>&nbsp;</label>
+                <button id="chatStop" class="danger" disabled>Stop</button>
+              </div>
+            </div>
+            <div class="status" id="authorStatus" aria-live="polite"></div>
+          </div>
+
+          <div class="author-chat" id="authorChat" role="log" aria-live="polite"></div>
+
+          <div class="author-composer">
+            <textarea id="authorPrompt" rows="2" placeholder="Message the model…  (Ctrl+Enter to send, Enter for a new line)" disabled></textarea>
+            <button id="sendAuthor" disabled>Send</button>
+          </div>
         </details>
-
-        <div class="author-chat" id="authorChat" role="log" aria-live="polite"></div>
-
-        <div class="author-composer">
-          <textarea id="authorPrompt" rows="1" placeholder="Message the author…  (Enter to send, Shift+Enter for newline)" disabled></textarea>
-          <button id="sendAuthor" disabled>Send</button>
-        </div>
-        <div class="author-attachbar">
-          <label class="attach-button secondary" for="authorAttachments">Attach files</label>
-          <input id="authorAttachments" type="file" multiple accept=".pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.py,application/pdf,text/*">
-          <div class="attachment-list" id="authorAttachmentList"></div>
-        </div>
 
         <details class="author-extras">
           <summary>Generated code &amp; raw result</summary>
@@ -976,7 +1011,22 @@
       return pollJob(jobId, statusId, resultId, done);
     }
 
+    const STOP_BUTTONS = { authorStatus: 'chatStop' };
+
     async function pollJob(jobId, statusId, resultId, done) {
+      state.runningJobs = state.runningJobs || {};
+      state.runningJobs[statusId] = jobId;
+      const stopButton = STOP_BUTTONS[statusId] ? $(STOP_BUTTONS[statusId]) : null;
+      if (stopButton) stopButton.disabled = false;
+      try {
+        return await pollJobUntilDone(jobId, statusId, resultId, done);
+      } finally {
+        if (state.runningJobs[statusId] === jobId) delete state.runningJobs[statusId];
+        if (stopButton) stopButton.disabled = true;
+      }
+    }
+
+    async function pollJobUntilDone(jobId, statusId, resultId, done) {
       let transientFailures = 0;
       while (true) {
         let data;
@@ -996,6 +1046,12 @@
           setStatus(statusId, `${job.kind}: ${job.status} · ${formatDuration(elapsed)}`, 'running');
           await sleep(750);
           continue;
+        }
+        if (job.status === 'stopped') {
+          setStatus(statusId, `Stopped after ${formatDuration(job.elapsed_s || 0)}.`, 'error');
+          const err = new Error('Stopped.');
+          err.stopped = true;
+          throw err;
         }
         if (job.status === 'failure') {
           setStatus(statusId, job.error ? job.error.message : 'Job failed', 'error');
@@ -1032,6 +1088,8 @@
         const profile = $('authorProfile').value;
         if (!profile) { setStatus('fastStatus', 'Choose a profile first.', 'error'); return; }
         $('fastGenerate').disabled = true;
+        // A new run starts clean: nothing from the previous one can be replayed or mistaken for this result.
+        $('generatedCode').value = ''; $('fastReplay').disabled = true;
         $('fastProgress').textContent = ''; $('fastSummary').textContent = '';
         $('fastInstructions').innerHTML = ''; $('fastSpec').textContent = '';
         try {
@@ -1043,24 +1101,65 @@
             fc_check: $('fastFcCheck').checked,
             choose: $('fastChoose').checked,
           });
-          $('fastAnswerSend').onclick = async () => {
-            await post('/api/job-answer', { id: created.job.id, answer: $('fastAnswer').value });
-            $('fastQuestion').hidden = true; $('fastAnswer').value = '';
+          const jobId = created.job.id;
+          let shownQuestions = '';
+          const sendAnswer = async (answer) => {
+            $('fastAnswerSend').disabled = true; $('fastAccept').disabled = true;
+            try {
+              await post('/api/job-answer', { id: jobId, answer });
+              $('fastQuestion').hidden = true; shownQuestions = '';
+            } catch (err) {
+              setStatus('fastStatus', String(err.message || err), 'error');
+            } finally {
+              $('fastAnswerSend').disabled = false; $('fastAccept').disabled = false;
+            }
+          };
+          $('fastAnswerSend').onclick = () => {
+            const fields = Array.from($('fastQuestionList').querySelectorAll('textarea'));
+            const lines = fields
+              .filter(f => f.value.trim())
+              .map(f => `- ${f.dataset.question}\n  answer: ${f.value.trim()}`);
+            sendAnswer(lines.length ? lines.join('\n') : '__accept__');
+          };
+          $('fastAccept').onclick = () => sendAnswer('__accept__');
+          $('fastStop').hidden = false; $('fastStop').disabled = false;
+          $('fastStop').onclick = async () => {
+            $('fastStop').disabled = true;
+            setStatus('fastStatus', 'stopping…', 'running');
+            try { await post('/api/job-cancel', { id: jobId }); }
+            catch (err) { setStatus('fastStatus', String(err.message || err), 'error'); }
           };
           let job;
           while (true) {
-            job = (await api(`/api/job?id=${encodeURIComponent(created.job.id)}`)).job;
+            job = (await api(`/api/job?id=${encodeURIComponent(jobId)}`)).job;
             $('fastProgress').textContent = (job.progress || []).join('\n');
-            if (job.question && job.question.length) {
-              $('fastQuestionText').textContent = 'The spec leaves this open: ' + job.question.join(' | ');
-              if ($('fastQuestion').hidden) { $('fastQuestion').hidden = false; $('fastAnswer').focus(); }
+            const questions = job.question || [];
+            const key = JSON.stringify(questions);
+            if (questions.length && key !== shownQuestions) {
+              // Rebuilt only when the questions change, so typing is never lost.
+              shownQuestions = key;
+              $('fastQuestionList').innerHTML = questions.map((q, i) =>
+                `<div class="fp-q"><label for="fastQ${i}">${i + 1}. ${escapeHtml(q)}</label>` +
+                `<textarea id="fastQ${i}" rows="1" placeholder="blank = keep / let the model decide"></textarea></div>`
+              ).join('');
+              questions.forEach((q, i) => { $(`fastQ${i}`).dataset.question = q; });
+              $('fastQuestion').hidden = false;
+              $('fastQuestion').scrollIntoView({ block: 'nearest' });
+            } else if (!questions.length && !$('fastQuestion').hidden) {
+              $('fastQuestion').hidden = true; shownQuestions = '';
             }
             if (job.status === 'queued' || job.status === 'running') {
-              setStatus('fastStatus', `generating · ${formatDuration(job.elapsed_s || 0)}`, 'running');
+              const waiting = questions.length ? 'waiting for your answers' : 'generating';
+              setStatus('fastStatus', `${waiting} · ${formatDuration(job.elapsed_s || 0)}`, 'running');
               await sleep(1000);
               continue;
             }
             break;
+          }
+          $('fastQuestion').hidden = true;
+          if (job.status === 'stopped') {
+            setStatus('fastStatus', `Stopped after ${formatDuration(job.elapsed_s || 0)}.`, 'error');
+            return;
           }
           if (job.status === 'failure') {
             setStatus('fastStatus', job.error ? job.error.message : 'failed', 'error');
@@ -1070,7 +1169,12 @@
           const ins = sm.instructions || {};
           const fc = sm.fc_ok === true ? 'FluentControl: no InfoPad errors' :
             sm.fc_ok === false ? `FluentControl: ${(sm.fc_findings || []).length} finding(s)` : 'compiled and simulated';
-          setStatus('fastStatus', `${sm.stage} in ${formatDuration(job.elapsed_s || 0)}`, sm.stage === 'done' ? 'ok' : 'error');
+          // Green only when everything holds: built, FluentControl not failing, no instruction unmet.
+          const allGood = sm.stage === 'done' && sm.fc_ok !== false && !ins.failed;
+          const label = sm.stage !== 'done' ? `stopped at ${sm.stage}`
+            : allGood ? 'done' : `done with problems${ins.failed ? ` (${ins.failed} instruction(s) NOT met)` : ''}` +
+              (sm.fc_ok === false ? ' (FluentControl findings)' : '');
+          setStatus('fastStatus', `${label} · ${formatDuration(job.elapsed_s || 0)}`, allGood ? 'ok' : 'error');
           $('fastSummary').textContent = sm.stage === 'done'
             ? `${fc}` + (ins.total ? ` · your instructions: ${ins.verified}/${ins.total} verified` +
                 (ins.failed ? `, ${ins.failed} NOT met` : '') + (ins.unverified ? `, ${ins.unverified} not checkable` : '') : '')
@@ -1086,6 +1190,7 @@
           setStatus('fastStatus', String(err.message || err), 'error');
         } finally {
           $('fastGenerate').disabled = false;
+          $('fastStop').hidden = true;
         }
       });
     }
@@ -1165,11 +1270,21 @@
     function bindWorkbench() {
       $('startAuthor').addEventListener('click', startAuthoringSession);
       $('sendAuthor').addEventListener('click', sendAuthorMessage);
+      // Enter is a new line (a half-typed answer must never go out by accident);
+      // Ctrl+Enter / Cmd+Enter sends.
       $('authorPrompt').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
           sendAuthorMessage();
         }
+      });
+      $('chatStop').addEventListener('click', async () => {
+        const jobId = state.runningJobs && state.runningJobs.authorStatus;
+        if (!jobId) return;
+        $('chatStop').disabled = true;
+        setStatus('authorStatus', 'stopping…', 'running');
+        try { await post('/api/job-cancel', { id: jobId }); }
+        catch (err) { setStatus('authorStatus', String(err.message || err), 'error'); }
       });
       $('authorAttachments').addEventListener('change', addAuthorAttachments);
       $('simulateSource').addEventListener('click', simulateSource);

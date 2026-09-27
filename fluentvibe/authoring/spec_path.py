@@ -49,6 +49,27 @@ def choose_yourself(questions: list[str]) -> str:
     return CHOOSE_YOURSELF_ANSWER
 
 
+# The answer "nothing to change": keep the assumptions, or let the model decide
+# the open values. An ``ask`` returns it for an all-blank answer; None stops.
+ACCEPT = "__accept__"
+
+
+def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
+    """What the model assumed, for the user to confirm: every value it chose
+    itself (``proposed``) and every question it left in its notes."""
+    out: list[str] = []
+    for step in spec.steps:
+        for name in step.proposed:
+            value = getattr(step, name, None)
+            if value in (None, [], ""):
+                continue
+            shown = ", ".join(f"{v:g}" for v in value) if isinstance(value, list) else (
+                f"{value:g}" if isinstance(value, float) else str(value))
+            out.append(f"{step.id} ({' '.join(step.text.split())[:70]}): {name} = {shown} (assumed)")
+    out += [" ".join(n.split()) for n in spec.notes if "?" in n]
+    return out[:limit]
+
+
 @dataclass
 class SpecPathResult:
     stage: str                       # "done" | "questions" | "spec" | "skeleton" | "gate"
@@ -185,6 +206,33 @@ def author_from_document(
         result.error = "; ".join(f"{p.where}: {p.message}" for p in problems)
         return result
 
+    if ask is not None and ask is not choose_yourself:
+        confirm = assumptions(spec)
+        if confirm:
+            note("waiting for you to confirm the assumptions")
+            answer = ask(confirm)
+            result.rounds.append({"questions": confirm, "answer": answer, "kind": "confirm"})
+            if answer is None:
+                result.stage = "questions"
+                return result
+            if answer != ACCEPT:
+                note("revising the spec with your answers (model)")
+                t0 = time.monotonic()
+                try:
+                    revised, revised_problems, revised_raw = revise_bench_spec(
+                        client, raw, source_text, confirm,
+                        answer + "\nKeep every other assumption as it is.")
+                except Exception as exc:  # noqa: BLE001
+                    result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
+                    return result
+                result.timings["revise_s"] = result.timings.get("revise_s", 0.0) + time.monotonic() - t0
+                if revised is None:
+                    result.stage, result.error = "spec", "revision unusable: " + "; ".join(
+                        p.message for p in revised_problems)
+                    return result
+                spec, raw, problems = revised, revised_raw, revised_problems
+                result.spec, result.problems, result.spec_raw = spec, problems, raw
+
     deck = load_deck(profile_dir)
     for _ in range(max_rounds + 1):
         try:
@@ -201,6 +249,11 @@ def author_from_document(
             if answer is None:
                 result.stage = "questions"
                 return result
+            if answer == ACCEPT:
+                answer = CHOOSE_YOURSELF_ANSWER
+            elif ask is not choose_yourself:
+                # Blank questions: the model decides those.
+                answer += "\nFor anything not answered here: " + CHOOSE_YOURSELF_ANSWER
             round_["answer"] = answer
             note("revising the spec with the answer (model)")
             t0 = time.monotonic()
@@ -262,6 +315,10 @@ def author_from_document(
                 for r in reqs
             ]
             result.requirements_markdown = requirements_markdown(reqs, verdicts, dispositions)
+            # The checklist beside draft.py: the editor re-checks it on every save.
+            from .requirements import save_requirements, sidecar_path
+
+            save_requirements(sidecar_path(out / "draft.py"), reqs)
         except Exception as exc:  # noqa: BLE001 - the checklist failing is reported, not fatal
             result.requirements_markdown = f"Instruction check failed: {type(exc).__name__}: {exc}\n"
     if fluentcontrol:
