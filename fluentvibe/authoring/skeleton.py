@@ -495,18 +495,43 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         # then keep their volume through a clean-up too.
         marker_ul = min(2.0, sample_ul / 10)
         if sample_n == 96:
-            w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+            w.fills.append(f"    {samples}.fill_all(Reagent({json.dumps(matrix_name)}), SAMPLE_UL - {marker_ul:g})")
             w.fills.append(f"    {samples}.layer_all({analyte_var}, {marker_ul:g})")
         else:
             wells = f"{samples}.first_wells({sample_n})"
-            w.fills.append(f"    {samples}.fill_wells({wells}, Reagent({json.dumps(matrix_name)}), {sample_ul - marker_ul:g})")
+            w.fills.append(f"    {samples}.fill_wells({wells}, Reagent({json.dumps(matrix_name)}), SAMPLE_UL - {marker_ul:g})")
             w.fills.append(f"    {samples}.layer_wells({wells}, {analyte_var}, {marker_ul:g})")
             if n > sample_n:
                 # Simulation only: the unused wells of the last column hold nothing
                 # on the bench; modelled as blank so whole-column pipetting is checked.
                 w.fills.append(f"    {samples}.fill_wells({samples}.first_wells({n})[{sample_n}:], "
-                               f"Reagent(\"Blank (unused well of a pipetted column)\"), {sample_ul:g})")
+                               f"Reagent(\"Blank (unused well of a pipetted column)\"), SAMPLE_UL)")
     well_ul = sample_ul
+    # Dependent volumes are written as expressions of named per-well volumes
+    # (SAMPLE_UL, S3_AXP_UL, ...), so changing one in the Python carries
+    # through to every removal, mix and transfer that depends on it.
+    vols: dict[str, float] = {}
+    well_terms: list[str] = []
+    if not empty_start:
+        vols["SAMPLE_UL"] = sample_ul
+        well_terms.append("SAMPLE_UL")
+
+    def vol_name(step: SpecStep, what: str) -> str:
+        name = f"{_ident(step.id).upper()}_{_ident(what).upper()}_UL"
+        base, k = name, 2
+        while name in vols:
+            name, k = f"{base}_{k}", k + 1
+        return name
+
+    def well_expr(minus: float | None = None) -> str:
+        terms = well_terms or ["0"]
+        out = terms[0]
+        for term in terms[1:]:
+            out += f" - {term[1:]}" if term.startswith("-") else f" + {term}"
+        if minus:
+            out += f" - {minus:g}"
+        return out
+
     # The analyte marker binds to beads added to its wells and leaves the free
     # liquid (the simulator counts it as bound), and comes back with an eluent.
     free_marker_ul, bound_marker_ul = marker_ul, 0.0
@@ -641,8 +666,18 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             if not on_magnet and any(s.op == "separate" for s in spec.steps):
                 w.notes.append(f"{step.id}: removing liquid off the magnet takes suspended beads along")
             comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
+            if step.volume_ul is not None and step.volume_ul <= well_ul:
+                vol_text = vol_name(step, "remove")
+                vols[vol_text] = vol
+                well_terms.append(f"-{vol_text}")
+            elif step.volume_ul is not None:      # more than the wells hold: all of it
+                vol_text = well_expr()
+                well_terms[:] = []
+            else:                                 # all but the residual
+                vol_text = well_expr(residual)
+                well_terms[:] = [f"{residual:g}"]
             w.body.append(
-                f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol:g}, tips={plate_tips(current)},\n"
+                f"    remove_liquid(wt, plate={current}, waste={waste}, volume_ul={vol_text}, tips={plate_tips(current)},\n"
                 f"                  liquid_class={lc_for('sample')}, name={label}{cols_arg}){comment}"
             )
             well_ul -= vol
@@ -654,9 +689,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 continue
             cycles = step.cycles if step.cycles is not None else 10
             vol = step.volume_ul if step.volume_ul is not None else round(0.8 * well_ul, 1)
+            vol_text = f"{vol:g}" if step.volume_ul is not None else f"round(0.8 * ({well_expr()}), 1)"
             comment = "  # ASSUMED: cycles" if step.cycles is None else ""
             w.body.append(
-                f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol:g}, "
+                f"    mix_wells(wt, plate={current}, tips={plate_tips(current)}, volume_ul={vol_text}, "
                 f"cycles={cycles}{', liquid_class=' + lc_for('mix') if spec.liquid_class_variables else ''}, "
                 f"name={label}{cols_arg}){comment}"
             )
@@ -705,13 +741,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 f"        wt, sample_plate={current}, magnet={magnet}, bead_source={bead_trough},\n"
                 f"        wash_source={wash_trough}, elution_source={eluent_trough}, waste={waste},\n"
                 f"        eluate_plate={eluate}, reagent_tips={tips[0]}, sample_tips={tips[1]},\n"
-                f"        eluate_tips={tips[2]}, sample_volume_ul={well_ul:g}, {bead_arg},\n"
+                f"        eluate_tips={tips[2]}, sample_volume_ul={well_expr()}, {bead_arg},\n"
                 f"        elution_volume_ul={elute_ul:g}, wash_volume_ul={wash_ul:g}, wash_count={washes},\n"
                 f"        liquid_class={lc_for('sample')}, fca_tips={fca_tips}, name={label}{cols_arg},\n"
                 f"    ){comment}"
             )
             w.retire(current, sample_tips)
             current, well_ul = eluate, elute_ul - 2.0
+            well_terms[:] = [f"{well_ul:g}"]
             continue
 
         if step.op == "pool":
@@ -734,6 +771,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 )
                 w.retire(current, tips)
                 current, well_ul = pool, vol * sample_n
+                well_terms[:] = [f"{well_ul:g}"]
                 pooled = True
                 continue
             if vol * used_columns > _POOL_WELL_UL:
@@ -746,6 +784,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             )
             w.retire(current, tips)
             current, well_ul = pool, vol * used_columns
+            well_terms[:] = [f"{well_ul:g}"]
             pooled = True
             continue
 
@@ -755,9 +794,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             w.fills.append(f"    {source}.fill_all({reagent_var(reagent)}, {per_well:g})")
             tips = w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else 1.0
+            vol_text = vol_name(step, reagent.id)
+            vols[vol_text] = vol
+            well_terms.append(vol_text)
             mix = ", mix_cycles=5" if re.search(r"\bmix", step.text or "", re.IGNORECASE) else ""
             w.body.append(
-                f"    stamp(wt, source={source}, dest={current}, volume_ul={vol:g}, tips={tips},\n"
+                f"    stamp(wt, source={source}, dest={current}, volume_ul={vol_text}, tips={tips},\n"
                 f"          liquid_class={lc_for('add', reagent)}{mix}, name={label}{cols_arg})"
             )
             w.retire(source, tips)
@@ -767,6 +809,8 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
 
         if step.op == "add" and reagent is not None:
             vol = step.volume_ul if step.volume_ul is not None else 5.0
+            vol_text = vol_name(step, reagent.id)
+            vols[vol_text] = vol
             cheap = (reagent.liquid_type or "") in {"ethanol", "water"} or reagent.role == "wash"
             if step.head is not None:
                 # The request names the head: it is a requirement, not a default.
@@ -778,22 +822,25 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
                 if "reagent" not in shared_tips:
                     shared_tips["reagent"] = w.mca_box("ReagentTips")
                 w.body.append(
-                    f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol:g},\n"
+                    f"    add_reagent(wt, reagent_source={trough}, plate={current}, volume_ul={vol_text},\n"
                     f"                reagent_tips={shared_tips['reagent']}, liquid_class={lc_for('add', reagent)}, name={label}{cols_arg})"
                 )
             else:
                 # Reagents: the FCA from a slim trough (little dead volume).
                 trough = fca_trough_for(reagent, vol * n * 1.1 + 2000)
                 w.body.append(
-                    f"    distribute_reagent(wt, source={trough}, plate={current}, volume_ul={vol:g},\n"
+                    f"    distribute_reagent(wt, source={trough}, plate={current}, volume_ul={vol_text},\n"
                     f"                       tips={w.fca_reagent_tips()}, liquid_class={lc_for('add', reagent)}, name={label}{cols_arg})"
                 )
             well_ul += vol
+            well_terms.append(vol_text)
             if reagent.role == "bead_carrier" and free_marker_ul:
                 well_ul -= free_marker_ul
+                well_terms.append(f"-{free_marker_ul:g}")
                 free_marker_ul, bound_marker_ul = 0.0, free_marker_ul
             elif reagent.role == "eluent" and bound_marker_ul:
                 well_ul += bound_marker_ul
+                well_terms.append(f"{bound_marker_ul:g}")
                 free_marker_ul, bound_marker_ul = bound_marker_ul, 0.0
             fits(step, well_ul)
             continue
@@ -803,12 +850,17 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             # Sample-lineage tips: channel i only ever meets sample i.
             tips = carry[0] if carry and carry[1] == current else w.mca_box(f"{step.id}_Tips")
             vol = step.volume_ul if step.volume_ul is not None else well_ul
+            vol_text = well_expr()
+            if step.volume_ul is not None and vol <= well_ul - 1.0:
+                vol_text = vol_name(step, "transfer")
+                vols[vol_text] = vol
             if vol > well_ul - 1.0:
                 w.notes.append(f"{step.id}: {vol:g} ul is more than the {well_ul:g} ul in the wells; moving {well_ul - 1.0:g} ul")
                 vol = well_ul - 1.0
+                vol_text = well_expr(1.0)
             fits(step, vol)
             w.body.append(
-                f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol:g}, tips={tips},\n"
+                f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol_text}, tips={tips},\n"
                 f"          liquid_class={lc_for('sample')}, name={label}{cols_arg})"
             )
             # The emptied plate leaves the magnet so the next separation can use it.
@@ -816,6 +868,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             w.retire(current)
             carry = (tips, dest)
             current, well_ul = dest, vol
+            well_terms[:] = [vol_text if vol_text.isidentifier() else f"({vol_text})"]
             continue
 
         if step.op == "incubate":  # room temperature (warmer ones went to the operator above)
@@ -887,6 +940,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         *[line for name, default in lc_vars.items()
           for line in (f"    wt.declare_variable({json.dumps(name)}, {json.dumps(default)})",
                        f"    wt.set_sim_value({json.dumps(name)}, {json.dumps(default)})")],
+        *(["", "    # Per-well volumes (ul). Removals, mixes and transfers below are computed",
+           "    # from these, so a change here carries through."]
+          + [f"    {name} = {value:g}" for name, value in vols.items()] if vols else []),
         "",
         '    wt.group("Labware Placement")',
         *w.placements,
