@@ -343,6 +343,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "question": job.get("question"),
         "error": job["error"],
         "stopping": bool(job.get("stopping")),
+        "streamed_tokens": getattr(_CANCEL_TOKENS.get(job["id"]), "streamed_tokens", None),
         "queue_s": round(queue_s, 3),
         "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
     }

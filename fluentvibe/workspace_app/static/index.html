@@ -553,6 +553,17 @@
     .author-advanced .author-chat { min-height: 220px; max-height: 55vh; margin: 10px 0; }
     .fast-path .fp-row label { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
     .fast-path .fp-row input[type=checkbox] { width: auto; margin: 0; }
+    .fp-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; max-width: 760px; }
+    .fp-steps li { display: grid; grid-template-columns: 26px 220px 1fr; align-items: center; padding: 8px 10px;
+      border: 1px solid var(--line, #d0d7de); border-radius: 8px; background: #fff; font-size: 14px; }
+    .fp-steps li .ic { font-size: 16px; text-align: center; }
+    .fp-steps li .dt { color: var(--muted); font-size: 13px; }
+    .fp-steps li.pending { color: var(--muted); background: transparent; }
+    .fp-steps li.active { border-color: #6366f1; box-shadow: 0 0 0 2px #e0e7ff; font-weight: 600; }
+    .fp-steps li.failed { border-color: #ef4444; background: #fef2f2; }
+    .fp-steps li.active .ic { animation: fp-pulse 1.2s ease-in-out infinite; }
+    @keyframes fp-pulse { 50% { opacity: .35; } }
+    .fp-log > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
     .fast-path .fp-row > button { width: auto; min-width: 160px; }
     .author-extras {
       border: 1px solid var(--line);
@@ -663,7 +674,8 @@
       <div class="author-shell">
         <section class="fast-path" id="fastPath">
           <h2 class="fp-title">Generate a protocol from a document</h2>
-          <p class="fp-help">Choose the deck, attach the protocol (PDF or text), say what you need, then <b>Generate</b> (about 3–5 minutes).
+          <p class="fp-help">Choose the deck, attach the protocol (PDF or text), say what you need, then <b>Generate</b>
+            (5–10 minutes; most of it is the model reading the document).
             Before it builds anything it shows what it assumed and asks you to confirm: answer only what you want to change.
             <b>Stop</b> ends the run at any time.</p>
           <div class="fp-row">
@@ -690,7 +702,8 @@
             <button id="fastReplay" class="secondary" disabled>Show replay</button>
           </div>
           <div class="status" id="fastStatus" aria-live="polite"></div>
-          <div class="fp-progress" id="fastProgress"></div>
+          <ol class="fp-steps" id="fastSteps" hidden></ol>
+          <details class="fp-log" id="fastLog" hidden><summary>log</summary><div class="fp-progress" id="fastProgress"></div></details>
           <div id="fastQuestion" class="fp-questions" hidden>
             <div class="fp-summary">Please check. Change only what is wrong; a blank field keeps the assumption (or lets the model decide).</div>
             <div id="fastQuestionList"></div>
@@ -1067,6 +1080,60 @@
 
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+    // The fast path's progress as stages instead of a log: which one runs now,
+    // for how long, and that the model is alive (tokens streamed so far).
+    const FAST_STAGES = [
+      { label: 'Read the document', match: /reading the document|extracting your instructions/ },
+      { label: 'Your confirmation', match: /waiting for you|waiting for your answer|revising the spec/ },
+      { label: 'Build and simulate', match: /^spec:|compiling and simulating|custom|model-written/ },
+      { label: 'Check your instructions', match: /checking your instructions/ },
+      { label: 'Check in FluentControl', match: /FluentControl/ },
+    ];
+
+    function renderFastSteps(job, fcChecked, instructionsChecked) {
+      const lines = (job.progress || []).map(line => {
+        const m = /^\s*(\d+)\s*s\s+(.*)$/.exec(line);
+        return m ? { t: Number(m[1]), msg: m[2] } : { t: 0, msg: line.trim() };
+      });
+      const stageOf = msg => FAST_STAGES.findIndex(s => s.match.test(msg));
+      let current = 0, currentStart = 0, confirmed = false;
+      const reached = new Set([0]);
+      for (const { t, msg } of lines) {
+        const k = stageOf(msg);
+        if (k < 0) continue;
+        if (k !== current) currentStart = t;
+        current = k; reached.add(k);
+        if (k === 1) confirmed = true;
+      }
+      const spec = lines.map(l => /^spec: (\d+) steps in (\d+) s/.exec(l.msg)).find(Boolean);
+      const running = job.status === 'queued' || job.status === 'running';
+      const failed = job.status === 'failure' || job.status === 'stopped' ||
+        (job.status === 'success' && job.result && job.result.summary && job.result.summary.stage !== 'done');
+      const tokens = job.streamed_tokens ? ` · model writing, ${job.streamed_tokens.toLocaleString()} tokens` : '';
+      const rows = FAST_STAGES.map((stage, k) => {
+        if (k === 3 && !instructionsChecked) return '';
+        if (k === 4 && !fcChecked) return '';
+        let cls = 'pending', icon = '○', detail = '';
+        if (k === current && running) {
+          cls = 'active'; icon = '●';
+          detail = k === 1 && (job.question || []).length ? 'waiting for your answers below'
+            : `${formatDuration(Math.max(0, (job.elapsed_s || 0) - currentStart))}${tokens}`;
+        } else if (k === current && failed) {
+          cls = 'failed'; icon = '✕'; detail = job.status === 'stopped' ? 'stopped' : 'did not finish';
+        } else if (k < current || (!running && !failed)) {
+          cls = 'done'; icon = '✓';
+          if (k === 0 && spec) detail = `read in ${formatDuration(Number(spec[2]))}`;
+          if (k === 1 && !confirmed) { detail = 'nothing to confirm'; }
+        }
+        // "spec: … building" comes before the confirmation: building has not really started yet.
+        if (k === 2 && current === 1) { cls = 'pending'; icon = '○'; detail = ''; }
+        return `<li class="${cls}"><span class="ic">${icon}</span><span>${stage.label}</span><span class="dt">${escapeHtml(detail)}</span></li>`;
+      });
+      $('fastSteps').innerHTML = rows.join('');
+      $('fastSteps').hidden = false;
+      $('fastLog').hidden = false;
+    }
+
     function bindFastPath() {
       const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
       $('fastReplay').addEventListener('click', async () => {
@@ -1090,6 +1157,7 @@
         $('fastGenerate').disabled = true;
         // A new run starts clean: nothing from the previous one can be replayed or mistaken for this result.
         $('generatedCode').value = ''; $('fastReplay').disabled = true;
+        $('fastSteps').hidden = true; $('fastLog').hidden = true;
         $('fastProgress').textContent = ''; $('fastSummary').textContent = '';
         $('fastInstructions').innerHTML = ''; $('fastSpec').textContent = '';
         try {
@@ -1102,6 +1170,8 @@
             choose: $('fastChoose').checked,
           });
           const jobId = created.job.id;
+          const fcChecked = $('fastFcCheck').checked;
+          const instructionsChecked = $('fastCheckInstructions').checked && !!$('fastRequest').value.trim();
           let shownQuestions = '';
           const sendAnswer = async (answer) => {
             $('fastAnswerSend').disabled = true; $('fastAccept').disabled = true;
@@ -1133,6 +1203,7 @@
           while (true) {
             job = (await api(`/api/job?id=${encodeURIComponent(jobId)}`)).job;
             $('fastProgress').textContent = (job.progress || []).join('\n');
+            renderFastSteps(job, fcChecked, instructionsChecked);
             const questions = job.question || [];
             const key = JSON.stringify(questions);
             if (questions.length && key !== shownQuestions) {
@@ -1157,6 +1228,7 @@
             break;
           }
           $('fastQuestion').hidden = true;
+          renderFastSteps(job, fcChecked, instructionsChecked);
           if (job.status === 'stopped') {
             setStatus('fastStatus', `Stopped after ${formatDuration(job.elapsed_s || 0)}.`, 'error');
             return;
@@ -1181,7 +1253,12 @@
             : `Stopped at ${sm.stage}: ${sm.error || ''}`;
           if ((r.requirements || []).length) {
             $('fastInstructions').innerHTML = '<table><tr><th></th><th>Instruction</th><th>Evidence</th></tr>' +
-              r.requirements.map(q => `<tr><td>${icon[q.status] || '⚪'}</td><td>${escapeHtml(q.text)}</td><td>${escapeHtml(q.evidence)}</td></tr>`).join('') +
+              r.requirements.map(q => {
+                // One sentence can hold several checks ("beads and elution buffer via the FCA"): say which one.
+                const twin = r.requirements.filter(o => o.text === q.text).length > 1;
+                const which = twin && q.params && q.params.reagent ? ` — ${q.params.reagent}` : '';
+                return `<tr><td>${icon[q.status] || '⚪'}</td><td>${escapeHtml(q.text + which)}</td><td>${escapeHtml(q.evidence)}</td></tr>`;
+              }).join('') +
               '</table>';
           }
           $('fastSpec').textContent = r.spec_markdown || '';
