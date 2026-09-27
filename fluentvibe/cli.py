@@ -1199,6 +1199,7 @@ def _cmd_author_spec(args) -> int:
         ask=choose_yourself if args.choose else ask_terminal, fluentcontrol=args.fc_check,
         progress=lambda message: print(f"progress: {message}", flush=True),
         check_requirements=args.check_instructions,
+        understand=not args.choose,
     )
     if result.spec_raw is not None:
         (args.output / "spec.json").write_text(_json.dumps(result.spec_raw, indent=2, ensure_ascii=False), encoding="utf-8")
