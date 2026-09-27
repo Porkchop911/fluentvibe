@@ -129,12 +129,21 @@ def _step_index(wt) -> dict[int, tuple[int | None, str]]:
     return index
 
 
+def _ascii(text: str) -> str:
+    return re.sub(r"[^!-~]", "", text or "")
+
+
 def explain_infopad(error_lines: list[str], wt=None) -> list[Finding]:
     """Group InfoPad lines into findings with Python lines and fix hints."""
     index = _step_index(wt) if wt is not None else {}
+    # The scan also sees the script tree: a group named "1: Add beads" looks
+    # like an InfoPad line. Compared without non-ASCII (FC shows µ garbled).
+    groups = {_ascii(name) for _, name in index.values() if name}
     findings: dict[tuple[str, str], Finding] = {}
     previous_kind = None
     for raw in error_lines:
+        if _ascii(raw) in groups:
+            continue
         match = _LINE.match(raw)
         number, message = (int(match.group(1)), match.group(2).strip()) if match else (None, raw.strip())
         kind, hint, labware = _classify(message)

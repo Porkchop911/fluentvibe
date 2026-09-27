@@ -6,11 +6,18 @@ in a structured, validated format before rendering to XML.
 """
 
 from enum import Enum
+import typing
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .source_pos import SourcePos
+
+
+def _allows_str(annotation) -> bool:
+    if annotation is str:
+        return True
+    return any(_allows_str(arg) for arg in typing.get_args(annotation))
 
 
 class StepType(str, Enum):
@@ -84,12 +91,34 @@ class BaseStep(BaseModel):
     # never rendered. See fluentvibe/ir/source_pos.py.
     source_pos: Optional[SourcePos] = Field(default=None, exclude=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _volumes_as_expressions(cls, data):
+        # A fluentvibe.variables.Volume (a float carrying its FluentControl
+        # name or expression) becomes that expression wherever the field
+        # takes a variable name, so the step references the variable.
+        if not isinstance(data, dict):
+            return data
+        from ..variables import Volume, fc_value
+        out = None
+        for key, value in data.items():
+            if not (isinstance(value, Volume) or (isinstance(value, list) and any(isinstance(v, Volume) for v in value))):
+                continue
+            field = cls.model_fields.get(key)
+            if field is None or not _allows_str(field.annotation):
+                continue
+            if out is None:
+                out = dict(data)
+            out[key] = fc_value(value)
+        return data if out is None else out
+
 
 class SetVariableStep(BaseStep):
     """Step to set a variable value."""
     step_type: Literal[StepType.SET_VARIABLE] = StepType.SET_VARIABLE
     variable_name: str = Field(..., description="Name of the variable")
     value: Union[float, int, str] = Field(..., description="Value to set (number or string)")
+    expression: bool = Field(default=False, description="value is a numeric expression FluentControl evaluates")
 
 
 class CalculateVariableStep(BaseStep):

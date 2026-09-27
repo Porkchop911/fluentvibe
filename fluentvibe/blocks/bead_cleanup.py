@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from ..variables import num, per_trip
 from .common import (
     DEFAULT_EMPTY_TIP_LIQUID_CLASS,
     DEFAULT_MIX_LIQUID_CLASS,
@@ -121,7 +122,7 @@ def spri_cleanup(
     block = "spri_cleanup"
     if (bead_ratio is None) == (bead_volume_ul is None):
         raise BlockError(f"{block}: give exactly one of bead_ratio or bead_volume_ul.")
-    bead_ul = float(bead_volume_ul if bead_volume_ul is not None else sample_volume_ul * bead_ratio)
+    bead_ul = num(bead_volume_ul if bead_volume_ul is not None else sample_volume_ul * bead_ratio)
     require_positive(
         block,
         sample_volume_ul=sample_volume_ul,
@@ -149,10 +150,10 @@ def spri_cleanup(
 
     volumes = CleanupVolumes(
         bead_ul=bead_ul,
-        supernatant_ul=float(sample_volume_ul) + bead_ul - float(retain_volume_ul),
-        wash_ul=float(wash_volume_ul),
-        elution_ul=float(elution_volume_ul),
-        eluate_transfer_ul=float(elution_volume_ul) - float(retain_volume_ul),
+        supernatant_ul=num(sample_volume_ul) + bead_ul - num(retain_volume_ul),
+        wash_ul=num(wash_volume_ul),
+        elution_ul=num(elution_volume_ul),
+        eluate_transfer_ul=num(elution_volume_ul) - num(retain_volume_ul),
     )
     # Mix 80% of the well volume, capped by what the sample tips can hold.
     tip_capacity = float(getattr(sample_tips, "capacity_ul", 0.0) or 200.0)
@@ -167,27 +168,27 @@ def spri_cleanup(
     reagent_capacity = float(getattr(reagent_tips, "capacity_ul", 0.0) or 200.0)
     bead_trips = math.ceil(volumes.bead_ul / reagent_capacity)
     supernatant_trips = math.ceil(volumes.supernatant_ul / tip_capacity)
-    bead = v.ref("BEAD_VOLUME_UL" if bead_trips == 1 else "BEAD_TRIP_UL", round(volumes.bead_ul / bead_trips, 2))
+    bead = v.ref("BEAD_VOLUME_UL" if bead_trips == 1 else "BEAD_TRIP_UL", per_trip(volumes.bead_ul, bead_trips))
     supernatant = v.ref("SUPERNATANT_UL" if supernatant_trips == 1 else "SUPERNATANT_TRIP_UL",
-                        round(volumes.supernatant_ul / supernatant_trips, 2))
+                        per_trip(volumes.supernatant_ul, supernatant_trips))
     wash_trips = math.ceil(volumes.wash_ul / min(reagent_capacity, tip_capacity))
     elution_trips = math.ceil(volumes.elution_ul / reagent_capacity)
     eluate_capacity = float(getattr(eluate_tips, "capacity_ul", 0.0) or 200.0)
     eluate_trips = math.ceil(volumes.eluate_transfer_ul / eluate_capacity)
-    wash = v.ref("WASH_VOLUME_UL" if wash_trips == 1 else "WASH_TRIP_UL", round(volumes.wash_ul / wash_trips, 2))
+    wash = v.ref("WASH_VOLUME_UL" if wash_trips == 1 else "WASH_TRIP_UL", per_trip(volumes.wash_ul, wash_trips))
     elution = v.ref("ELUTION_VOLUME_UL" if elution_trips == 1 else "ELUTION_TRIP_UL",
-                    round(volumes.elution_ul / elution_trips, 2))
+                    per_trip(volumes.elution_ul, elution_trips))
     eluate = v.ref("ELUATE_TRANSFER_UL" if eluate_trips == 1 else "ELUATE_TRIP_UL",
-                   round(volumes.eluate_transfer_ul / eluate_trips, 2))
+                   per_trip(volumes.eluate_transfer_ul, eluate_trips))
     fca_bead = fca_elution = None
     if fca_tips is not None:
         fca_capacity = float(getattr(fca_tips, "capacity_ul", 0.0) or 200.0)
         fca_bead_trips = max(1, math.ceil(volumes.bead_ul / fca_capacity))
         fca_elution_trips = max(1, math.ceil(volumes.elution_ul / fca_capacity))
         fca_bead = bead if fca_bead_trips == bead_trips else v.ref(
-            "BEAD_FCA_TRIP_UL", round(volumes.bead_ul / fca_bead_trips, 2))
+            "BEAD_FCA_TRIP_UL", per_trip(volumes.bead_ul, fca_bead_trips))
         fca_elution = elution if fca_elution_trips == elution_trips else v.ref(
-            "ELUTION_FCA_TRIP_UL", round(volumes.elution_ul / fca_elution_trips, 2))
+            "ELUTION_FCA_TRIP_UL", per_trip(volumes.elution_ul, fca_elution_trips))
     bind_mix = v.ref("BIND_MIX_UL", bind_mix_ul)
     elution_mix = v.ref("ELUTION_MIX_UL", elution_mix_ul)
     lc = v.ref("LIQUID_CLASS", liquid_class)

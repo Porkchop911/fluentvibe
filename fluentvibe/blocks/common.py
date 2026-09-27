@@ -106,6 +106,9 @@ def variable_prefix(name: str | None) -> str | None:
     # which FluentControl rejects in a variable name ("Enter a valid volume").
     slug = "".join(ch if ch.isascii() and ch.isalnum() else "_" for ch in str(name).upper())
     slug = "_".join(part for part in slug.split("_") if part)
+    if slug[:1].isdigit():
+        # a FluentControl variable name cannot start with a digit ("11: Wash")
+        slug = f"S{slug}"
     return slug or None
 
 
@@ -132,7 +135,21 @@ class BlockVariables:
         # (wrapping it would make a variable whose value is a variable name).
         if key.endswith("LIQUID_CLASS") and isinstance(value, str) and value in self.wt.protocol_variables:
             return value
+        from ..variables import Volume
+        if isinstance(value, Volume) and value.expr in self.wt.protocol_variables:
+            # A protocol volume variable (wt.volume): referenced directly.
+            return value
         name = f"{self.prefix}_{key}"
+        if isinstance(value, Volume):
+            # Computed from protocol variables: this block's variable is set
+            # from the expression, so FluentControl recomputes it at run time.
+            existing = self.wt.protocol_variables.get(name)
+            if existing is not None and existing != float(value):
+                raise BlockError(
+                    f"{self.block}: variable {name} already holds {existing!r}; give this "
+                    f"{self.block}() call a different name= (e.g. name='Library clean-up')."
+                )
+            return self.wt.volume(name, value)
         existing = self.wt.protocol_variables.get(name)
         if existing is not None and existing != value:
             raise BlockError(

@@ -181,6 +181,11 @@ fluentvibe fc-open my_protocol.py       # load into FluentControl, read the Info
 fluentvibe fc-pull my_protocol.py       # map FluentControl edits back to Python variables
 ```
 
+`SAMPLE_UL = wt.volume("SAMPLE_UL", 20)` declares a volume as a FluentControl
+variable; `wt.volume("REMOVE_UL", SAMPLE_UL + BEADS_UL - 5)` also emits a Set
+Variable step with that calculation, and steps given these values reference the
+variables, so an edit in FluentControl carries through at run time.
+
 `wt.add(reagent, to=plate, volume_ul=...)` adds a reagent with the source
 trough, head, tips and fill resolved from the deck profile; `head=`,
 `liquid_class_var=`, `columns=` are enforced or refused

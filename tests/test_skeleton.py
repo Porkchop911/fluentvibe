@@ -560,9 +560,9 @@ def test_named_volumes_carry_a_change_through(profile, tmp_path):
     from fluentvibe.copilot.analyzer import analyze_source
 
     source = build_skeleton(_spec(_SPRI_PRIMITIVES), load_deck(profile))
-    assert "    SAMPLE_UL = 20" in source and "SAMPLE_UL + S1_AXP_UL" in source
+    assert 'SAMPLE_UL = wt.volume("SAMPLE_UL", 20)' in source and "SAMPLE_UL + S1_AXP_UL" in source
     path = tmp_path / "d.py"
-    for old, new in (("    S1_AXP_UL = 36", "    S1_AXP_UL = 30"), ("    SAMPLE_UL = 20", "    SAMPLE_UL = 40")):
+    for old, new in (('"S1_AXP_UL", 36)', '"S1_AXP_UL", 30)'), ('"SAMPLE_UL", 20)', '"SAMPLE_UL", 40)')):
         edited = source.replace(old, new)
         assert edited != source
         assert not [d for d in analyze_source(edited, path) if d.severity == "error"], old
@@ -628,3 +628,25 @@ def test_per_well_volumes_normalise_a_plate(profile, tmp_path):
     assert re.findall(r"<int>(\d+)</int>", tips_block) == ["2", "4"]          # rows C and E
     volumes = re.search(r"<Volumes>(.*?)</Volumes>", dispense, re.S).group(1)
     assert re.findall(r"<string>([^<]*)</string>", volumes) == ["0", "0", "10", "0", "25", "0", "0", "0"]
+
+
+def test_volumes_are_a_fluentcontrol_variables_block(profile, tmp_path):
+    """Volumes are FluentControl variables in a group at the top; dependent ones
+    are Set Variable expressions, and every step references a variable."""
+    import re
+
+    source = build_skeleton(_spec(_SPRI_PRIMITIVES), load_deck(profile))
+    namespace: dict = {}
+    exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
+    wt = namespace["build_worktable"]()
+    variables = wt.to_protocol().groups[0]
+    assert variables.name == "Variables"
+    derived = {s.variable_name: s.value for s in variables.steps if getattr(s, "expression", False)}
+    assert derived and all("SAMPLE_UL" in v or "_UL" in v for v in derived.values())
+    out = tmp_path / "d.xscr"
+    wt.compile(str(out))
+    text = out.read_text(encoding="utf-8")
+    name, expr = next(iter(derived.items()))
+    assert f"<Name>{name}</Name><Value>{expr}</Value>" in text      # unquoted expression
+    volumes = set(re.findall(r"<Volume>([^<]*)</Volume>", text))
+    assert volumes and not [v for v in volumes if re.fullmatch(r"[0-9.]+", v)]

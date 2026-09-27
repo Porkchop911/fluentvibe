@@ -1638,7 +1638,7 @@ class Renderer:
                 if not is_numeric and isinstance(val, str):
                     # Check if it's a numeric string
                     is_numeric = val.replace('.', '', 1).lstrip('-').isdigit()
-                if not is_numeric:
+                if not is_numeric and not getattr(step, "expression", False):
                     val_str = f'"{val_str}"'
                 params.update({
                     "Name": step.variable_name,

@@ -843,8 +843,13 @@ class Simulator:
             self._empty_tip_one(self._liha_tips[ch], volume, well)
 
     def _on_set_variable(self, step: SetVariableStep) -> None:
-        self._wt.protocol_variables[step.variable_name] = step.value
-        self._wt.sim_values[step.variable_name] = step.value
+        value = step.value
+        if getattr(step, "expression", False) and isinstance(value, str):
+            # Evaluated as FluentControl would at run time, from the values
+            # the variables hold at this point of the protocol.
+            value = self._eval_numeric_expr(value)
+        self._wt.protocol_variables[step.variable_name] = value
+        self._wt.sim_values[step.variable_name] = value
 
     def _on_set_location(self, step: SetLocationStep) -> None:
         labware = self._twin.get(step.labware)
