@@ -5,6 +5,8 @@ import json
 import time
 from pathlib import Path
 
+import pytest
+
 from fluentvibe.authoring.grounding import load_current_worktable_snapshot
 from fluentvibe.catalog.catalog import index_exists
 from fluentvibe.workspace_app import service
@@ -448,3 +450,21 @@ def test_save_profile_rejects_stale_workspace_source(tmp_path: Path) -> None:
         assert "Workspace file changed" in str(exc)
     else:
         raise AssertionError("stale workspace source was accepted")
+
+
+def test_xscr_paths_accept_quotes_uploads_and_a_recent_list(tmp_path, monkeypatch) -> None:
+    import base64
+
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path / "workbench")
+    run = tmp_path / "workbench" / "authored" / "spec-20260927-175441-49c3"
+    run.mkdir(parents=True)
+    (run / "draft.xscr").write_text("<xscr/>", encoding="utf-8")
+    # "Copy as path" in Explorer adds quotes.
+    assert service._xscr_from_payload({"xscr_path": f'  "{run / "draft.xscr"}" '}) == (run / "draft.xscr").resolve()
+    uploaded = service._xscr_from_payload({"xscr_upload": {
+        "name": "mine.xscr", "content_base64": base64.b64encode(b"<xscr/>").decode()}})
+    assert uploaded.read_bytes() == b"<xscr/>" and uploaded.parent.parent == (tmp_path / "workbench" / "authored").resolve()
+    files = service.recent_xscr()["files"]
+    assert {f["path"] for f in files} == {str(uploaded), str((run / "draft.xscr").resolve())}
+    with pytest.raises(ValueError, match="not found"):
+        service._xscr_from_payload({"xscr_path": '"D:/nowhere/x.xscr"'})

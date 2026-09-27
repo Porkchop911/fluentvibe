@@ -571,6 +571,12 @@
     .fp-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
     .fp-table td, .fp-table th { border-bottom: 1px solid var(--line, #d0d7de); padding: 4px 6px; text-align: left; vertical-align: top; }
     .fp-asklist { margin: 6px 0; padding-left: 20px; }
+    .fc-pick { display: flex; gap: 6px; }
+    .fc-pick select { flex: 1; }
+    .fc-pick button { width: auto; }
+    .fp-files { margin-top: 8px; font-size: 13px; }
+    .fp-files code { user-select: all; }
+    .fp-files button { width: auto; margin-top: 6px; }
     .fp-thinking { margin-top: 8px; padding: 8px 10px; max-width: 760px; font-size: 12px; line-height: 1.45;
       color: var(--muted); background: #f8fafc; border-left: 3px solid #c7d2fe; border-radius: 4px;
       white-space: pre-wrap; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
@@ -833,7 +839,14 @@
       <div class="wide-grid">
         <section>
           <h2>FluentControl Gate</h2>
-          <label for="fcXscrPath">XSCR path</label>
+          <label for="fcRecent">Recent protocols</label>
+          <div class="fc-pick">
+            <select id="fcRecent"><option value="">— newest generated protocols —</option></select>
+            <button id="fcRecentRefresh" class="secondary" type="button" title="Reload the list">↻</button>
+          </div>
+          <label for="fcXscrFile">or a file on this computer</label>
+          <input id="fcXscrFile" type="file" accept=".xscr">
+          <label for="fcXscrPath">or a path (quotes are fine)</label>
           <input id="fcXscrPath" placeholder="D:\path\compiled.xscr">
           <label><input id="fcOpenDirect" type="checkbox" style="width:auto;min-height:auto"> open XSCR directly</label>
           <button id="fcValidate" class="secondary">Validate via shell</button>
@@ -1171,7 +1184,12 @@
         ? `<details open><summary>Assumed by the model (${sm.assumed.length}) — send a new message to change any of them</summary>` +
           `<ul class="fp-asklist">${sm.assumed.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></details>`
         : '';
-      return `<div class="fp-summary">${escapeHtml(head)}</div>${table}${assumed}${more}${spec}`;
+      const files = r.output_dir ? `<div class="fp-files">Saved in <code>${escapeHtml(r.output_dir)}</code>` +
+        (r.python_path ? `<br>Python: <code>${escapeHtml(r.python_path)}</code>` : '') +
+        (r.xscr_path ? `<br>FluentControl: <code>${escapeHtml(r.xscr_path)}</code>` +
+          `<br><button class="secondary" data-open-fc="${escapeHtml(r.xscr_path)}">Check in FluentControl</button>` : '') +
+        '</div>' : '';
+      return `<div class="fp-summary">${escapeHtml(head)}</div>${table}${assumed}${files}${more}${spec}`;
     }
 
     function upsertAuthorMessage(id, role, title, html) {
@@ -1334,6 +1352,14 @@
           sendFromComposer();
         }
       });
+      // "Check in FluentControl" in a result: open that tab with this protocol chosen.
+      $('authorChat').addEventListener('click', (e) => {
+        const button = e.target.closest('button[data-open-fc]');
+        if (!button) return;
+        useXscr(button.dataset.openFc);
+        document.querySelector('button[data-tab=fc]').click();
+        setStatus('fcStatus', 'Protocol chosen; press “Validate via shell”.', 'ok');
+      });
       $('authorStop').addEventListener('click', async () => {
         const jobId = state.fastJobId || (state.runningJobs && state.runningJobs.authorStatus);
         if (!jobId) return;
@@ -1440,6 +1466,12 @@
       $('catalogSearch').addEventListener('click', searchCatalog);
       $('catalogRefresh').addEventListener('click', refreshCatalog);
       $('fcValidate').addEventListener('click', validateFc);
+      $('fcRecent').addEventListener('change', () => { if ($('fcRecent').value) useXscr($('fcRecent').value); });
+      $('fcRecentRefresh').addEventListener('click', loadRecentXscr);
+      $('fcXscrPath').addEventListener('input', () => { $('fcXscrFile').value = ''; });
+      document.querySelector('button[data-tab=fc]') &&
+        document.querySelector('button[data-tab=fc]').addEventListener('click', loadRecentXscr);
+      loadRecentXscr();
       $('deployXscr').addEventListener('click', deployXscr);
     }
 
@@ -1888,10 +1920,33 @@
       }
     }
 
+    // The protocol for the FluentControl tab: a chosen file (uploaded) wins,
+    // otherwise the path field (filled from the recent list or pasted).
+    async function fcXscrPayload() {
+      const file = $('fcXscrFile').files && $('fcXscrFile').files[0];
+      if (file) {
+        return { xscr_upload: { name: file.name, content_base64: await readFileAsBase64(file) } };
+      }
+      return { xscr_path: $('fcXscrPath').value };
+    }
+
+    async function loadRecentXscr() {
+      try {
+        const data = await api('/api/recent-xscr');
+        $('fcRecent').innerHTML = '<option value="">— newest generated protocols —</option>' +
+          (data.files || []).map(f => `<option value="${escapeHtml(f.path)}">${escapeHtml(f.label)}</option>`).join('');
+      } catch (err) { setStatus('fcStatus', String(err.message || err), 'error'); }
+    }
+
+    function useXscr(path) {
+      $('fcXscrFile').value = '';
+      $('fcXscrPath').value = path;
+    }
+
     async function validateFc() {
       try {
         await submitAndPoll('fc-validate', {
-          xscr_path: $('fcXscrPath').value,
+          ...(await fcXscrPayload()),
           open_direct: $('fcOpenDirect').checked
         }, 'fcStatus', 'fcResult');
       } catch (err) {
@@ -1902,7 +1957,7 @@
     async function deployXscr() {
       try {
         await submitAndPoll('deploy-xscr', {
-          xscr_path: $('fcXscrPath').value,
+          ...(await fcXscrPayload()),
           object_name: $('deployObjectName').value,
           datastore_dir: $('deployDatastore').value,
           allow_fc_running: $('allowFcRunning').checked

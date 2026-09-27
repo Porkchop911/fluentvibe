@@ -469,9 +469,14 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     if result.source is not None:
         (output_dir / "draft.py").write_text(result.source, encoding="utf-8")
     summary = result.summary()
+    folder = output_dir.resolve()
+    xscr = next((p for p in [folder / "draft.xscr", *sorted(folder.glob("*.xscr"), reverse=True)] if p.is_file()), None)
     return {
         "ok": result.stage == "done",
-        "output_dir": str(output_dir),
+        "output_dir": str(folder),
+        # Where the result is, for the page to show (and hand to the FluentControl tab).
+        "python_path": str(folder / "draft.py") if (folder / "draft.py").is_file() else None,
+        "xscr_path": str(xscr) if xscr else None,
         "summary": summary,
         "source": result.source,
         "spec_markdown": files.get("spec_markdown"),
@@ -611,13 +616,63 @@ def _job_compile_source(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": bool(result.get("ok")), "validation": result, "tool_calls": registry.calls}
 
 
+def _clean_path(value: Any) -> str:
+    """A path as pasted: without surrounding whitespace or quotes (Windows "Copy as path")."""
+    return str(value or "").strip().strip('"').strip("'").strip()
+
+
+def _xscr_from_payload(payload: dict[str, Any]) -> Path:
+    """The .xscr a job works on: an uploaded file (saved under
+    build/workbench/authored/upload-<time>) or a path, quotes allowed."""
+    upload = payload.get("xscr_upload")
+    if isinstance(upload, dict) and upload.get("content_base64"):
+        import base64
+
+        name = Path(str(upload.get("name") or "protocol.xscr")).name
+        if not name.lower().endswith(".xscr"):
+            raise ValueError(f"{name} is not an .xscr file")
+        folder = WORKBENCH_BASE_DIR / "authored" / f"upload-{time.strftime('%Y%m%d-%H%M%S')}"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / name
+        target.write_bytes(base64.b64decode(upload["content_base64"]))
+        return target.resolve()
+    raw = _clean_path(payload.get("xscr_path"))
+    if not raw:
+        raise ValueError("choose a protocol: a recent one, a file, or paste a path")
+    xscr = Path(raw).expanduser()
+    if not xscr.exists():
+        raise ValueError(f"XSCR file not found: {xscr}")
+    return xscr.resolve()
+
+
+def recent_xscr(limit: int = 25) -> dict[str, Any]:
+    """The latest generated protocols (one per run folder), newest first."""
+    root = WORKBENCH_BASE_DIR / "authored"
+    rows = []
+    if root.is_dir():
+        for folder in root.iterdir():
+            if not folder.is_dir():
+                continue
+            candidates = [folder / "draft.xscr", *sorted(folder.glob("lm_authoring_attempt*.xscr"), reverse=True),
+                          *sorted(folder.glob("*.xscr"))]
+            xscr = next((c for c in candidates if c.is_file()), None)
+            if xscr is None:
+                continue
+            stat = xscr.stat()
+            rows.append({
+                "path": str(xscr.resolve()),
+                "label": f"{time.strftime('%d %b %H:%M', time.localtime(stat.st_mtime))} · {folder.name} · {xscr.name}",
+                "mtime": stat.st_mtime,
+            })
+    rows.sort(key=lambda r: r["mtime"], reverse=True)
+    return {"ok": True, "files": rows[:limit]}
+
+
 def _job_decompile_xscr(payload: dict[str, Any]) -> dict[str, Any]:
     from ..decompiler import emit_python, parse_xscr
     from ..ir.schema import GenericStep
 
-    xscr = Path(str(payload.get("xscr_path") or "")).expanduser()
-    if not xscr.exists():
-        raise ValueError(f"XSCR file not found: {xscr}")
+    xscr = _xscr_from_payload(payload)
     proto = parse_xscr(xscr)
     source = emit_python(proto, source_xscr=str(xscr))
     out_dir = WORKBENCH_BASE_DIR / "decompiled"
@@ -658,9 +713,11 @@ def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
     from ..authoring.tools import AuthoringToolRegistry
 
     registry = AuthoringToolRegistry(output_dir=_workbench_path(payload.get("output_dir"), "fc_validate"))
+    source = str(payload.get("source") or "") or None
+    xscr = None if source else str(_xscr_from_payload(payload))
     result = registry.validate_fluentcontrol_shell(
-        source=str(payload.get("source") or "") or None,
-        xscr_path=str(payload.get("xscr_path") or "") or None,
+        source=source,
+        xscr_path=xscr,
         shell_xscr=str(payload.get("shell_xscr") or "") or None,
         restore_shell=bool(payload.get("restore_shell", False)),
         backup=bool(payload.get("backup", False)),
@@ -672,9 +729,9 @@ def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
 def _job_deploy_xscr(payload: dict[str, Any]) -> dict[str, Any]:
     from ..deployer import DEFAULT_DATASTORE_DIR, deploy_xscr
 
-    xscr = Path(str(payload.get("xscr_path") or "")).expanduser()
-    datastore_raw = payload.get("datastore_dir")
-    datastore = Path(str(datastore_raw)).expanduser() if datastore_raw else DEFAULT_DATASTORE_DIR
+    xscr = _xscr_from_payload(payload)
+    datastore_raw = _clean_path(payload.get("datastore_dir"))
+    datastore = Path(datastore_raw).expanduser() if datastore_raw else DEFAULT_DATASTORE_DIR
     result = deploy_xscr(
         xscr,
         datastore_dir=datastore,

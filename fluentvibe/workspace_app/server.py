@@ -75,6 +75,8 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/profile":
                 qs = parse_qs(parsed.query)
                 self._json(service.load_profile(_first(qs, "name") or ""))
+            elif parsed.path == "/api/recent-xscr":
+                self._json(service.recent_xscr())
             elif parsed.path == "/api/job":
                 qs = parse_qs(parsed.query)
                 self._json(service.job_status(_first(qs, "id") or ""))
