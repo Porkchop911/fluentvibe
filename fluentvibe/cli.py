@@ -1200,6 +1200,9 @@ def _cmd_author_spec(args) -> int:
         progress=lambda message: print(f"progress: {message}", flush=True),
         check_requirements=args.check_instructions,
         understand=not args.choose,
+        # Reuse a finished read of the same document, request and answers (the
+        # web app's cache, when it exists).
+        spec_cache=(Path("build/workbench/spec_cache.json") if Path("build/workbench").is_dir() else None),
     )
     if result.spec_raw is not None:
         (args.output / "spec.json").write_text(_json.dumps(result.spec_raw, indent=2, ensure_ascii=False), encoding="utf-8")

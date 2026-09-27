@@ -736,3 +736,23 @@ def test_spec_path_states_its_understanding_before_the_long_read(profile, tmp_pa
     stopped = author_from_document(_UnderstandingThenSpec("x", [], spec), "Streptavidin beads.", profile,
                                    tmp_path / "b", ask=lambda q: None, examples=False, understand=True)
     assert stopped.stage == "questions" and stopped.spec is None
+
+
+def test_a_second_read_of_the_same_document_reuses_the_spec(profile, tmp_path):
+    """Same document, request and answers: the spec is reused, no model call."""
+    from fluentvibe.authoring.spec_path import author_from_document
+
+    spec = json.loads(json.dumps(_STREPTAVIDIN))
+    cache = tmp_path / "spec_cache.json"
+    first = _ScriptedClient(spec)
+    author_from_document(first, "Streptavidin beads.", profile, tmp_path / "a", examples=False, spec_cache=cache)
+    notes = []
+    again = _ScriptedClient()                       # no replies: any model call would fail
+    result = author_from_document(again, "Streptavidin beads.", profile, tmp_path / "b", examples=False,
+                                  spec_cache=cache, progress=notes.append)
+    assert result.stage == "done" and not again.calls
+    assert any("reused the spec" in n for n in notes)
+    changed = _ScriptedClient(spec)
+    author_from_document(changed, "Streptavidin beads, 2 minutes.", profile, tmp_path / "c", examples=False,
+                         spec_cache=cache)
+    assert len(changed.calls) == 1                  # another document: read again

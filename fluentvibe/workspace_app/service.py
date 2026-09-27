@@ -344,6 +344,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "error": job["error"],
         "stopping": bool(job.get("stopping")),
         "streamed_tokens": getattr(_CANCEL_TOKENS.get(job["id"]), "streamed_tokens", None),
+        "thinking": getattr(_CANCEL_TOKENS.get(job["id"]), "thinking", None) or None,
         "queue_s": round(queue_s, 3),
         "elapsed_s": round(elapsed_s, 3) if elapsed_s is not None else None,
     }
@@ -460,6 +461,7 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
         check_requirements=bool(request) and bool(payload.get("check_instructions", True)),
         progress=lambda message: _job_progress(payload, message),
         understand=not payload.get("choose"),
+        spec_cache=WORKBENCH_BASE_DIR / "spec_cache.json",
     )
     files = {}
     if result.spec is not None:

@@ -26,6 +26,8 @@ class CancelToken:
         # Stream chunks (about one token each) the model sent for this job: a liveness signal
         # for the page ("the model is writing: 3,400 tokens").
         self.streamed_tokens = 0
+        # The tail of the model's current reasoning, shown live on the page.
+        self.thinking = ""
 
     @property
     def cancelled(self) -> bool:
@@ -76,6 +78,11 @@ def current() -> Optional[CancelToken]:
         return token
     with _active_lock:
         return _active[-1] if _active else None
+
+
+def is_own_thread(token: CancelToken) -> bool:
+    """True in the thread the job runs in (not a worker it started)."""
+    return getattr(_local, "token", None) is token
 
 
 @contextmanager

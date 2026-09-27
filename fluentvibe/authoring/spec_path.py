@@ -68,12 +68,16 @@ UNDERSTAND_PROMPT = (
     "- questions: at most 5 short questions, only where the answer changes the protocol and neither "
     "the request nor the document settles it (e.g. which of several procedures in a datasheet, the "
     "sample count, a volume the document leaves open). Empty when everything is clear. No questions "
-    "about things you can decide sensibly yourself."
+    "about things you can decide sensibly yourself.\n"
+    "- request_has_instructions: true if the user's request states concrete requirements that can be "
+    "checked on the finished protocol (volumes, sample count, which arm or head, liquid classes, "
+    "timings, labware); false for a general request such as 'automate this for DNA'."
 )
 
 
-def understand_request(client: Any, source_text: str, request: str) -> tuple[str, list[str]]:
-    """One short model call: what the model will automate, and what it must ask first."""
+def understand_request(client: Any, source_text: str, request: str) -> tuple[str, list[str], bool]:
+    """One short model call: what the model will automate, what it must ask
+    first, and whether the request holds instructions worth a checklist."""
     tool = {
         "type": "function",
         "function": {
@@ -84,8 +88,9 @@ def understand_request(client: Any, source_text: str, request: str) -> tuple[str
                 "properties": {
                     "understood": {"type": "string"},
                     "questions": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+                    "request_has_instructions": {"type": "boolean"},
                 },
-                "required": ["understood", "questions"],
+                "required": ["understood", "questions", "request_has_instructions"],
             },
         },
     }
@@ -107,10 +112,54 @@ def understand_request(client: Any, source_text: str, request: str) -> tuple[str
         understood = " ".join(str(data.get("understood") or "").split())
         questions = [" ".join(str(q).split()) for q in data.get("questions") or [] if str(q).strip()][:5]
         if understood:
-            return understood, questions
+            return understood, questions, data.get("request_has_instructions") is not False
     # No usable call: fall back to the reply text, so the user still sees something to confirm.
     text = " ".join(str(message.get("content") or "").split())[:800]
-    return text or "(the model gave no summary)", []
+    return text or "(the model gave no summary)", [], True
+
+
+_SPEC_CACHE_SIZE = 40
+
+
+def _spec_cache_key(client: Any, source_text: str, extra_context: str | None) -> str:
+    import hashlib
+
+    parts = [
+        source_text, extra_context or "",
+        str(getattr(client, "model", "")), str(getattr(client, "reasoning_effort", "")),
+        EXTRACTION_SYSTEM_PROMPT, json.dumps(bench_spec_json_schema(), sort_keys=True),
+    ]
+    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()
+
+
+def _spec_cache_get(path: Path | str | None, key: str) -> tuple[dict[str, Any], str] | None:
+    if path is None:
+        return None
+    try:
+        entry = json.loads(Path(path).read_text(encoding="utf-8")).get(key)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(entry, dict) or not isinstance(entry.get("raw"), dict):
+        return None
+    return entry["raw"], str(entry.get("when", "an earlier run"))
+
+
+def _spec_cache_put(path: Path | str | None, key: str, raw: dict[str, Any] | None) -> None:
+    if path is None or raw is None:
+        return
+    path = Path(path)
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError):
+        entries = {}
+    entries.pop(key, None)
+    entries[key] = {"raw": raw, "when": time.strftime("%d %b %H:%M")}
+    while len(entries) > _SPEC_CACHE_SIZE:          # oldest first (insertion order)
+        entries.pop(next(iter(entries)))
+    try:
+        path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
@@ -225,6 +274,7 @@ def author_from_document(
     progress: Callable[[str], None] | None = None,
     check_requirements: bool = False,
     understand: bool = False,
+    spec_cache: Path | str | None = None,
 ) -> SpecPathResult:
     """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl).
 
@@ -237,13 +287,14 @@ def author_from_document(
             progress(message)
 
     result = SpecPathResult(stage="spec")
+    request_has_instructions = True
     context_parts = [f"Request: {request}"] if request else []
     if understand and ask is not None and ask is not choose_yourself:
         # Generation takes minutes: first make sure the request is understood.
         note("understanding your request (model)")
         t0 = time.monotonic()
         try:
-            understood, questions = understand_request(client, source_text, request or "")
+            understood, questions, request_has_instructions = understand_request(client, source_text, request or "")
         except Exception as exc:  # noqa: BLE001
             result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
             return result
@@ -275,7 +326,10 @@ def author_from_document(
     # The request's instructions are extracted by a separate call, in parallel
     # with the spec: the author never writes its own checklist.
     pending_requirements = None
-    if check_requirements and request:
+    # Only when the request says something concrete (as the understanding
+    # call judged): a checklist call on "automate this" costs minutes of GPU
+    # time for nothing. The document's own steps are checked either way.
+    if check_requirements and request and request_has_instructions:
         from concurrent.futures import ThreadPoolExecutor
 
         from .requirements import extract_requirements
@@ -284,12 +338,28 @@ def author_from_document(
         pending_requirements = pool.submit(extract_requirements, client, request, source_text)
         pool.shutdown(wait=False)
         note("extracting your instructions into a checklist (model, in parallel)")
-    try:
-        spec, problems, raw = extract_bench_spec(client, source_text,
-                                                 extra_context="\n\n".join(context_parts) or None)
-    except Exception as exc:  # noqa: BLE001 - a model/server failure is a result, not a crash
-        result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
-        return result
+    extra_context = "\n\n".join(context_parts) or None
+    cache_key = _spec_cache_key(client, source_text, extra_context)
+    cached = _spec_cache_get(spec_cache, cache_key)
+    if cached is not None:
+        # Same document, request, answers, model and effort as a finished read:
+        # reading it again would take minutes for the same result.
+        raw_cached, when = cached
+        spec, problems = validate_bench_spec(raw_cached, source_text)
+        raw = raw_cached
+        if spec is not None:
+            problems = _drop_untraced_supply(spec, problems)
+            note(f"reading the document: reused the spec read at {when} (same document, request and answers)")
+    else:
+        spec = None
+    if spec is None:
+        try:
+            spec, problems, raw = extract_bench_spec(client, source_text, extra_context=extra_context)
+        except Exception as exc:  # noqa: BLE001 - a model/server failure is a result, not a crash
+            result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
+            return result
+        if spec is not None:
+            _spec_cache_put(spec_cache, cache_key, raw)
     result.timings["spec_s"] = time.monotonic() - started
     if spec is not None:
         note(f"spec: {len(spec.steps)} steps in {result.timings['spec_s']:.0f} s; building the protocol")
@@ -391,13 +461,14 @@ def author_from_document(
         result.stage = "gate"
         result.error = " ".join(str(result.gate.get("failure_message", "")).split())[:600]
         return result
-    if pending_requirements is not None:
+    if pending_requirements is not None or check_requirements:
         from .eval_rubric import build_worktable_from_source
         from .requirements import requirements_markdown, verify_all
 
         note("checking your instructions on the protocol")
         try:
-            reqs, dispositions = pending_requirements.result(timeout=1800)
+            reqs, dispositions = (pending_requirements.result(timeout=1800)
+                                  if pending_requirements is not None else ([], []))
             from .requirements import requirements_from_spec
 
             reqs = reqs + requirements_from_spec(result.spec)  # the document's steps, in order
