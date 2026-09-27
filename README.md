@@ -161,6 +161,32 @@ fluentvibe author "Transfer 20 uL from a source to a dest 96-well plate"
 fluentvibe author "..." --endpoint http://localhost:1234/v1/chat/completions --model your-model-name
 ```
 
+### Documents, instructions, FluentControl
+
+```bash
+# Document -> Bench Spec -> protocol from checked building blocks (fast path);
+# open values become questions; the request's instructions and the document's
+# steps are checked on the result; optional FluentControl InfoPad check.
+fluentvibe author-spec protocol.pdf --profile build/workspaces/<deck> -o out/ \
+    --request "20 ul samples, whole plate, ethanol via the FCA" --check-instructions --fc-check
+
+# The model writes the DSL itself (full path), with the same checklist.
+fluentvibe author "Automate this on this deck" --document protocol.pdf \
+    --profile build/workspaces/<deck> --output-dir out/ --check-instructions
+
+fluentvibe opentrons opentrons_protocol.py --profile build/workspaces/<deck> -o out/   # no model
+fluentvibe requirements my_protocol.py --request "..." --document protocol.pdf       # checklist beside the file
+fluentvibe replay my_protocol.py        # HTML: the deck and every well after each step
+fluentvibe fc-open my_protocol.py       # load into FluentControl, read the InfoPad
+fluentvibe fc-pull my_protocol.py       # map FluentControl edits back to Python variables
+```
+
+`wt.add(reagent, to=plate, volume_ul=...)` adds a reagent with the source
+trough, head, tips and fill resolved from the deck profile; `head=`,
+`liquid_class_var=`, `columns=` are enforced or refused
+([docs/adr-authoring-resolver.md](docs/adr-authoring-resolver.md)).
+A demo walk-through is in [docs/demo-guide.md](docs/demo-guide.md).
+
 ## Documentation
 
 - [Repository overview](docs/repository-overview.md)
