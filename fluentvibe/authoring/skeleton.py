@@ -649,6 +649,17 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         flush_offdeck(final=False)
         label = json.dumps(f"{step.id}: {' '.join(step.text.split())[:50]}")
         reagent = next((r for r in spec.reagents if r.id == step.reagent), None)
+        if step.op == "transfer" and well_ul <= 1.0:
+            # "Transfer 25 µl of bead suspension to each well" into a plate that
+            # is still empty is an addition of that liquid, not a transfer of
+            # well contents (which would be "everything minus 1 µl" = negative).
+            liquid = reagent or (_pick(spec, "bead_carrier") if re.search(r"bead", step.text, re.I) else None)
+            if liquid is None:
+                raise OpenValues([f"“{' '.join(step.text.split())[:70]}” transfers out of wells that are still "
+                                  "empty: which liquid is added here, and how many µl per well?"])
+            w.notes.append(f"{step.id}: the wells are still empty, so this transfer adds {liquid.id}")
+            step = replace(step, op="add", reagent=liquid.id)
+            reagent = liquid
 
         if pooled and step.op != "incubate":
             # The pool plate holds 8 wells in column 1; MCA96 full-plate

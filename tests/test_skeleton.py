@@ -756,3 +756,35 @@ def test_a_second_read_of_the_same_document_reuses_the_spec(profile, tmp_path):
     author_from_document(changed, "Streptavidin beads, 2 minutes.", profile, tmp_path / "c", examples=False,
                          spec_cache=cache)
     assert len(changed.calls) == 1                  # another document: read again
+
+
+def test_a_transfer_into_a_still_empty_plate_adds_the_liquid(profile, tmp_path):
+    """Seen on Dynabeads: "Transfer 25 µl bead suspension to each well" written
+    as a transfer while the plate is still empty built a -1 µl transfer."""
+    raw = {
+        "title": "Bead wash", "starts_empty": True, "sample_count": 96,
+        "reagents": [{"id": "beads", "name": "Dynabeads M-280", "role": "bead_carrier"},
+                     {"id": "bw1x", "name": "1X B&W buffer", "role": "wash"}],
+        "steps": [
+            {"id": "t1", "op": "transfer", "text": "Transfer 25 µl bead suspension to each well",
+             "location": "deck", "volume_ul": 25},
+            {"id": "a1", "op": "add", "text": "Add 100 µl 1X B&W buffer", "location": "deck",
+             "reagent": "bw1x", "volume_ul": 100},
+            {"id": "m1", "op": "separate", "text": "Place on the magnet for 2 min", "location": "deck",
+             "minutes": [2]},
+            {"id": "r1", "op": "remove", "text": "Discard the supernatant", "location": "deck"},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "0 - 1" not in source and "(-1" not in source
+    namespace: dict = {}
+    exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
+    wt = namespace["build_worktable"]()
+    wt.simulate()
+
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    raw["reagents"] = raw["reagents"][1:]
+    raw["steps"][0]["text"] = "Transfer 25 µl to each well"
+    with pytest.raises(OpenValues, match="still empty"):
+        build_skeleton(_spec(raw), load_deck(profile))
