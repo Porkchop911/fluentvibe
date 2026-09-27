@@ -369,13 +369,201 @@ def _starts_empty(spec: BenchSpec) -> bool:
     return first is not None and first.op == "add" and first.reagent is not None
 
 
+_STEP_MARK = "#@step "
+
+
+def _repeat_groups(spec: BenchSpec) -> list[dict[str, Any]]:
+    """The spec's ``repeat`` steps before unrolling: which steps, how often in total."""
+    groups: list[dict[str, Any]] = []
+    ids: list[str] = []
+    for step in spec.steps:
+        if step.op != "repeat":
+            ids.append(step.id)
+            continue
+        if step.first_step in ids and step.last_step in ids and step.times and step.times >= 1                 and ids.index(step.first_step) <= ids.index(step.last_step):
+            block = ids[ids.index(step.first_step): ids.index(step.last_step) + 1]
+            first = next(s for s in spec.steps if s.id == block[0])
+            passes = [block] + [[f"{b}-{n}" for b in block] for n in range(2, int(step.times) + 2)]
+            groups.append({"id": step.id, "passes": passes, "text": " ".join((first.text or "").split())})
+            ids.extend(f"{b}-{n}" for n in range(2, int(step.times) + 2) for b in block)
+    return groups
+
+
+def _unnumbered(text: str) -> str:
+    """A step name without its pass number ("Discard (wash 2 of 3)" -> "Discard")."""
+    text = re.sub(r"\s*\([^()]*\d[^()]*\)", "", text)
+    text = re.sub(r"(?i)\b(wash|round|pass|cycle)\s+\d+\b(\s*(of|/)\s*\d+)?", r"\1", text)
+    return " ".join(text.split())
+
+
+def _step_signature(step: SpecStep) -> tuple:
+    """What a step does, without its id and wording."""
+    return (step.op, step.location, step.reagent, step.volume_ul, step.ratio, step.washes, step.wash_ul,
+            step.elute_ul, tuple(step.temp_c), tuple(step.minutes), step.residual_ul, step.cycles,
+            step.engage, getattr(step, "head", None))
+
+
+def _implicit_repeats(steps: list[SpecStep], taken: set[str]) -> list[dict[str, Any]]:
+    """Repetitions the document wrote out step by step ("wash 1 … wash 2 …"):
+    consecutive runs of the same steps. Longest runs first; steps of an
+    explicit repeat are left alone. The code check in _loop_repeats decides
+    whether a run really becomes a loop."""
+    groups: list[dict[str, Any]] = []
+    sig = [_step_signature(s) for s in steps]
+    i = 0
+    while i < len(steps):
+        best = None
+        for length in range(min(8, (len(steps) - i) // 2), 0, -1):
+            count = 1
+            while i + (count + 1) * length <= len(steps) and \
+                    sig[i + count * length: i + (count + 1) * length] == sig[i: i + length]:
+                count += 1
+            window = [s.id for s in steps[i: i + count * length]]
+            if count >= 2 and not taken.intersection(window) and \
+                    any(s.op in {"add", "remove", "mix", "transfer"} for s in steps[i: i + length]):
+                if best is None or count * length > best[0] * best[1]:
+                    best = (count, length)
+        if best is None:
+            i += 1
+            continue
+        count, length = best
+        # A pass reads best starting with its addition ("add, mix, magnet,
+        # remove"), not mid-way ("magnet, remove, …, add, mix"): shift the
+        # start onto an add when the run still repeats from there.
+        for shift in range(1, length):
+            j = i + shift
+            if steps[j].op != "add":
+                continue
+            again = 1
+            while j + (again + 1) * length <= len(steps) and \
+                    sig[j + again * length: j + (again + 1) * length] == sig[j: j + length]:
+                again += 1
+            if again >= 2:
+                i, count = j, again
+            break
+        passes = [[s.id for s in steps[i + k * length: i + (k + 1) * length]] for k in range(count)]
+        groups.append({"id": f"repeat_{passes[0][0]}", "passes": passes,
+                       "text": " ".join((steps[i].text or "").split())})
+        i += count * length
+    return groups
+
+
+def _segment(body: list[str], first_id: str, end_id: str | None) -> tuple[int, int] | None:
+    marks = {line[len(_STEP_MARK):]: i for i, line in enumerate(body) if line.startswith(_STEP_MARK)}
+    if first_id not in marks:
+        return None
+    start = marks[first_id]
+    if end_id is None:
+        return start, len(body)
+    return (start, marks[end_id]) if end_id in marks else None
+
+
+def _loop_repeats(body: list[str], repeats: list[dict[str, Any]], notes: list[str],
+                  vols: dict[str, Any] | None = None) -> dict[str, int]:
+    """Turn unrolled repetitions into native FluentControl loops.
+
+    Repetitions whose code is identical (apart from their step ids) leave the
+    wells in the same state every pass, so they become one
+    ``with wt.loop(times=<VARIABLE>)`` and the count stays editable in
+    FluentControl. Passes that differ (fresh tips, an operator step, a
+    different volume) stay unrolled. Returns the loop-count variables.
+    """
+    loop_vars: dict[str, int] = {}
+    for group in repeats:
+        passes = group["passes"]
+        block, total = passes[0], len(passes)
+
+        def normal(text: str, n: int) -> str:
+            # One pass over every spelling of every step id of pass n (step id,
+            # its variable-name form), so no replacement is replaced again.
+            forms: dict[str, str] = {}
+            for i, c in enumerate(passes[n - 1]):
+                forms.setdefault(_ident(c).upper(), f"@{i}@")
+                forms.setdefault(c, f"@{i}@")
+                forms.setdefault(_ident(c), f"@{i}@")
+            pattern = re.compile("|".join(re.escape(k) for k in sorted(forms, key=len, reverse=True)))
+            text = pattern.sub(lambda m: forms[m.group(0)], text)
+            # Group names are wording ("wash 1", "wash 2 of 3"), not behaviour.
+            return re.sub(r'name="[^"]*"', 'name=@name@', text)
+
+        marks = [line[len(_STEP_MARK):] for line in body if line.startswith(_STEP_MARK)]
+        last = passes[-1][-1]
+        after = marks[marks.index(last) + 1] if last in marks and marks.index(last) + 1 < len(marks) else None
+        spans = []
+        for n in range(1, total + 1):
+            end = passes[n][0] if n < total else after
+            span = _segment(body, passes[n - 1][0], end)
+            if span is None:
+                spans = []
+                break
+            spans.append(span)
+        if not spans:
+            continue
+        texts = ["\n".join(body[a:b]) for a, b in spans]
+        if any("offdeck_step(" in t or "wt.place(" in t for t in texts):
+            continue   # an operator step or a labware swap: not the same every pass
+        def with_definitions(text: str) -> str:
+            # The same variable names can hide different formulas (the first
+            # wash removes sample + buffer, the next ones buffer + residual):
+            # a pass is only the same if what its variables stand for is too.
+            used = [name for name in (vols or {}) if re.search(rf"\b{re.escape(name)}\b", text)]
+            return text + "".join(f"\n{name} = {vols[name]}" for name in sorted(used))
+
+        norm = [normal(with_definitions(t), n) for n, t in enumerate(texts, start=1)]
+        if total < 2 or len(set(norm[1:])) != 1:
+            continue
+        first = 0 if norm[0] == norm[1] else 1
+        count = total - first
+        if count < 2:
+            continue
+        kept = texts[first]
+        for i, b in enumerate(block):   # "wash1-2: Add ..." reads "wash1: Add ..." inside the loop
+            kept = kept.replace(f'"{passes[first][i]}: ', f'"{b}: ')
+        # "(wash 2)", "(wash 2 of 3)" in a name is wrong on every other pass.
+        kept = re.sub(r'name="([^"]*)"', lambda m: f'name="{_unnumbered(m.group(1))}"', kept)
+        variable = f"{_ident(group['id']).upper()}_TIMES"
+        # The count is the variable (editable in FluentControl), not the name.
+        label = json.dumps(f"Repeat: {_unnumbered(group['text']) or block[0]}"[:60])
+        lines = [f'    with wt.loop(times="{variable}", name={label}):']
+        for line in kept.split("\n"):
+            lines.append(line if line.startswith(_STEP_MARK) or not line.strip() else "    " + line)
+        a, b = spans[first][0], spans[-1][1]
+        body[a:b] = lines
+        loop_vars[variable] = count
+        # Notes about the copies now inside the loop repeat the first pass's.
+        copies = {f"{c}:" for p in passes[first + 1:] for c in p}
+        notes[:] = [note for note in notes if not any(note.startswith(c) for c in copies)]
+        notes.append(f"{group['id']}: {len(block)} step(s) run {count} times as a FluentControl loop "
+                     f"(count: {variable})")
+    return loop_vars
+
+
+def _drop_unused_volumes(vols: dict[str, Any], w: Any) -> None:
+    """Volume variables only an unrolled copy used: gone with the copy."""
+    code = "\n".join([*w.body, *w.fills, *w.placements])
+    changed = True
+    while changed:
+        changed = False
+        text = code + "\n" + "\n".join(str(v) for v in vols.values())
+        for name in list(vols):
+            if name == "SAMPLE_UL":
+                continue
+            if not re.search(rf"\b{re.escape(name)}\b", text.replace(f"{name} = ", "")):
+                del vols[name]
+                changed = True
+                break
+
+
 def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     """Python source for a first, runnable protocol draft.
 
     Raises :class:`OpenValues` when the spec leaves a number open that the
     physics needs, and :class:`DeckMismatch` when the volumes do not fit.
     """
+    repeats = _repeat_groups(spec)
     spec, repeat_problems = expand_repeats(spec)
+    # Repetitions written out step by step ("wash 1", "wash 2") loop too.
+    repeats += _implicit_repeats(spec.steps, {c for g in repeats for p in g["passes"] for c in p})
     questions = [p.message for p in repeat_problems] + [p.message for p in open_values(spec)]
     # Partial plate: the samples fill the first columns; MCA96 steps pipette
     # whole columns, so every well of a used column is addressed.
@@ -634,6 +822,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         pending_offdeck.clear()
 
     for index, step in enumerate(spec.steps):
+        w.body.append(f"{_STEP_MARK}{step.id}")      # segment marker, removed below
         if step.op == "separate" and deck.magnet is not None and step.location != "deck":
             # A magnet is a deck device here: documents written for a hand-held
             # magnet (DynaMag) still separate on the deck's magnet.
@@ -942,6 +1131,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             else:
                 w.fills.append(line)
 
+    loop_vars = _loop_repeats(w.body, repeats, w.notes, vols)
+    w.body[:] = [line for line in w.body if not line.startswith(_STEP_MARK)]
+    _drop_unused_volumes(vols, w)
+
     if w.swaps:
         w.notes.append(f"the deck is full: {w.swaps} operator swap(s) replace spent labware mid-run")
     classes = sorted({
@@ -978,6 +1171,9 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
         "    )",
         f'    wt.declare_variable("RunId", "{slug}")',
         f'    wt.set_sim_value("RunId", "{slug}")',
+        *[line for name, count in loop_vars.items()
+          for line in (f"    wt.declare_variable({json.dumps(name)}, {count})  # how often the loop runs",
+                       f"    wt.set_sim_value({json.dumps(name)}, {count})")],
         *[line for name, default in lc_vars.items()
           for line in (f"    wt.declare_variable({json.dumps(name)}, {json.dumps(default)})",
                        f"    wt.set_sim_value({json.dumps(name)}, {json.dumps(default)})")],
