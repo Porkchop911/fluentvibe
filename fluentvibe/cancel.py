@@ -23,6 +23,9 @@ class CancelToken:
         self._event = threading.Event()
         self._lock = threading.Lock()
         self._closers: list[Callable[[], None]] = []
+        # Stream chunks (about one token each) the model sent for this job: a liveness signal
+        # for the page ("the model is writing: 3,400 tokens").
+        self.streamed_tokens = 0
 
     @property
     def cancelled(self) -> bool:

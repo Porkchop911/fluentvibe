@@ -447,8 +447,11 @@ class LMStudioChatClient:
 
         from .. import cancel as _cancel
 
+        token = _cancel.current()
         for raw_line in response:
             _cancel.check()
+            if token is not None:
+                token.streamed_tokens += 1
             if deadline is not None and time.monotonic() > deadline:
                 raise TimeoutError
             line = raw_line.decode("utf-8").strip()

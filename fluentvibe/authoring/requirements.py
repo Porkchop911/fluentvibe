@@ -241,10 +241,12 @@ def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
         return _seconds(wt, op.step.duration_seconds) or 0.0
 
     total = sum(seconds(op) for op in waits)
+    # Both ends inside one block call (e.g. a clean-up): name the line once.
+    where = (f"in the call on line {first.line}" if first.line == last.line
+             else f"between line {first.line} and line {last.line}")
     if total + 1e-9 < minimum:
-        return Verdict(req.id, FAIL, f"{total:g} s of waiting between line {first.line} and line {last.line}; "
-                                     f"{minimum:g} s required", last.line)
-    return Verdict(req.id, PASS, f"{total:g} s of waiting between line {first.line} and line {last.line}")
+        return Verdict(req.id, FAIL, f"{total:g} s of waiting {where}; {minimum:g} s required", last.line)
+    return Verdict(req.id, PASS, f"{total:g} s of waiting {where}")
 
 
 def _check_step_present(wt, ops: list[_Op], req: Requirement) -> Verdict:
