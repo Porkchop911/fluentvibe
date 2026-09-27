@@ -932,3 +932,24 @@ def test_normalisation_asks_for_the_sheet_and_takes_it_from_the_chat(profile, tm
     final = wt.snapshots[-1].labware("norm_Plate")
     volumes = [sum(layer.volume_ul for layer in final.well(f"{row}1").layers) for row in "ABCDEFGH"]
     assert all(abs(v - 9) < 0.01 for v in volumes), volumes
+
+
+def test_a_repeat_the_operator_does_is_not_an_empty_loop(profile, tmp_path):
+    """Seen on ONT: the ethanol wash after pooling is operator work; its two
+    passes have no deck code and must not become `with wt.loop(): <nothing>`."""
+    raw = {
+        "title": "Rapid barcoding", "sample_count": 16, "sample_volume_ul": 9,
+        "reagents": [{"id": "dna", "name": "Amplicon DNA", "role": "sample"},
+                     {"id": "etoh", "name": "80% ethanol", "role": "wash"}],
+        "steps": [
+            {"id": "pool", "op": "pool", "text": "Pool all samples", "location": "deck", "volume_ul": 8},
+            {"id": "wash", "op": "add", "text": "Wash with 1.5 ml ethanol", "location": "deck", "reagent": "etoh",
+             "volume_ul": 150},
+            {"id": "rem", "op": "remove", "text": "Remove the ethanol", "location": "deck"},
+            {"id": "rep", "op": "repeat", "text": "Repeat the wash", "location": "deck", "first_step": "wash",
+             "last_step": "rem", "times": 1},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "wt.loop(" not in source
+    compile(source, "d.py", "exec")
