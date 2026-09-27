@@ -69,6 +69,8 @@ def test_a_reply_that_ends_inside_its_reasoning_is_retried(monkeypatch):
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
     message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=[{"type": "function"}])
     assert message["tool_calls"] and "ended inside your reasoning" in calls[1][-1]["content"]
+    # The retry gets the first attempt's reasoning back instead of starting over.
+    assert "def build_worktable(): ..." in calls[1][-2]["content"] and calls[1][-2]["role"] == "assistant"
 
 
 def test_a_second_reasoning_only_reply_fails_immediately(monkeypatch):

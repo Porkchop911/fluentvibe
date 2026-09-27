@@ -571,6 +571,9 @@
     .fp-table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
     .fp-table td, .fp-table th { border-bottom: 1px solid var(--line, #d0d7de); padding: 4px 6px; text-align: left; vertical-align: top; }
     .fp-asklist { margin: 6px 0; padding-left: 20px; }
+    .fp-thinking { margin-top: 8px; padding: 8px 10px; max-width: 760px; font-size: 12px; line-height: 1.45;
+      color: var(--muted); background: #f8fafc; border-left: 3px solid #c7d2fe; border-radius: 4px;
+      white-space: pre-wrap; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
     .fp-asklist li { margin: 4px 0; }
     .author-attachbar #fastReplay { width: auto; margin-left: auto; }
     .fast-path .fp-row label { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
@@ -930,7 +933,8 @@
           `<div class="msg-title">${escapeHtml(msg.title)}</div>${body}${tools}</div>`;
       });
       if (state.authorPending) {
-        parts.push('<div class="msg model author-pending"><div class="msg-title">Author</div>thinking</div>');
+        const live = state.authorThinking ? `<div class="fp-thinking">${escapeHtml(state.authorThinking.slice(-420))}</div>` : '';
+        parts.push(`<div class="msg model author-pending rich"><div class="msg-title">Author</div>thinking${live}</div>`);
       }
       if (!parts.length) {
         parts.push('<div class="msg system"><div class="msg-title">How it works</div>Choose the deck and the mode, attach the protocol document, describe what should be automated and send (Ctrl+Enter). The model tells you what it understood and asks when something is unclear; answer here. Stop ends a run at any time.</div>');
@@ -1047,6 +1051,10 @@
           continue;
         }
         const job = data.job;
+        if (statusId === 'authorStatus' && state.authorPending && job.thinking !== state.authorThinking) {
+          state.authorThinking = job.thinking || '';
+          renderAuthorChat();
+        }
         if (job.status === 'queued' || job.status === 'running') {
           const elapsed = job.status === 'queued' ? job.queue_s : job.elapsed_s;
           setStatus(statusId, `${job.kind}: ${job.status} · ${formatDuration(elapsed)}`, 'running');
@@ -1132,7 +1140,9 @@
         }
         return `<li class="${cls}"><span class="ic">${icon}</span><span>${stage.label}</span><span class="dt">${escapeHtml(detail)}</span></li>`;
       });
-      return `<ol class="fp-steps">${rows.join('')}</ol>`;
+      const thinking = running && job.thinking && !(job.question || []).length
+        ? `<div class="fp-thinking" title="what the model is thinking right now">${escapeHtml(job.thinking.slice(-420))}</div>` : '';
+      return `<ol class="fp-steps">${rows.join('')}</ol>${thinking}`;
     }
 
     function fastResultHtml(r) {
@@ -1803,7 +1813,7 @@
         setStatus('authorStatus', err.message, 'error');
         pushAuthorMessage('error', 'Send error', err.message);
       } finally {
-        state.authorPending = false;
+        state.authorPending = false; state.authorThinking = '';
         setComposerBusy(false);
         renderAuthorChat();
         if (state.authorSessionId) $('authorPrompt').focus();

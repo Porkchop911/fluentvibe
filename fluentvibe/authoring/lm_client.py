@@ -274,9 +274,16 @@ class LMStudioChatClient:
                     self.trace_recorder.record("turn_retry", reason="reasoning_only")
                 print("[lm] reply ended inside its reasoning without a tool call -- retrying the turn once",
                       flush=True)
-                retry = self._complete_once(messages=[*messages, {"role": "user", "content": (
+                # Hand the model its own reasoning back: re-deriving it from
+                # scratch costs another 5-8 minutes at high effort.
+                notes = max((v for v in (message.get("reasoning_fields") or {}).values() if isinstance(v, str)),
+                            key=len, default="")[-8000:]
+                handback = ([{"role": "assistant", "content": f"(My notes from the previous attempt:)\n{notes}"}]
+                            if notes.strip() else [])
+                retry = self._complete_once(messages=[*messages, *handback, {"role": "user", "content": (
                     "Your previous reply ended inside your reasoning, without a tool call or any text. "
-                    f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
+                    + ("Your notes are above: do not re-derive them. " if handback else "")
+                    + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
                 )}], tools=tools)
                 if _reasoning_only(retry):
                     raise LMReasoningOnlyError(
@@ -448,6 +455,11 @@ class LMStudioChatClient:
         from .. import cancel as _cancel
 
         token = _cancel.current()
+        # Only the job's own thread shows its thinking; a parallel call (the
+        # instruction checklist) would interleave into unreadable text.
+        show_thinking = token is not None and _cancel.is_own_thread(token)
+        if show_thinking:
+            token.thinking = ""
         for raw_line in response:
             _cancel.check()
             if token is not None:
@@ -495,6 +507,9 @@ class LMStudioChatClient:
                     reasoning_parts.setdefault(key, []).append(value)
                     if watch is not None:
                         watch.feed(value)
+                    if show_thinking:
+                        # The page shows what the model is thinking, as a chat does.
+                        token.thinking = (token.thinking + value)[-1200:]
                 else:
                     reasoning_parts.setdefault(key, []).append(json.dumps(value, default=str))
             if watch is not None and not tool_calls:
