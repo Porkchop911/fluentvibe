@@ -144,7 +144,7 @@ class BlockVariables:
             # Computed from protocol variables: this block's variable is set
             # from the expression, so FluentControl recomputes it at run time.
             existing = self.wt.protocol_variables.get(name)
-            if existing is not None and existing != float(value):
+            if existing is not None and existing != round(float(value), 6):
                 raise BlockError(
                     f"{self.block}: variable {name} already holds {existing!r}; give this "
                     f"{self.block}() call a different name= (e.g. name='Library clean-up')."

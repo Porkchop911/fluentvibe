@@ -287,6 +287,10 @@ class _Writer:
 
 
 # What a skeleton 96-well plate can hold during a clean-up (sample + beads).
+# A per-well term that is the analyte marker in the simulator and 0 on the
+# instrument: expressions stay exact on the bench and consistent in simulation.
+_SIM_ANALYTE = "SIM_ANALYTE_UL"
+
 _PLATE_WORKING_UL = 180.0
 # Most a slim 25 ml trough is filled with before the 100 ml one is used.
 _SLIM_TROUGH_FILL_UL = 22000.0
@@ -544,6 +548,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
     # The analyte marker binds to beads added to its wells and leaves the free
     # liquid (the simulator counts it as bound), and comes back with an eluent.
     free_marker_ul, bound_marker_ul = marker_ul, 0.0
+    sim_analyte_ul = 0.0     # > 0 once the marker term appears in a volume
     pooled = False
 
     def fits(step: SpecStep, volume: float) -> None:
@@ -850,11 +855,12 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
             well_terms.append(vol_text)
             if reagent.role == "bead_carrier" and free_marker_ul:
                 well_ul -= free_marker_ul
-                well_terms.append(f"-{free_marker_ul:g}")
+                well_terms.append(f"-{_SIM_ANALYTE}")
+                sim_analyte_ul = free_marker_ul
                 free_marker_ul, bound_marker_ul = 0.0, free_marker_ul
             elif reagent.role == "eluent" and bound_marker_ul:
                 well_ul += bound_marker_ul
-                well_terms.append(f"{bound_marker_ul:g}")
+                well_terms.append(_SIM_ANALYTE)
                 free_marker_ul, bound_marker_ul = bound_marker_ul, 0.0
             fits(step, well_ul)
             continue
@@ -959,6 +965,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck) -> str:
            "    # Per-well volumes (ul) as FluentControl variables. Removals, mixes and",
            "    # transfers are variables computed from these, so a change here or in",
            "    # FluentControl carries through."]
+          + ([f"    # Simulation only: the analyte marker ({sim_analyte_ul:g} ul) bound to beads",
+              "    # leaves the simulated free liquid; 0 on the instrument.",
+              f'    {_SIM_ANALYTE} = wt.volume("{_SIM_ANALYTE}", 0)',
+              f'    wt.set_sim_value("{_SIM_ANALYTE}", {sim_analyte_ul:g})'] if sim_analyte_ul else [])
           + [f"    {name} = wt.volume({json.dumps(name)}, {value if isinstance(value, str) else format(value, 'g')})"
              for name, value in vols.items()] if vols else []),
         "",
