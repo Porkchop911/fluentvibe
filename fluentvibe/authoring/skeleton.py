@@ -129,6 +129,15 @@ def load_deck(profile_dir: Path | str) -> _Deck:
         (loc, pos) for loc, positions in summary.items() if loc.startswith(_TROUGH_PREFIX)
         for pos in positions if (loc, pos) not in occupied and (loc, pos) not in reserved
     ]
+    # A profile that lists the magnet / waste without a position: take a free
+    # one (the magnet on a plate nest, the waste reservoir on an MCA-reachable
+    # 7 mm nest, as on the verified decks) instead of failing.
+    if magnet and magnet_slot is None and free_nests:
+        loc, pos = free_nests.pop()
+        magnet_slot = (magnet["catalog_name"], loc, pos)
+    if waste and waste_slot is None and free_large_sites:
+        loc, pos = free_large_sites.pop(0)
+        waste_slot = (waste["catalog_name"], loc, pos)
     return _Deck(
         workspace_name=ws["name"],
         workspace_guid=ws["guid"],
