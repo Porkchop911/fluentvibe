@@ -63,7 +63,7 @@ def main() -> int:
         raw = json.loads(path.read_text(encoding="utf-8"))
         raw.pop("_source", None)
         row = {"name": path.stem, "family": families.get(path.stem, "unclassified"),
-               "built": False, "gate": False, "fails": [], "error": ""}
+               "built": False, "gate": False, "fails": [], "error": "", "todo": 0}
         rows.append(row)
         spec, _ = validate_bench_spec(raw)
         if spec is None:
@@ -77,6 +77,7 @@ def main() -> int:
             print(f"FAIL {path.stem} [{row['family']}] {row['error']}", flush=True)
             continue
         row["built"] = True
+        row["todo"] = source.count('wt.add_comment("TODO')
         target = args.work / f"{path.stem}.py"
         target.write_text(source, encoding="utf-8")
         try:
@@ -101,6 +102,7 @@ def main() -> int:
         c["built"] += row["built"]
         c["gate"] += row["gate"]
         c["clean"] += row["gate"] and not row["fails"]
+        c["complete"] += row["gate"] and not row["fails"] and not row["todo"]
     fail_keys = Counter(k for r in rows for k in r["fails"])
     errors = Counter(r["error"].split(":")[0] + ": " + r["error"].split(":", 2)[-1][:70] for r in rows if r["error"])
     mismatch = sum(1 for r in rows if r["error"].startswith("deck mismatch"))
@@ -110,7 +112,8 @@ def main() -> int:
     lines = ["# Skeleton benchmark (corpus specs)", "",
              f"{total['specs']} specs: {total['built']} built, {total['gate']} pass the compile gate, "
              f"{total['clean']} also pass every rubric check. {mismatch} do not fit this deck "
-             f"(deep-well volumes); {total['clean']} of {total['specs'] - mismatch} that fit pass.", "",
+             f"(deep-well volumes); {total['clean']} of {total['specs'] - mismatch} that fit pass; "
+             f"{total['complete']} of those have no step left as TODO.", "",
              "| Family | Specs | Built | Gate | All checks |", "|---|---|---|---|---|"]
     for family in sorted(per, key=lambda f: -per[f]["specs"]):
         c = per[family]

@@ -1248,7 +1248,7 @@
   "family": "pcr-setup",
   "title": "Universal_test_Protocol_Demo_Flex with Plate reader_May2025",
   "description": "",
-  "sample_count": 26,
+  "sample_count": 29,
   "steps": [
    {
     "id": "s1",
@@ -1262,7 +1262,7 @@
    {
     "id": "s2",
     "op": "manual",
-    "text": "20260926-17.12.40_Single Detection Result: {450: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260927-01.54.48_Single Detection Result: {450: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1277,7 +1277,7 @@
    {
     "id": "s4",
     "op": "manual",
-    "text": "20260926-17.12.41_Single Detection Result: {562: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260927-01.54.48_Single Detection Result: {562: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1292,7 +1292,7 @@
    {
     "id": "s6",
     "op": "manual",
-    "text": "20260926-17.12.41_Single Detection Result: {600: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260927-01.54.48_Single Detection Result: {600: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {
@@ -1307,7 +1307,7 @@
    {
     "id": "s8",
     "op": "manual",
-    "text": "20260926-17.12.41_Single Detection Result: {650: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
+    "text": "20260927-01.54.49_Single Detection Result: {650: {'A1': 0.0, 'A2': 0.0, 'A3': 0.0, 'A4': 0.0, 'A5': 0.0, 'A6': 0.0, 'A7'",
     "location": "manual"
    },
    {

@@ -517,3 +517,12 @@ def test_repeat_of_unknown_steps_is_a_question(profile):
                          "first_step": "nope", "last_step": "s3", "times": 1})
     with pytest.raises(OpenValues, match="repeat 'r1' needs"):
         build_skeleton(_spec(raw), load_deck(profile))
+
+
+def test_add_without_a_reagent_is_a_question(profile):
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    raw = json.loads(json.dumps(_STREPTAVIDIN))
+    raw["steps"].append({"id": "s11", "op": "add", "text": "Resuspend in buffer", "location": "deck", "volume_ul": 20})
+    with pytest.raises(OpenValues, match="which reagent or buffer"):
+        build_skeleton(_spec(raw), load_deck(profile))

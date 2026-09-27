@@ -118,6 +118,9 @@ class BenchSpec:
     spec_version: int = SPEC_VERSION
     # The request wants liquid classes as FluentControl string variables.
     liquid_class_variables: bool = False
+    # The protocol builds its wells from reagents (no samples at the start);
+    # None = not stated (the skeleton infers it).
+    starts_empty: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -200,6 +203,7 @@ def bench_spec_json_schema() -> dict[str, Any]:
             },
             "notes": {"type": "array", "items": {"type": "string"}},
             "liquid_class_variables": {"type": "boolean"},
+            "starts_empty": {"type": ["boolean", "null"]},
         },
     }
 
@@ -308,6 +312,7 @@ def parse_bench_spec(raw: dict[str, Any]) -> tuple[BenchSpec | None, list[SpecPr
         steps=steps,
         notes=[str(n) for n in raw.get("notes") or []],
         liquid_class_variables=bool(raw.get("liquid_class_variables", False)),
+        starts_empty=raw.get("starts_empty") if isinstance(raw.get("starts_empty"), bool) else None,
     )
     return spec, problems
 
@@ -419,6 +424,13 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
     for i, step in enumerate(spec.steps):
         if step.location != "deck":
             continue
+        # (Converted drafts name no reagents at all; that is a known gap of the
+        # converter, not a question for this step.)
+        if step.op == "add" and not step.reagent and spec.reagents:
+            problems.append(SpecProblem(
+                "open", f"steps[{i}].reagent",
+                f"step {step.id!r} ({step.text[:60]}) adds liquid but does not say which: which reagent or buffer?",
+            ))
         if step.op == "add" and step.volume_ul is None:
             reagent = step.reagent or "the reagent"
             problems.append(SpecProblem(
@@ -562,7 +574,9 @@ Macros, only when the document really does exactly this:
   wash_ul, elute_ul). Anything else with beads (streptavidin capture, bead
   washes, keeping the beads) is written as primitives.
 - pool: samples combined into one container.
-- custom: only if no primitive fits; say why in text.
+- custom: only if no primitive fits; say why in text. NOT for a step whose
+  reagent, volume or time is unknown: write the primitive, leave that field null,
+  and the user is asked.
 
 Instructions in the request about HOW the robot works are part of the spec:
 - "head" on an add step: "fca" or "mca" when the request says which head
@@ -582,8 +596,8 @@ Rules:
 - Keep the document's order. If it pools samples before a cleanup, the pool
   step comes first.
 - If the protocol starts from reagents (e.g. beads) rather than samples, give
-  no reagent the role sample: the working plate then starts empty and the first
-  add fills it.
+  no reagent the role sample and set "starts_empty": true: the working plate then
+  starts empty and the first add fills it. Otherwise set "starts_empty": false.
 """
 
 
