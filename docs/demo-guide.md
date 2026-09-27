@@ -5,48 +5,59 @@ What works end to end, how to start it, and what to leave out of a live demo.
 ## Setup (once)
 
 1. Model server: the 27B on vLLM (`http://127.0.0.1:18020/v1/chat/completions`, model
-   `qwen3.8-27b`, key from `~/qwen-serving/api_key.txt` in WSL). FluentControl open,
-   maximised on the left monitor, the 1080 workspace loaded.
-2. VS Code: extension `fluentvibe` 0.5.0 (`editors/vscode/fluentvibe-0.5.0.vsix`); open
-   `D:\python\fluentvibe` as the workspace folder; *Reload Window* after installing.
-3. Settings (search "fluentvibe"): `model.endpoint`, `model.name`, `model.apiKey`;
-   `model.reasoningEffort` = `xhigh`; `profile` = `build/workspaces/sat_1080_test`.
-4. Web app (optional): start it with the same variables set
-   (`FLUENTVIBE_LM_ENDPOINT`, `FLUENTVIBE_LM_MODEL`, `FLUENTVIBE_LM_API_KEY`,
-   `FLUENTVIBE_LM_REASONING_EFFORT=xhigh`): `python -m fluentvibe.cli workspace-app --port 8765`.
+   `qwen3.8-27b`). Endpoint, model, key and reasoning effort are Windows user environment
+   variables (`FLUENTVIBE_LM_*`); open a new terminal after changing them.
+2. FluentControl open, maximised on the left monitor, workspace **1080_DEV_TABLE**.
+3. Web app: `python -m fluentvibe.cli workspace-app --port 8765`. Only one instance: stop an
+   old one first (two apps on one port answer unpredictably).
+4. VS Code (optional): extension `fluentvibe` 0.5.1; open `D:\python\fluentvibe`; the model
+   settings are in the user settings; `profile` = `build/workspaces/1080_Dev`.
+
+## The Author page
+
+One chat, a **Fast | Full Python** toggle, one **Stop**.
+
+- **Fast** (5-10 min): attach the protocol (PDF/text) and, for normalisation, a sample sheet
+  (CSV: well or sample number, ng/µl); write the request; **Ctrl+Enter** sends (Enter is a
+  new line). After ~30-60 s the model says what it understood and asks at most 5 questions;
+  answer in the chat ("ok" keeps everything). The stages then run live (read the document,
+  build and simulate, check your instructions, check in FluentControl) with the model's
+  thinking shown. The result names the folder, `draft.py` and the `.xscr`, lists what the
+  model assumed, and offers **Check in FluentControl** and **Show replay**.
+- **Full Python** (15-60 min, many model turns): the model writes the Python itself in the
+  same chat. Record it; do not wait for it live.
+- The same document with the same request and answers reuses the finished read (seconds).
 
 ## Flows
 
 | Flow | Where | Time | What the viewer sees |
 |---|---|---|---|
-| Document → protocol | VS Code *fluentvibe: Generate protocol from document* → **Fast**; or the web app's Author tab | 3-5 min | live progress, the spec, the Python, **"your instructions: n/n verified"** with the checklist, FluentControl result |
-| Open questions | same | +1 model call | a box asks e.g. "beads 4,800 µl needed, kit has 2,000 µl" instead of guessing |
-| Replay | *fluentvibe: Show protocol replay* (editor title button); web app *Show replay* | seconds | the deck and every well after each step, play / slider |
-| Break an instruction | edit e.g. `head="fca"` → `"mca"` in a protocol with a checklist | save | red squiggle on that line: "Instruction not met" |
-| FluentControl check | *fluentvibe: Open in FluentControl* (Ctrl+Alt+F) | ~25 s | FluentControl loads the script; InfoPad errors become squiggles |
-| Edits in FluentControl | *fluentvibe: Pull FluentControl edits* | seconds | which Python variable a FluentControl edit changed |
-| Opentrons → Tecan | *fluentvibe: Convert Opentrons protocol* | ~10 s | an Opentrons .py becomes a checked FluentControl protocol, no model |
-| Instructions for hand-written code | *fluentvibe: Set instructions for this protocol* | 15-60 s | a checklist beside the file, checked on every save |
-| Change one volume | edit `wt.volume("S3_AXP_UL", 36)` → `30` in a generated protocol, or `S3_AXP_UL` in FluentControl's Variables group | save | nothing breaks: removals and mixes are Set Variable calculations of the base volumes |
+| Document → protocol | Author, Fast (or VS Code *Generate protocol from document* → Fast) | 5-10 min | understanding + questions after ~30-60 s, live stages, "your instructions: n/n verified", FluentControl result |
+| Repetitions as loops | same | – | "3 washes" is one FluentControl loop with a count variable (`REPEAT_WASH_TIMES`), not 3 copies |
+| Per-sample normalisation | same, with a sample sheet | – | per-well water and DNA volumes (FCA); concentrated samples pre-diluted as in the ONT table |
+| Change one volume | `wt.volume("S3_AXP_UL", 36)` → `30` in the Python, or `S3_AXP_UL` in FluentControl's Variables group | save | removals and mixes follow (Set Variable formulas) |
+| Replay | result → Show replay (VS Code: editor title button) | seconds | the deck and every well after each step |
+| FluentControl check | FluentControl tab: recent protocols or a file; VS Code Ctrl+Alt+F | ~30 s | InfoPad result (squiggles in VS Code) |
+| Break an instruction | VS Code: `head="fca"` → `"mca"` in a generated protocol | save | red squiggle "Instruction not met" |
+| Edits in FluentControl | VS Code: Pull FluentControl edits | seconds | which Python variable a FluentControl edit changed |
+| Opentrons → Tecan | VS Code: Convert Opentrons protocol | ~10 s | a checked FluentControl protocol, no model |
 
-Suggested 90 s cut: Generate (time-lapse) → checklist 10/10 → Replay, Play → break
-an instruction (squiggle) → Opentrons → Tecan.
+Suggested 90 s cut: Fast on the AMPure IFU (time-lapse) → the questions → checklist n/n →
+a loop and the Variables group in FluentControl → Replay → Opentrons → Tecan.
 
 ## Leave out of a live demo
 
-- **Full Python** generation: 15-25 min; record it, do not wait for it live.
-- Protocols whose steps need loops over data, worklists or devices on the fast path:
-  such a step becomes model-written code or stays a marked TODO (reported, never hidden).
-- FluentControl check timing: ~25 s is FluentControl loading the script.
-- Claiming a FluentControl *run* recomputes dependent volumes: the InfoPad parses
-  the Set Variable expressions (a broken one is flagged), but no instrument run
-  has confirmed the run-time values yet.
+- **Full Python** generation live (15-60 min).
+- After pooling (ONT), the tube work (AMPure clean-up of the pool, adapter) is one operator
+  hand-off; pooling straight into an Eppendorf tube on the deck is in progress.
+- Claiming a FluentControl *run* recomputes dependent volumes: the InfoPad parses the Set
+  Variable formulas, but no instrument run has confirmed the values yet.
+- Worklists in Fast: steps that need a CSV/GWL are not generated from documents yet.
 
-## Numbers (for the post, from the benchmarks)
+## Numbers (from the benchmarks)
 
-- AMPure prompt (27B, xhigh): 2.8-3.9 min end to end, FluentControl clean,
-  10/10 instructions verified.
-- 4 vendor protocols (AMPure XP, BCA, CellTiter-Glo, Dynabeads), fast path: 21/22
-  FluentControl clean.
-- Opentrons corpus: 136 of 149 deck-fitting protocols convert complete and pass
-  every check (no step left as TODO).
+- AMPure IFU on 1080_Dev (27B, xhigh): 4-7 min end to end, FluentControl clean; 7/7
+  instructions verified with a concrete request.
+- Dynabeads datasheet: understanding after ~33 s; the document read ~5 min at xhigh
+  (2-2.5x faster at medium with the same results in the benchmark).
+- Opentrons corpus: 141 of 149 deck-fitting protocols pass every check; 140 with no TODO.
