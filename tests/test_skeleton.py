@@ -858,3 +858,46 @@ def test_steps_after_pooling_are_one_operator_hand_off(profile, tmp_path):
     namespace: dict = {}
     exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
     namespace["build_worktable"]().simulate()
+
+
+def test_samples_added_later_come_from_a_sample_plate(profile, tmp_path):
+    """Dynabeads: beads first, then each sample's DNA. 96 samples are 96
+    liquids: a sample plate stamped 1:1, not one trough into every well --
+    also when the spec forgot to mark the DNA as the samples."""
+    from fluentvibe.authoring.requirements import Requirement, verify_all
+
+    raw = {
+        "title": "Immobilize DNA", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Dynabeads M-280", "role": "bead_carrier"},
+                     {"id": "bw", "name": "2X B&W buffer", "role": "wash"},
+                     {"id": "dna", "name": "Biotinylated DNA in water", "role": "reagent"}],
+        "steps": [
+            {"id": "b", "op": "add", "text": "Add 10 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 10},
+            {"id": "w", "op": "add", "text": "Add 10 µl 2X B&W", "location": "deck", "reagent": "bw",
+             "volume_ul": 10},
+            {"id": "d", "op": "add", "text": "Add 20 µl DNA", "location": "deck", "reagent": "dna",
+             "volume_ul": 20},
+            {"id": "m", "op": "separate", "text": "Magnet 2 min", "location": "deck", "minutes": [2]},
+            {"id": "r", "op": "remove", "text": "Discard the supernatant", "location": "deck", "residual_ul": 5},
+        ],
+    }
+    for role in ("reagent", "sample"):
+        raw["reagents"][2]["role"] = role
+        source = build_skeleton(_spec(raw), load_deck(profile))
+        assert "dna_Plate" in source and "dna_trough" not in source, role
+        namespace: dict = {}
+        exec(compile(source, str(tmp_path / f"{role}.py"), "exec"), namespace)
+        wt = namespace["build_worktable"]()
+        wt.simulate()
+        [verdict] = verify_all(wt, [Requirement(id="n", text="96 samples", kind="sample_count",
+                                                params={"count": 96})])
+        assert verdict.status == "pass", verdict.evidence
+
+
+def test_an_operator_incubation_counts_as_waiting():
+    from fluentvibe.authoring.requirements import _stated_seconds
+
+    assert _stated_seconds("Incubate 15 min at room temperature using gentle rotation.") == 900
+    assert _stated_seconds("30 °C for 2 minutes, then 80 °C for 2 minutes") == 240
+    assert _stated_seconds("Spin down briefly") == 0

@@ -416,7 +416,9 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
     problems: list[SpecProblem] = []
     has_deck_liquid = any(s.location == "deck" and s.op not in {"incubate", "measure", "manual"}
                           for s in spec.steps)
-    if spec.sample_volume_ul is None and has_deck_liquid and any(r.role == "sample" for r in spec.reagents):
+    # (A plate that starts empty gets its samples from an add step with its own volume.)
+    if spec.sample_volume_ul is None and has_deck_liquid and not spec.starts_empty \
+            and any(r.role == "sample" for r in spec.reagents):
         problems.append(SpecProblem(
             "open", "sample_volume_ul",
             "the samples' volume per well is not given: how many µl of sample are in each well at the start?",
@@ -609,9 +611,14 @@ Rules:
   tube volumes from the document down to one well.
 - Keep the document's order. If it pools samples before a cleanup, the pool
   step comes first.
-- If the protocol starts from reagents (e.g. beads) rather than samples, give
-  no reagent the role sample and set "starts_empty": true: the working plate then
-  starts empty and the first add fills it. Otherwise set "starts_empty": false.
+- If the protocol starts from reagents (e.g. beads) rather than samples, set
+  "starts_empty": true: the working plate then starts empty and the first add
+  fills it. Otherwise set "starts_empty": false.
+- The samples are the liquid that differs from well to well (each sample's DNA,
+  template, lysate): give that reagent the role sample even when it is added
+  later (e.g. DNA onto washed beads); it then comes from a sample plate, one
+  well per sample, never from one trough. Barcodes and other per-well kit
+  reagents are per_sample.
 """
 
 
