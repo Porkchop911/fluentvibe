@@ -446,6 +446,9 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     attachments = extract_uploaded_attachments(payload.get("attachments") or [], output_dir=output_dir, turn_index=1)
     document = "\n\n".join(a.text for a in attachments).strip() or request
+    if not attachments and len(request) < 400:
+        # One sentence is not a protocol: the fast path would only guess.
+        raise ValueError("attach the protocol document (or paste the whole protocol as text)")
     if not document:
         raise ValueError("attach a protocol document or describe the protocol")
     os.environ[PROFILE_DIR_ENV] = str(profile_dir)
