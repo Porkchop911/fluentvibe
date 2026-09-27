@@ -709,15 +709,24 @@ def _check_spec_conformance(wt, spec) -> Invariant:
         and pooled_at is not None and magnet_at is not None and magnet_at < pooled_at
     ):
         problems.append("spec pools before the clean-up, but the protocol cleans up first")
+    def count_stretches(positions: list[int]) -> int:
+        count, in_stretch = 0, False
+        if positions:
+            for index in range(positions[0] + 1, positions[-1]):
+                off = spec.steps[index].location != "deck"
+                if off and not in_stretch:
+                    count += 1
+                in_stretch = off
+        return count
+
     deck_positions = [i for i, _ in deck_ops]
-    stretches = 0
-    if deck_positions:
-        in_stretch = False
-        for index in range(deck_positions[0] + 1, deck_positions[-1]):
-            off = spec.steps[index].location != "deck"
-            if off and not in_stretch:
-                stretches += 1
-            in_stretch = off
+    stretches = count_stretches(deck_positions)
+    # After a deck pool the work may continue on the deck (a clean-up on the
+    # pooled column, a pause per off-deck stretch) or on one pool in a tube,
+    # which the operator takes in a single hand-off: either is conformant.
+    if pool_index is not None and pool_index < len(spec.steps) - 1:
+        handed_off = count_stretches([i for i in deck_positions if i <= pool_index]) + 1
+        stretches = min(stretches, handed_off)
     # Physical primitives: each must have its physical effect.
     ops = {op for _, op in deck_ops}
     if "separate" in ops and magnet_at is None:
