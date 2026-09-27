@@ -788,3 +788,43 @@ def test_a_transfer_into_a_still_empty_plate_adds_the_liquid(profile, tmp_path):
     raw["steps"][0]["text"] = "Transfer 25 µl to each well"
     with pytest.raises(OpenValues, match="still empty"):
         build_skeleton(_spec(raw), load_deck(profile))
+
+
+def test_repeats_become_native_loops_when_every_pass_is_the_same(profile, tmp_path):
+    """A wash repeated 3 times is one FluentControl loop with its count as a
+    variable, not 3 copies; it simulates like the copies."""
+    raw = {
+        "title": "Bead wash", "sample_count": 96, "sample_volume_ul": 20,
+        "reagents": [{"id": "dna", "name": "DNA", "role": "sample"},
+                     {"id": "bw", "name": "1X B&W buffer", "role": "wash"}],
+        "steps": [
+            {"id": "w_add", "op": "add", "text": "Add 100 µl buffer", "location": "deck", "reagent": "bw",
+             "volume_ul": 100, "head": "mca"},
+            {"id": "w_mag", "op": "separate", "text": "Magnet 2 min", "location": "deck", "minutes": [2]},
+            {"id": "w_rem", "op": "remove", "text": "Discard the buffer", "location": "deck", "residual_ul": 5},
+            {"id": "w_off", "op": "separate", "text": "Off the magnet", "location": "deck", "engage": False},
+            {"id": "rep", "op": "repeat", "text": "Repeat the wash 2 more times", "location": "deck",
+             "first_step": "w_add", "last_step": "w_off", "times": 2},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    # The first wash also removes the sample: it differs, so it stays in front
+    # of the loop, which runs the two identical washes after it.
+    assert source.count("wt.loop(") == 1 and 'wt.declare_variable("REP_TIMES", 2)' in source
+    assert "w_add-3" not in source and "W_ADD_3" not in source
+    namespace: dict = {}
+    exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
+    wt = namespace["build_worktable"]()
+    wt.simulate()
+    # The same wells after three passes as the unrolled copies would leave.
+    well = wt.snapshots[-1].labware("Samples").well("A1")
+    assert abs(sum(layer.volume_ul for layer in well.layers) - 5) < 1.0
+
+    # When every pass is the same (the first starts from the residual too), all of them loop.
+    raw["steps"].insert(0, {"id": "pre", "op": "remove", "text": "Remove the sample", "location": "deck",
+                            "residual_ul": 5})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert 'wt.declare_variable("REP_TIMES", 3)' in source and "W_ADD_2" not in source
+    namespace = {}
+    exec(compile(source, str(tmp_path / "e.py"), "exec"), namespace)
+    namespace["build_worktable"]().simulate()

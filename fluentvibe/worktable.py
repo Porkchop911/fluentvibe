@@ -106,6 +106,8 @@ class Worktable:
         # topmost list (the loop/conditional body); otherwise it appends
         # to the active group.
         self._emit_target_stack: list[list[Step]] = []
+        # Stack depths at which wt.group() opened a group inside a loop/branch.
+        self._inner_group_depths: list[int] = []
 
         # Filled by `simulate()`.
         self.snapshots: list["Snapshot"] = []
@@ -261,9 +263,27 @@ class Worktable:
     # ── Authoring API ───────────────────────────────────────────────
 
     def group(self, name: str) -> None:
-        """Start a new step group (e.g. 'Setup', 'Transfer')."""
+        """Start a new step group (e.g. 'Setup', 'Transfer').
+
+        Inside a loop or conditional it is a group within that loop (a block
+        called in a ``wt.loop`` keeps its steps together there), closed by
+        the next ``wt.group`` or the end of the loop.
+        """
+        if self._emit_target_stack:
+            self._close_inner_groups()
+            group_step = ScriptGroupStep(name=name, steps=[])
+            self._emit_target_stack[-1].append(group_step)
+            self._emit_target_stack.append(group_step.steps)
+            self._inner_group_depths.append(len(self._emit_target_stack))
+            return
         self._active_group = Group(name=name, steps=[])
         self._groups.append(self._active_group)
+
+    def _close_inner_groups(self) -> None:
+        """Pop the groups ``wt.group`` opened inside the current loop/branch."""
+        while self._inner_group_depths and self._inner_group_depths[-1] == len(self._emit_target_stack):
+            self._inner_group_depths.pop()
+            self._emit_target_stack.pop()
 
     @contextmanager
     def nested_group(self, name: str) -> Iterator[ScriptGroupStep]:
@@ -273,6 +293,7 @@ class Worktable:
         try:
             yield group_step
         finally:
+            self._close_inner_groups()
             self._emit_target_stack.pop()
             self._emit(group_step)
 
@@ -657,6 +678,7 @@ class Worktable:
         try:
             yield loop_step
         finally:
+            self._close_inner_groups()
             self._emit_target_stack.pop()
             self._emit(loop_step)
 
@@ -692,6 +714,7 @@ class Worktable:
         try:
             yield cond_step
         finally:
+            self._close_inner_groups()
             self._emit_target_stack.pop()
             self._emit(cond_step)
 
@@ -702,6 +725,7 @@ class Worktable:
         try:
             yield conditional
         finally:
+            self._close_inner_groups()
             self._emit_target_stack.pop()
 
     def place(
