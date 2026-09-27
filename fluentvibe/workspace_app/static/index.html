@@ -1216,8 +1216,13 @@
       if (state.fastJobId) { setStatus('authorStatus', 'Still working; Stop first to start over.', 'error'); return; }
       const profile = $('authorProfile').value;
       if (!profile) { setStatus('authorStatus', 'Choose a deck profile first.', 'error'); return; }
-      if (!message && !state.authorAttachments.length) {
-        setStatus('authorStatus', 'Describe what to automate and attach the protocol document.', 'error'); return;
+      // Fast reads a protocol document: never start without one (a pasted
+      // protocol of some length counts), rather than guess from one sentence.
+      if (!state.authorAttachments.length && message.length < 400) {
+        setStatus('authorStatus', 'Attach the protocol document first (Attach files below), or paste the whole protocol as text.', 'error');
+        pushAuthorMessage('system', 'Document missing',
+          'Fast builds the protocol from a document. Attach the protocol (PDF or text) with “Attach files”, then send again. Your message is kept.');
+        return;
       }
       const attachments = await buildAuthorAttachmentPayload();
       const fcChecked = $('fastFcCheck').checked;
@@ -1226,7 +1231,7 @@
       pushAuthorMessage('user', 'You', `${message || '(document only)'}` +
         (attachments.length ? `\n\nAttached: ${attachments.map(a => a.name).join(', ')}` : ''));
       $('authorPrompt').value = '';
-      state.authorAttachments = []; renderAuthorAttachments();
+      // The document stays attached: a second run or a follow-up uses it again.
       // A new run starts clean: nothing from the previous one can be replayed or mistaken for this result.
       $('generatedCode').value = ''; $('fastReplay').disabled = true;
       let created;

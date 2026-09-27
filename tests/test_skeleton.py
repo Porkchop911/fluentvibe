@@ -186,7 +186,7 @@ def test_open_values_are_questions_not_defaults(profile):
     raw["steps"][6]["volume_ul"] = None
     spec, problems = validate_bench_spec(raw)
     assert any(p.kind == "open" and "PROBE" in p.message for p in problems)
-    with pytest.raises(OpenValues, match="how many µl per well"):
+    with pytest.raises(OpenValues, match="How many µl of"):
         build_skeleton(spec, load_deck(profile))
 
 

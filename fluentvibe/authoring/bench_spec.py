@@ -421,6 +421,15 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
             "open", "sample_volume_ul",
             "the samples' volume per well is not given: how many µl of sample are in each well at the start?",
         ))
+    names = {r.id: r.name for r in spec.reagents}
+
+    def quote(step: SpecStep) -> str:
+        text = " ".join(step.text.split())
+        return f"“{text[:70]}{'…' if len(text) > 70 else ''}”"
+
+    # One question per reagent, not per step: a buffer added in five washes
+    # without a volume is one question, named as the document names it.
+    missing_volume: dict[str, list[tuple[int, SpecStep]]] = {}
     for i, step in enumerate(spec.steps):
         if step.location != "deck":
             continue
@@ -429,14 +438,19 @@ def open_values(spec: BenchSpec) -> list[SpecProblem]:
         if step.op == "add" and not step.reagent and spec.reagents:
             problems.append(SpecProblem(
                 "open", f"steps[{i}].reagent",
-                f"step {step.id!r} ({step.text[:60]}) adds liquid but does not say which: which reagent or buffer?",
+                f"{quote(step)} adds a liquid but does not say which: which reagent or buffer?",
             ))
         if step.op == "add" and step.volume_ul is None:
-            reagent = step.reagent or "the reagent"
-            problems.append(SpecProblem(
-                "open", f"steps[{i}].volume_ul",
-                f"step {step.id!r} adds {reagent} but no volume is given: how many µl per well?",
-            ))
+            missing_volume.setdefault(step.reagent or "", []).append((i, step))
+    for reagent, steps in missing_volume.items():
+        name = names.get(reagent, reagent) or "the reagent"
+        label = f"{name} ({reagent})" if reagent and name != reagent else name
+        where = "; ".join(f"steps[{i}].volume_ul" for i, _ in steps)
+        if len(steps) == 1:
+            detail = f"No volume is given where it is added: {quote(steps[0][1])}."
+        else:
+            detail = f"It is added {len(steps)} times without a volume, first: {quote(steps[0][1])}."
+        problems.append(SpecProblem("open", where, f"How many µl of {label} per well? {detail}"))
     return problems
 
 

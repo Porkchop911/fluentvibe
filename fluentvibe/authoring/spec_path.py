@@ -116,6 +116,9 @@ def understand_request(client: Any, source_text: str, request: str) -> tuple[str
 def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
     """What the model assumed, for the user to confirm: every value it chose
     itself (``proposed``) and every question it left in its notes."""
+    unit = {"volume_ul": "{} µl per well", "ratio": "{}× ratio", "washes": "{} washes", "wash_ul": "{} µl wash",
+            "elute_ul": "{} µl elution", "residual_ul": "{} µl left in the well", "cycles": "{} mix cycles",
+            "temp_c": "{} °C", "minutes": "{} min"}
     out: list[str] = []
     for step in spec.steps:
         for name in step.proposed:
@@ -123,8 +126,10 @@ def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
             if value in (None, [], ""):
                 continue
             shown = ", ".join(f"{v:g}" for v in value) if isinstance(value, list) else (
-                f"{value:g}" if isinstance(value, float) else str(value))
-            out.append(f"{step.id} ({' '.join(step.text.split())[:70]}): {name} = {shown} (assumed)")
+                f"{value:g}" if isinstance(value, (int, float)) else str(value))
+            text = " ".join(step.text.split())
+            text = f"{text[:70]}{'…' if len(text) > 70 else ''}"
+            out.append(f"“{text}”: {unit.get(name, name + ' = {}').format(shown)} (assumed)")
     out += [" ".join(n.split()) for n in spec.notes if "?" in n]
     return out[:limit]
 
