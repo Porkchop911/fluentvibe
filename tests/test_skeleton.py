@@ -550,3 +550,19 @@ def test_document_sequence_catches_a_missing_wait_and_a_skipped_step(profile, tm
     assert missing.status == "fail" and "300 s" in missing.evidence
     no_transfer = re.sub(r"    stamp\(.*?name=[^\n]*\n", "", source, count=1, flags=re.S)
     assert verdict(no_transfer).status == "fail"
+
+
+def test_named_volumes_carry_a_change_through(profile, tmp_path):
+    """Editing one per-well volume in the Python (e.g. with Ctrl+I) must not
+    break the removals and mixes that depend on it."""
+    import re
+
+    from fluentvibe.copilot.analyzer import analyze_source
+
+    source = build_skeleton(_spec(_SPRI_PRIMITIVES), load_deck(profile))
+    assert "    SAMPLE_UL = 20" in source and "SAMPLE_UL + S1_AXP_UL" in source
+    path = tmp_path / "d.py"
+    for old, new in (("    S1_AXP_UL = 36", "    S1_AXP_UL = 30"), ("    SAMPLE_UL = 20", "    SAMPLE_UL = 40")):
+        edited = source.replace(old, new)
+        assert edited != source
+        assert not [d for d in analyze_source(edited, path) if d.severity == "error"], old
