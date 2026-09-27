@@ -54,6 +54,65 @@ def choose_yourself(questions: list[str]) -> str:
 ACCEPT = "__accept__"
 
 
+UNDERSTAND_TOOL = "state_understanding"
+
+UNDERSTAND_PROMPT = (
+    "You prepare the automation of a lab protocol on a Tecan Fluent liquid handler: the FCA (Flexible "
+    "Channel Arm, 8 pipetting channels), the MCA (Multiple Channel Arm, a 96-channel head), the RGA "
+    "(gripper), a magnet on the deck, and an operator for off-deck steps. Before the long "
+    "work starts, state briefly what you will automate and ask the user only what you genuinely need.\n"
+    f"Call {UNDERSTAND_TOOL} once:\n"
+    "- understood: 2-4 plain sentences: which protocol/procedure, how many samples and in which "
+    "plate, the key volumes, what runs on the deck and what the operator does by hand. Use the "
+    "user's request and the document; say 'I will assume ...' for what you would choose yourself.\n"
+    "- questions: at most 5 short questions, only where the answer changes the protocol and neither "
+    "the request nor the document settles it (e.g. which of several procedures in a datasheet, the "
+    "sample count, a volume the document leaves open). Empty when everything is clear. No questions "
+    "about things you can decide sensibly yourself."
+)
+
+
+def understand_request(client: Any, source_text: str, request: str) -> tuple[str, list[str]]:
+    """One short model call: what the model will automate, and what it must ask first."""
+    tool = {
+        "type": "function",
+        "function": {
+            "name": UNDERSTAND_TOOL,
+            "description": "State what will be automated and ask what is unclear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "understood": {"type": "string"},
+                    "questions": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
+                },
+                "required": ["understood", "questions"],
+            },
+        },
+    }
+    user = (f"User's request: {request or '(none: automate the document)'}\n\n"
+            f"Protocol document:\n\n{source_text[:60000]}")
+    message = client.complete(
+        messages=[{"role": "system", "content": UNDERSTAND_PROMPT}, {"role": "user", "content": user}],
+        tools=[tool],
+    )
+    for call in message.get("tool_calls") or []:
+        function = call.get("function") or {}
+        if function.get("name") != UNDERSTAND_TOOL:
+            continue
+        arguments = function.get("arguments")
+        try:
+            data = json.loads(arguments) if isinstance(arguments, str) else dict(arguments or {})
+        except (TypeError, ValueError):
+            break
+        understood = " ".join(str(data.get("understood") or "").split())
+        questions = [" ".join(str(q).split()) for q in data.get("questions") or [] if str(q).strip()][:5]
+        if understood:
+            return understood, questions
+    # No usable call: fall back to the reply text, so the user still sees something to confirm.
+    text = " ".join(str(message.get("content") or "").split())[:800]
+    return text or "(the model gave no summary)", []
+
+
 def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
     """What the model assumed, for the user to confirm: every value it chose
     itself (``proposed``) and every question it left in its notes."""
@@ -102,6 +161,7 @@ class SpecPathResult:
             "steps": [s.op for s in self.spec.steps] if self.spec else [],
             # Deck steps the skeleton could not map (left as TODO comments): not a finished protocol.
             "todo_steps": (self.source or "").count('wt.add_comment("TODO'),
+            "assumed": assumptions(self.spec) if self.spec is not None else [],
             "custom_steps": self.custom_steps,
             "instructions": {
                 "total": len(self.requirements),
@@ -159,6 +219,7 @@ def author_from_document(
     examples: bool = True,
     progress: Callable[[str], None] | None = None,
     check_requirements: bool = False,
+    understand: bool = False,
 ) -> SpecPathResult:
     """Document -> spec -> (questions -> answers ->) skeleton -> gate (-> FluentControl).
 
@@ -171,9 +232,35 @@ def author_from_document(
             progress(message)
 
     result = SpecPathResult(stage="spec")
+    context_parts = [f"Request: {request}"] if request else []
+    if understand and ask is not None and ask is not choose_yourself:
+        # Generation takes minutes: first make sure the request is understood.
+        note("understanding your request (model)")
+        t0 = time.monotonic()
+        try:
+            understood, questions = understand_request(client, source_text, request or "")
+        except Exception as exc:  # noqa: BLE001
+            result.stage, result.error = "model", f"{type(exc).__name__}: {exc}"[:400]
+            return result
+        result.timings["understand_s"] = time.monotonic() - t0
+        answer = ask([f"I understood: {understood}", *questions])
+        result.rounds.append({"questions": [understood, *questions], "answer": answer, "kind": "understand"})
+        if answer is None:
+            result.stage = "questions"
+            return result
+        if answer == ACCEPT:
+            clarification = f"The user confirmed this understanding of the task: {understood}"
+        else:
+            clarification = (f"Your understanding of the task was: {understood}\n"
+                             + ("Your questions were:\n" + "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions)) + "\n"
+                                if questions else "")
+                             + f"The user answered: {answer}\n"
+                             "Follow the user's answer where it differs from your understanding; decide "
+                             "anything left unanswered yourself and mark numbers you choose as proposed.")
+            request = f"{request or ''}\n{answer}".strip()   # the answers are instructions too
+        context_parts.append(clarification)
     started = time.monotonic()
     note("reading the document and writing the Bench Spec (model)")
-    context_parts = [f"Request: {request}"] if request else []
     if examples:
         from .spec_retrieval import retrieval_context
 
@@ -206,7 +293,11 @@ def author_from_document(
         result.error = "; ".join(f"{p.where}: {p.message}" for p in problems)
         return result
 
-    if ask is not None and ask is not choose_yourself:
+    # Once the user has been asked up front, later gaps are the model's to fill
+    # (the chat promised "anything you leave out, the model decides"); they are
+    # listed as assumptions with the result instead of interrupting again.
+    asked_up_front = any(r.get("kind") == "understand" for r in result.rounds)
+    if ask is not None and ask is not choose_yourself and not asked_up_front:
         confirm = assumptions(spec)
         if confirm:
             note("waiting for you to confirm the assumptions")
@@ -245,13 +336,13 @@ def author_from_document(
             if ask is None or len(result.rounds) > max_rounds:
                 result.stage = "questions"
                 return result
-            answer = ask(questions)
+            answer = CHOOSE_YOURSELF_ANSWER if asked_up_front else ask(questions)
             if answer is None:
                 result.stage = "questions"
                 return result
             if answer == ACCEPT:
                 answer = CHOOSE_YOURSELF_ANSWER
-            elif ask is not choose_yourself:
+            elif ask is not choose_yourself and answer != CHOOSE_YOURSELF_ANSWER:
                 # Blank questions: the model decides those.
                 answer += "\nFor anything not answered here: " + CHOOSE_YOURSELF_ANSWER
             round_["answer"] = answer

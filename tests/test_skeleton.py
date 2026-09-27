@@ -689,3 +689,50 @@ def test_spec_path_confirms_assumptions_first(profile, tmp_path):
                                   ask=lambda q: f"- {q[0]}\n  answer: 30", examples=False)
     assert result.stage == "done" and len(client.calls) == 2
     assert "answer: 30" in client.calls[1][-1]["content"] and result.spec.steps[0].volume_ul == 30
+
+
+class _UnderstandingThenSpec(_ScriptedClient):
+    """First call: the model states its understanding; then scripted specs."""
+
+    def __init__(self, understood, questions, *specs):
+        super().__init__(*specs)
+        self.understanding = {"understood": understood, "questions": questions}
+
+    def complete(self, *, messages, tools):
+        if tools and tools[0]["function"]["name"] == "state_understanding":
+            self.calls.append(messages)
+            return {"content": "", "tool_calls": [{"function": {
+                "name": "state_understanding", "arguments": json.dumps(self.understanding)}}]}
+        return super().complete(messages=messages, tools=tools)
+
+
+def test_spec_path_states_its_understanding_before_the_long_read(profile, tmp_path):
+    """Generation takes minutes, so the request is confirmed first; the user's
+    answer goes into the spec prompt and the instruction checklist."""
+    from fluentvibe.authoring.spec_path import ACCEPT, author_from_document
+
+    spec = json.loads(json.dumps(_STREPTAVIDIN))
+    asked = []
+
+    def ask(questions):
+        asked.append(questions)
+        if questions[0].startswith("I understood:"):
+            return "2: 48 samples"
+        return ACCEPT
+
+    client = _UnderstandingThenSpec("Streptavidin capture of 96 samples on the magnet.",
+                                    ["Which procedure?", "How many samples?"], spec)
+    result = author_from_document(client, "Streptavidin beads.", profile, tmp_path / "a", request="dna",
+                                  ask=ask, examples=False, understand=True)
+    assert asked[0][0] == "I understood: Streptavidin capture of 96 samples on the magnet."
+    assert asked[0][1:] == ["Which procedure?", "How many samples?"]
+    spec_prompt = client.calls[1][-1]["content"]
+    assert "The user answered: 2: 48 samples" in spec_prompt
+    assert result.rounds[0]["kind"] == "understand"
+    # Asked once, up front: the assumptions are listed with the result, not asked again.
+    assert len(asked) == 1 and result.stage == "done"
+    assert result.summary()["assumed"], "the model's own choices are shown with the result"
+
+    stopped = author_from_document(_UnderstandingThenSpec("x", [], spec), "Streptavidin beads.", profile,
+                                   tmp_path / "b", ask=lambda q: None, examples=False, understand=True)
+    assert stopped.stage == "questions" and stopped.spec is None

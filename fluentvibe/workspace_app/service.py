@@ -456,6 +456,7 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
         fluentcontrol=bool(payload.get("fc_check", False)),
         check_requirements=bool(request) and bool(payload.get("check_instructions", True)),
         progress=lambda message: _job_progress(payload, message),
+        understand=not payload.get("choose"),
     )
     files = {}
     if result.spec is not None:
