@@ -730,6 +730,10 @@ def _author_checklist(args, result, python_path, pending, seconds: float) -> Non
             summary["error"] = f"check: {type(exc).__name__}: {exc}"[:300]
     if verdicts:
         (out / "requirements.md").write_text(requirements_markdown(reqs, verdicts, dispositions), encoding="utf-8")
+        # Beside the protocol, so the editor re-checks the instructions on every save.
+        from .authoring.requirements import save_requirements, sidecar_path
+
+        save_requirements(sidecar_path(python_path), reqs)
     fc_file = out / "fluentcontrol_check.json"
     if fc_file.exists():
         try:
@@ -1177,12 +1181,17 @@ def _cmd_author_spec(args) -> int:
     kwargs["trace_recorder"] = ModelTraceRecorder(ModelTraceConfig.from_env(output_dir=args.output, enabled=True))
 
     def ask_terminal(questions: list[str]) -> str | None:
-        print("\nThe spec leaves these open:")
+        from .authoring.spec_path import ACCEPT
+
+        print("\nPlease check (the model assumed or left these open):")
         for q in questions:
             print(f"  - {q}")
-        print("Answer (empty to stop): ", end="", flush=True)
-        answer = sys.stdin.readline().strip()
-        return answer or None
+        print("Answer (empty: keep the assumptions / let the model decide; 'stop' to stop): ", end="", flush=True)
+        line = sys.stdin.readline()
+        answer = line.strip()
+        if not line or answer.lower() == "stop":
+            return None
+        return answer or ACCEPT
 
     args.output.mkdir(parents=True, exist_ok=True)
     result = author_from_document(

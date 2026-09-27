@@ -255,7 +255,7 @@ def test_extraction_retries_an_empty_spec_and_drops_invented_supplies():
 
 
 def test_spec_path_asks_revises_and_builds(profile, tmp_path):
-    from fluentvibe.authoring.spec_path import author_from_document
+    from fluentvibe.authoring.spec_path import ACCEPT, author_from_document
 
     first = json.loads(json.dumps(_STREPTAVIDIN))
     first["reagents"][0].update(supply_ul=2000, supply_count=1)
@@ -266,6 +266,8 @@ def test_spec_path_asks_revises_and_builds(profile, tmp_path):
     asked = []
 
     def ask(questions):
+        if "(assumed)" in questions[0]:
+            return ACCEPT                     # the confirm round: keep the assumptions
         asked.append(questions)
         return "Use 20 ul beads per well."
 
@@ -273,7 +275,7 @@ def test_spec_path_asks_revises_and_builds(profile, tmp_path):
                                   tmp_path / "out", ask=ask, examples=False)
     assert result.stage == "done", (result.stage, result.error)
     assert "BEADS is added at 4800" in asked[0][0]
-    assert result.rounds[0]["answer"] == "Use 20 ul beads per well."
+    assert result.rounds[-1]["answer"].startswith("Use 20 ul beads per well.")
     assert "Use 20 ul beads per well." in client.calls[1][-1]["content"]
     assert result.gate["success"] is True
 
@@ -283,8 +285,11 @@ def test_spec_path_hands_questions_back_without_an_answer(profile, tmp_path):
 
     first = json.loads(json.dumps(_STREPTAVIDIN))
     first["steps"][6]["volume_ul"] = None  # probe volume open
+    from fluentvibe.authoring.spec_path import ACCEPT
+
     result = author_from_document(_ScriptedClient(first), "Streptavidin beads.", profile, tmp_path / "out",
-                                  ask=lambda questions: None, examples=False)
+                                  ask=lambda questions: ACCEPT if "(assumed)" in questions[0] else None,
+                                  examples=False)
     assert result.stage == "questions" and "PROBE" in result.open_questions[0]
 
 
@@ -662,3 +667,25 @@ def test_simulation_marker_is_zero_on_the_instrument(profile, tmp_path):
     assert wt.protocol_variables["SIM_ANALYTE_UL"] == 0 and wt.sim_values["SIM_ANALYTE_UL"] > 0
     assert "SIM_ANALYTE_UL" in source and " - 2 " not in source.split('wt.group("Labware Placement")')[0]
     wt.simulate()
+
+
+def test_spec_path_confirms_assumptions_first(profile, tmp_path):
+    """The values the model assumed are shown for confirmation before building;
+    keeping them costs no model call, a change revises the spec once."""
+    from fluentvibe.authoring.spec_path import ACCEPT, author_from_document
+
+    spec = json.loads(json.dumps(_STREPTAVIDIN))
+    assert any(step.get("proposed") for step in spec["steps"])
+    kept_client = _ScriptedClient(spec)
+    asked = []
+    kept = author_from_document(kept_client, "Streptavidin beads.", profile, tmp_path / "a",
+                                ask=lambda q: asked.append(q) or ACCEPT, examples=False)
+    assert kept.stage == "done" and "(assumed)" in asked[0][0] and len(kept_client.calls) == 1
+
+    changed = json.loads(json.dumps(spec))
+    changed["steps"][0]["volume_ul"] = 30
+    client = _ScriptedClient(spec, changed)
+    result = author_from_document(client, "Streptavidin beads.", profile, tmp_path / "b",
+                                  ask=lambda q: f"- {q[0]}\n  answer: 30", examples=False)
+    assert result.stage == "done" and len(client.calls) == 2
+    assert "answer: 30" in client.calls[1][-1]["content"] and result.spec.steps[0].volume_ul == 30

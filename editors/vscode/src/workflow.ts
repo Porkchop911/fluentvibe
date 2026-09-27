@@ -44,7 +44,8 @@ function runCli(
   args: string[],
   onLine: (line: string) => void,
   onPrompt?: (child: cp.ChildProcess, buffered: string) => void,
-  extraEnv: NodeJS.ProcessEnv = {}
+  extraEnv: NodeJS.ProcessEnv = {},
+  cancel?: vscode.CancellationToken
 ): Promise<{ code: number; stdout: string }> {
   const python = settings().get<string>("pythonPath", "python");
   return new Promise((resolve) => {
@@ -52,6 +53,8 @@ function runCli(
       cwd: workspaceRoot(),
       env: { ...cliEnv(), ...extraEnv },
     });
+    // Cancel ends the CLI; its open model request closes with it.
+    cancel?.onCancellationRequested(() => child.kill());
     let stdout = "";
     let pending = "";
     const feed = (chunk: Buffer) => {
@@ -62,7 +65,7 @@ function runCli(
       pending = lines.pop() ?? "";
       lines.forEach(onLine);
       // A prompt waits without a newline: hand it over.
-      if (onPrompt && pending.startsWith("Answer (empty to stop):")) {
+      if (onPrompt && pending.startsWith("Answer (")) {
         const p = pending;
         pending = "";
         onPrompt(child, p);
@@ -151,8 +154,8 @@ export async function generateFromDocument(): Promise<void> {
   const questions: string[] = [];
 
   const result = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "fluentvibe", cancellable: false },
-    (progress) =>
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe", cancellable: true },
+    (progress, cancelToken) =>
       runCli(
         args,
         (line) => {
@@ -168,15 +171,28 @@ export async function generateFromDocument(): Promise<void> {
           }
         },
         async (child) => {
-          const answer = await vscode.window.showInputBox({
-            title: "The spec leaves this open",
-            prompt: questions.join("  |  ") || "Open question",
-            ignoreFocusOut: true,
-          });
+          // One box per question; empty keeps the assumption, Esc stops the run.
+          const answers: string[] = [];
+          let stopped = false;
+          for (const [i, q] of questions.entries()) {
+            const answer = await vscode.window.showInputBox({
+              title: `Please check (${i + 1}/${questions.length}): empty keeps it, Esc stops`,
+              prompt: q,
+              ignoreFocusOut: true,
+            });
+            if (answer === undefined) {
+              stopped = true;
+              break;
+            }
+            if (answer.trim()) {
+              answers.push(`${q} -> ${answer.trim()}`);
+            }
+          }
           questions.length = 0;
-          child.stdin?.write(`${answer ?? ""}\n`);
+          child.stdin?.write(stopped ? "stop\n" : `${answers.join(" | ")}\n`);
         },
-        extraEnv
+        extraEnv,
+        cancelToken
       )
   );
 
@@ -230,6 +246,7 @@ export async function openInFluentControl(): Promise<void> {
     return;
   }
   await editor.document.save();
+  const checkedVersion = editor.document.version;
   const file = editor.document.uri.fsPath;
   const args = ["fc-open", file, "--json"];
   const profile = settings().get<string>("profile", "");
@@ -251,6 +268,15 @@ export async function openInFluentControl(): Promise<void> {
   const result = JSON.parse(jsonLine) as { opened: boolean; load_error: string; findings: FcFinding[] };
   if (!result.opened) {
     vscode.window.showErrorMessage(`FluentControl could not load the script: ${result.load_error}`);
+    return;
+  }
+  if (editor.document.version !== checkedVersion) {
+    // Line numbers would point into a different revision: do not mark them.
+    fcDiagnostics.delete(editor.document.uri);
+    vscode.window.showWarningMessage(
+      `FluentControl checked the version saved ${secs} s ago (${result.findings.length} finding(s)); ` +
+      "the file changed since. Run Open in FluentControl again for the current version."
+    );
     return;
   }
   const diagnostics: vscode.Diagnostic[] = [];

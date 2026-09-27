@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import contextlib
 import json
 import os
 import re
@@ -243,6 +244,24 @@ class LMStudioChatClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        from .. import cancel as _cancel
+
+        try:
+            return self._complete_turn(messages=messages, tools=tools)
+        except Exception as exc:
+            # Stop closes the stream; whatever the closed socket raised, the
+            # cause is the user stopping the job.
+            token = _cancel.current()
+            if token is not None and token.cancelled:
+                raise _cancel.Cancelled("stopped by the user") from exc
+            raise
+
+    def _complete_turn(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """One model turn. A reply that loops on one line, or runs out of
         output tokens before any tool call, is retried once with a short
         instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
@@ -345,8 +364,12 @@ class LMStudioChatClient:
                 raise LMStudioError(message)
             effective_timeout = min(effective_timeout, remaining)
         deadline = started + effective_timeout
+        from .. import cancel as _cancel
+
+        _cancel.check()
+        token = _cancel.current()
         try:
-            with urllib.request.urlopen(req, timeout=effective_timeout) as response:
+            with urllib.request.urlopen(req, timeout=effective_timeout) as response,                     (token.closing(response.close) if token is not None else contextlib.nullcontext()):
                 content_type = response.headers.get("Content-Type", "")
                 if "text/event-stream" in content_type:
                     return _raise_if_truncated(self._read_stream(response, deadline=deadline))
@@ -422,7 +445,10 @@ class LMStudioChatClient:
         # structure legitimately, so this watch asks for more before it calls it.
         args_watch = _RepetitionWatch(min_repeats=12, share=0.6) if _loop_guard_enabled() else None
 
+        from .. import cancel as _cancel
+
         for raw_line in response:
+            _cancel.check()
             if deadline is not None and time.monotonic() > deadline:
                 raise TimeoutError
             line = raw_line.decode("utf-8").strip()
