@@ -446,6 +446,20 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     output_dir = WORKBENCH_BASE_DIR / "authored" / f"spec-{stamp}-{uuid.uuid4().hex[:4]}"
     output_dir.mkdir(parents=True, exist_ok=True)
     attachments = extract_uploaded_attachments(payload.get("attachments") or [], output_dir=output_dir, turn_index=1)
+    # A CSV/TSV with concentrations is the sample sheet, not part of the document.
+    from ..authoring.sample_sheet import parse_sample_sheet
+
+    sample_sheet: dict[str, float] = {}
+    documents = []
+    for attachment in attachments:
+        sheet = (parse_sample_sheet(attachment.text)
+                 if attachment.name.lower().endswith((".csv", ".tsv")) else {})
+        if sheet:
+            sample_sheet.update(sheet)
+            _job_progress(payload, f"sample sheet {attachment.name}: {len(sheet)} concentration(s)")
+        else:
+            documents.append(attachment)
+    attachments = documents
     document = "\n\n".join(a.text for a in attachments).strip() or request
     if not attachments and len(request) < 400:
         # One sentence is not a protocol: the fast path would only guess.
@@ -462,6 +476,7 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
         progress=lambda message: _job_progress(payload, message),
         understand=not payload.get("choose"),
         spec_cache=WORKBENCH_BASE_DIR / "spec_cache.json",
+        sample_sheet=sample_sheet or None,
     )
     files = {}
     if result.spec is not None:
