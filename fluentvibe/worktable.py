@@ -1245,15 +1245,17 @@ class Worktable:
             self.file_references.append(path)
 
     def _register_child_valid_slots(self, labware: Labware) -> None:
-        """Extend valid workspace slots from a placed carrier's child sites."""
-        if self.valid_slots is None or getattr(labware, "category", None) != "fixed_deck":
+        """Extend valid workspace slots from a placed carrier's child sites
+        (a fixed deck part, or a carrier placed on a nest such as the
+        '24 Eppendorf Adapter', whose tube positions are ('eppendorf', 1..24))."""
+        if self.valid_slots is None or getattr(labware, "category", None) not in {"fixed_deck", "tube_rack"}:
             return
 
         from .catalog.catalog import resolve_by_name
         from .catalog.xcmp import load_component_site_location_names
 
         entry = resolve_by_name(labware.catalog_name)
-        if entry is None:
+        if entry is None or (labware.category == "tube_rack" and getattr(entry, "component_kind", "") != "carrier"):
             return
 
         child_locations = load_component_site_location_names(entry.file_path)
