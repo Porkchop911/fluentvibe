@@ -2032,6 +2032,15 @@ class Renderer:
             cls._KNOWN_LABWARE_NAMES = {lw["name"] for lw in all_lw}
         except Exception:
             cls._KNOWN_LABWARE_NAMES = set()
+        # The catalog index is rebuilt from the FluentControl install
+        # (`fluentvibe catalog refresh`): labware made since the database above
+        # (e.g. a user's '24 Eppendorf Adapter_empty') is known, not "corrected".
+        try:
+            from ..catalog.catalog import find_components
+
+            cls._KNOWN_LABWARE_NAMES |= {entry.name for entry in find_components("")}
+        except Exception:
+            pass
         return cls._KNOWN_LABWARE_NAMES
 
     @classmethod
