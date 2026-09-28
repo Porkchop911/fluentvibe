@@ -899,10 +899,23 @@ def test_steps_after_pooling_are_one_operator_hand_off(profile, tmp_path):
     exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
     wt = namespace["build_worktable"]()
     wt.simulate()
-    # The checklist does not expect the operator's steps on the deck.
-    from fluentvibe.authoring.requirements import requirements_from_spec, verify_all
+    # The checklist expects the operator's steps in the hand-off, not on the deck,
+    # and fails when the hand-off is gone (Codex review: the pool used to end the check).
+    import re
 
-    assert verify_all(wt, requirements_from_spec(_spec(raw)))[0].status == "pass"
+    from fluentvibe.authoring.requirements import requirements_from_spec, skeleton_notes, verify_all
+
+    reqs = requirements_from_spec(_spec(raw), skeleton_notes(source))
+    (verdict,) = verify_all(wt, reqs)
+    assert verdict.status == "pass" and "3 handed to the operator" in verdict.evidence, verdict
+    no_hand_off = re.sub(r"    offdeck_step\(wt, \"The samples are pooled[^\n]*\n", "", source)
+    assert no_hand_off != source
+    namespace = {}
+    exec(compile(no_hand_off, str(tmp_path / "d2.py"), "exec"), namespace)
+    bare = namespace["build_worktable"]()
+    bare.simulate()
+    (verdict,) = verify_all(bare, reqs)
+    assert verdict.status == "fail" and "operator prompt" in verdict.evidence, verdict
 
 
 def test_samples_added_later_come_from_a_sample_plate(profile, tmp_path):
@@ -1005,33 +1018,147 @@ def test_a_repeat_the_operator_does_is_not_an_empty_loop(profile, tmp_path):
     compile(source, "d.py", "exec")
 
 
-def test_removing_off_the_magnet_with_beads_gets_a_separation_first(profile, tmp_path):
-    """Seen on Dynabeads: the spec said 'remove the 1X buffer' with no magnet
-    step; the beads must not go to the waste. Also: the checklist follows what
-    the builder did (a vial mix before anything is in the plate is skipped, a
-    transfer into the empty plate is an add)."""
+_BEAD_WASH = {
+    "title": "Bead wash", "sample_count": 96, "starts_empty": True,
+    "reagents": [{"id": "beads", "name": "Dynabeads M-280", "role": "bead_carrier"},
+                 {"id": "bw", "name": "1X B&W buffer", "role": "wash"}],
+    "steps": [
+        {"id": "vial", "op": "mix", "text": "Resuspend the beads in the vial", "location": "deck"},
+        {"id": "t", "op": "transfer", "text": "Transfer 25 µl beads to the plate", "location": "deck",
+         "reagent": "beads", "volume_ul": 25},
+        {"id": "a", "op": "add", "text": "Add 25 µl 1X B&W", "location": "deck", "reagent": "bw",
+         "volume_ul": 25},
+        {"id": "m", "op": "mix", "text": "Mix", "location": "deck"},
+        {"id": "r", "op": "remove", "text": "Remove the 1X B&W", "location": "deck"},
+    ],
+}
+
+
+def test_removing_off_the_magnet_with_beads_is_a_question(profile):
+    """Seen on Dynabeads: 'remove the 1X buffer' with no magnet step would pour
+    the beads away. The builder does not guess a separation (a discard can be
+    meant): it asks. A removal that says it discards the beads is not asked."""
+    import copy
+
+    from fluentvibe.authoring.skeleton import OpenValues
+
+    with pytest.raises(OpenValues) as info:
+        build_skeleton(_spec(_BEAD_WASH), load_deck(profile))
+    assert "Remove the 1X B&W" in info.value.questions[0] and "keep the" in info.value.questions[0]
+    discard = copy.deepcopy(_BEAD_WASH)
+    discard["steps"][-1]["text"] = "Discard the suspended beads with the buffer"
+    assert "remove_liquid(" in build_skeleton(_spec(discard), load_deck(profile))
+
+
+def test_a_vial_mix_before_the_plate_holds_anything_is_a_verified_hand_off(profile, tmp_path):
+    """Codex review: a builder note ('nothing to mix; skipped') must not waive
+    'resuspend the beads in the vial'. It is an operator prompt, and the
+    checklist fails when that prompt is missing."""
+    import copy
+    import re
+
     from fluentvibe.authoring.eval_rubric import build_worktable_from_source
     from fluentvibe.authoring.requirements import requirements_from_spec, skeleton_notes, verify_all
 
+    raw = copy.deepcopy(_BEAD_WASH)
+    raw["steps"].insert(4, {"id": "sep", "op": "separate", "text": "Magnet 1 min", "location": "deck",
+                            "minutes": [1]})
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "Resuspend the beads in the vial" in source and "offdeck_step(" in source
+    reqs = requirements_from_spec(_spec(raw), skeleton_notes(source))
+
+    def verdict(src, name):
+        wt = build_worktable_from_source(src, str(tmp_path / name))
+        wt.simulate()
+        return verify_all(wt, reqs)[0]
+
+    ok = verdict(source, "d.py")
+    assert ok.status == "pass" and "1 handed to the operator" in ok.evidence, ok
+    no_prompt = re.sub(r"    offdeck_step\(wt, \"Resuspend the beads in the vial[^\n]*\n", "", source)
+    assert no_prompt != source
+    assert verdict(no_prompt, "d2.py").status == "fail"
+
+
+def test_supernatant_moved_off_the_beads_leaves_them_behind(profile):
+    """Codex review: after the supernatant goes to a new plate, a removal from
+    that bead-free plate must not ask for (or add) a separation."""
     raw = {
-        "title": "Bead wash", "sample_count": 96, "starts_empty": True,
-        "reagents": [{"id": "beads", "name": "Dynabeads M-280", "role": "bead_carrier"},
-                     {"id": "bw", "name": "1X B&W buffer", "role": "wash"}],
+        "title": "Keep the supernatant", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Beads", "role": "bead_carrier"},
+                     {"id": "buf", "name": "Buffer", "role": "wash"}],
         "steps": [
-            {"id": "vial", "op": "mix", "text": "Resuspend the beads in the vial", "location": "deck"},
-            {"id": "t", "op": "transfer", "text": "Transfer 25 µl beads to the plate", "location": "deck",
-             "reagent": "beads", "volume_ul": 25},
-            {"id": "a", "op": "add", "text": "Add 25 µl 1X B&W", "location": "deck", "reagent": "bw",
-             "volume_ul": 25},
-            {"id": "m", "op": "mix", "text": "Mix", "location": "deck"},
-            {"id": "r", "op": "remove", "text": "Remove the 1X B&W", "location": "deck"},
+            {"id": "b", "op": "add", "text": "Add 50 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 50},
+            {"id": "u", "op": "add", "text": "Add 100 µl buffer", "location": "deck", "reagent": "buf",
+             "volume_ul": 100},
+            {"id": "s", "op": "separate", "text": "Magnet 2 min", "location": "deck", "minutes": [2]},
+            {"id": "t", "op": "transfer", "text": "Move 100 µl supernatant to a new plate", "location": "deck",
+             "volume_ul": 100},
+            {"id": "r", "op": "remove", "text": "Remove 50 µl", "location": "deck", "volume_ul": 50},
         ],
     }
     source = build_skeleton(_spec(raw), load_deck(profile))
-    assert "r: magnet first, so the beads stay" in source
-    body = source[source.index("magnet first"):]
-    assert "remove_liquid(" in body                          # the separation comes before the removal
-    wt = build_worktable_from_source(source, str(tmp_path / "d.py"))
+    assert source.count("separate(") == 1
+
+
+def test_a_later_product_at_the_same_volume_is_not_the_prepared_input(profile, tmp_path):
+    """Codex review: samples start at 20 µl and an eluate plate later holds
+    9 µl: 'start with 9 µl' must fail."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import Requirement, verify_all
+
+    raw = {
+        "title": "Clean-up", "sample_count": 8, "sample_volume_ul": 20,
+        "reagents": [{"id": "dna", "name": "DNA", "role": "sample"},
+                     {"id": "axp", "name": "AMPure XP", "role": "bead_carrier"},
+                     {"id": "etoh", "name": "80% ethanol", "role": "wash"},
+                     {"id": "eb", "name": "Elution buffer", "role": "eluent"}],
+        "steps": [{"id": "c", "op": "bead_cleanup", "text": "AMPure clean-up, elute in 11 µl", "location": "deck",
+                   "reagent": "axp", "ratio": 1.0, "washes": 2, "wash_ul": 150, "elute_ul": 11}],
+    }
+    wt = build_worktable_from_source(build_skeleton(_spec(raw), load_deck(profile)), str(tmp_path / "d.py"))
     wt.simulate()
-    (verdict,) = verify_all(wt, requirements_from_spec(_spec(raw), skeleton_notes(source)))
-    assert verdict.status == "pass", verdict
+    (verdict,) = verify_all(wt, [Requirement("r", "start with 9 ul", "sample_volume", {"ul": 9})])
+    assert verdict.status == "fail", verdict
+
+
+def test_an_attached_sheet_the_spec_does_not_use_is_asked_about(profile, tmp_path):
+    """Codex review: with concentrations attached and no normalize step, the
+    concentrations were silently ignored. Now the user is asked; 'ok' takes
+    the document's amount, and the concentrations change the protocol."""
+    from fluentvibe.authoring.spec_path import author_from_document
+
+    raw = {
+        "title": "Rapid barcoding", "sample_count": 8, "sample_volume_ul": 9,
+        "reagents": [{"id": "dna", "name": "Amplicon DNA", "role": "sample"},
+                     {"id": "rb", "name": "Rapid Barcodes", "role": "per_sample"}],
+        "steps": [{"id": "bc", "op": "add", "text": "Add 1 µl barcode", "location": "deck", "reagent": "rb",
+                   "volume_ul": 1}],
+    }
+    document = "Prepare 50 ng of amplicon DNA in 9 µl of nuclease-free water. Add 1 µl barcode."
+    sources, asked = [], []
+    for sheet in ({f"{r}1": 10.0 for r in "ABCDEFGH"}, {f"{r}1": 100.0 for r in "ABCDEFGH"}):
+        def ask(questions):
+            asked.append(questions)
+            return "ok"
+
+        result = author_from_document(_ScriptedClient(raw), document, profile, tmp_path / f"o{len(sources)}",
+                                      ask=ask, examples=False, sample_sheet=sheet)
+        assert result.stage == "done", (result.stage, result.error)
+        sources.append(result.source)
+    assert "does not normalise" in asked[0][0] and "50 ng in 9 µl" in asked[0][0]
+    assert sources[0] != sources[1]                     # the concentrations are used
+
+
+def test_a_document_number_in_another_unit_is_still_an_assumption():
+    """Codex review: '20 µl' in the quote does not make a proposed 20 min the document's."""
+    from fluentvibe.authoring.spec_path import assumptions
+
+    raw = {"title": "t", "sample_count": 8,
+           "reagents": [{"id": "b", "name": "Buffer", "role": "reagent"}],
+           "steps": [{"id": "i", "op": "incubate", "text": "Incubate", "location": "deck", "minutes": [20],
+                      "proposed": ["minutes"], "source_quote": "Add 20 µl and incubate at room temperature"},
+                     {"id": "j", "op": "incubate", "text": "Incubate", "location": "deck", "minutes": [15],
+                      "proposed": ["minutes"], "source_quote": "Incubate for 15 minutes"}]}
+    listed = assumptions(_spec(raw))
+    assert len(listed) == 1 and "20 min" in listed[0]

@@ -300,22 +300,37 @@ def _check_sample_volume(wt, ops: list[_Op], req: Requirement) -> Verdict:
                       if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)})
     if volumes == [round(want, 2)]:
         return Verdict(req.id, PASS, f"every sample well starts with {want:g} ul")
-    # Normalised on the deck: the samples reach that volume in another plate.
+    # Prepared on the deck (normalised): judged where every sample first
+    # stands complete in a new plate, before anything else is added to it,
+    # and only if that plate holds samples and diluent -- not beads, eluate
+    # or wash (a later product at the same volume is not the input).
     count = sum(1 for plate in plates for well in plate.wells.values()
                 if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers))
     initial = {plate.label for plate in plates}
+    judged: set[str] = set()
     for snap in getattr(wt, "snapshots", None) or ():
         for stack in snap.slot_map.values():
             for lw in stack:
-                if lw.label in initial or getattr(lw, "category", "") != "plate":
+                if lw.label in initial or lw.label in judged or getattr(lw, "category", "") != "plate":
                     continue
-                held = [round(sum(layer.volume_ul for layer in well.layers), 2) for well in lw.wells.values()
-                        if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)]
-                if len(held) == count and set(held) == {round(want, 2)}:
+                wells = [well for well in lw.wells.values()
+                         if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)]
+                if len(wells) < count:
+                    continue
+                judged.add(lw.label)          # its first complete state; later ones are products
+                if any(getattr(layer.reagent, "role", "") in _NOT_SAMPLE_PREP
+                       for well in wells for layer in well.layers):
+                    continue
+                held = {round(sum(layer.volume_ul for layer in well.layers), 2) for well in wells}
+                if held == {round(want, 2)}:
                     line = getattr(getattr(snap.step, "source_pos", None), "line", None)
-                    return Verdict(req.id, PASS, f"every sample holds {want:g} ul in {lw.label}"
-                                   + (f" after line {line}" if line else ""))
+                    return Verdict(req.id, PASS, f"every sample is prepared to {want:g} ul in {lw.label}"
+                                   + (f" (line {line})" if line else "") + ", before anything else is added")
     return Verdict(req.id, FAIL, f"sample wells start with {volumes} ul, not {want:g} ul")
+
+
+# Liquids that mean a plate holds a product, not prepared samples.
+_NOT_SAMPLE_PREP = {"bead_carrier", "eluent", "wash"}
 
 
 def _check_sample_count(wt, ops: list[_Op], req: Requirement) -> Verdict:
@@ -582,6 +597,8 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
             step = op.step
             seconds = float(step.delay) / 1000.0 if kind == "DelayStep" else (_seconds(wt, step.duration_seconds) or 0.0)
             tokens.append(("wait", seconds, op.line))
+        elif kind == "UserPromptStep":
+            tokens.append(("prompt:" + _norm(getattr(op.step, "prompt", "") or ""), 0.0, op.line))
     collapsed: list[tuple[str, float, int | None]] = []
     for token in tokens:
         if collapsed and collapsed[-1][0] == token[0]:
@@ -601,33 +618,47 @@ def skeleton_notes(source: str) -> list[str]:
 def requirements_from_spec(spec, notes: Iterable[str] = ()) -> list[Requirement]:
     """The document's deck steps as one ordered completeness requirement.
 
-    ``notes`` are the builder's notes (:func:`skeleton_notes`): steps it skipped
-    (nothing to mix in an empty plate) or turned into something else (a
-    transfer into empty wells adds that liquid) are expected as built."""
+    ``notes`` are the builder's notes (:func:`skeleton_notes`). They never
+    waive a step: a step the builder handed to the operator (after a pool, or
+    a vial mix before the plate holds anything) is expected in an operator
+    prompt that names it; a transfer into empty wells is expected as the add
+    it is. Only state no-ops are dropped (magnet on while on it, off while
+    off, nothing left to remove): the state they ask for already holds."""
     reagents = {r.id: r.name for r in spec.reagents}
     samples = {r.id for r in spec.reagents if r.role == "sample"}
-    skipped: set[str] = set()
+    no_ops: set[str] = set()
+    operator: set[str] = set()
     adds: dict[str, str] = {}
     for note in notes:
         step_id = note.split(":", 1)[0].split(" (", 1)[0].strip()
-        if note.endswith("; skipped") or "is done by the operator" in note:
-            skipped.add(step_id)
+        if note.endswith("already on the magnet; skipped") or note.endswith("not on the magnet; skipped") \
+                or re.search(r": nothing to remove \(.*\); skipped$", note):
+            no_ops.add(step_id)
+        elif "done by the operator" in note or "handed to the operator" in note or note.endswith("; skipped"):
+            operator.add(step_id)
         elif (m := re.search(r"this transfer adds (\S+)$", note)):
             adds[step_id] = m.group(1)
         elif "is the samples (one per well" in note:
             samples.add(note.split(": ", 1)[1].split(" is the samples", 1)[0])
     expected: list[dict[str, Any]] = []
 
-    def push(token, text, seconds=0.0):
-        if expected and expected[-1]["token"] == token and token != "wait":
+    def push(token, text, seconds=0.0, match=None):
+        if expected and expected[-1]["token"] == token and token not in ("wait", "operator"):
             return
-        expected.append({"token": token, "text": text[:80], "seconds": seconds})
+        item = {"token": token, "text": text[:80], "seconds": seconds}
+        if match is not None:
+            item["match"] = match
+        expected.append(item)
 
     for step in spec.steps:
         if step.location != "deck":
             continue
         text = f"{step.id}: {step.text}"
-        if step.id in skipped:
+        if step.id in no_ops:
+            continue
+        if step.id in operator:
+            # Verified as a hand-off: an operator prompt must name the step.
+            push("operator", text, match=_norm(step.text)[:60])
             continue
         if step.id in adds:
             step = replace(step, op="add", reagent=adds[step.id])
@@ -641,12 +672,7 @@ def requirements_from_spec(spec, notes: Iterable[str] = ()) -> list[Requirement]
             push("mag_off" if step.engage is False else "mag_on", text)
         elif step.op == "remove":
             push("waste", text)
-        elif step.op == "pool":
-            push("transfer", text)
-            # The builder hands everything after a pool to the operator in
-            # one step (see skeleton: ``pooled``).
-            break
-        elif step.op == "transfer":
+        elif step.op in ("pool", "transfer"):
             push("transfer", text)
         elif step.op == "mix":
             push("mix", text)
@@ -668,18 +694,29 @@ def _check_document_sequence(wt, ops: list[_Op], req: Requirement) -> Verdict:
     if not expected:
         return Verdict(req.id, UNKNOWN, "the document has no deck steps to check")
     tokens = _protocol_tokens(wt, ops, list(req.params.get("reagents") or []))
+
+    def matches(token, exp):
+        if exp["token"] == "operator":
+            return token[0].startswith("prompt:") and exp.get("match", "") in token[0]
+        return token[0] == exp["token"] and (exp["token"] != "wait" or token[1] + 1e-6 >= 0.9 * exp["seconds"])
+
     i = 0
     for exp in expected:
-        while i < len(tokens) and not (
-            tokens[i][0] == exp["token"] and (exp["token"] != "wait" or tokens[i][1] + 1e-6 >= 0.9 * exp["seconds"])
-        ):
+        while i < len(tokens) and not matches(tokens[i], exp):
             i += 1
         if i == len(tokens):
-            what = f"a wait of {exp['seconds']:g} s" if exp["token"] == "wait" else exp["token"].replace(":", " ")
+            what = (f"a wait of {exp['seconds']:g} s" if exp["token"] == "wait"
+                    else "an operator prompt for this step" if exp["token"] == "operator"
+                    else exp["token"].replace(":", " "))
             last_line = tokens[-1][2] if tokens else None
             return Verdict(req.id, FAIL, f"missing or out of order: {what} ({exp['text']})", last_line)
-        i += 1
-    return Verdict(req.id, PASS, f"all {len(expected)} deck steps of the document occur in order")
+        if exp["token"] != "operator":   # one hand-off prompt can name several steps
+            i += 1
+    handed = sum(1 for exp in expected if exp["token"] == "operator")
+    on_deck = len(expected) - handed
+    return Verdict(req.id, PASS, f"all {on_deck} deck steps of the document occur in order"
+                   + (f"; {handed} handed to the operator, each named in a prompt (not run by the robot)"
+                      if handed else ""))
 
 
 _CHECKS["document_sequence"] = _check_document_sequence

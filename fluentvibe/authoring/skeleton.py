@@ -320,6 +320,10 @@ class DeckMismatch(ValueError):
     """The spec cannot run on this deck as written (e.g. deep-well volumes)."""
 
 
+# A removal that is meant to take the beads along ("discard the beads").
+_DISCARDS_BEADS = re.compile(r"\b(discard|remove|dispose of|throw away)\b[^.]*\bbeads?\b", re.I)
+
+
 class OpenValues(ValueError):
     """The spec leaves numbers open that the skeleton must not guess."""
 
@@ -934,14 +938,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
             if vol <= 0:
                 w.notes.append(f"{step.id}: nothing to remove ({well_ul:g} ul in the wells); skipped")
                 continue
-            if not on_magnet and beads_in_wells:
-                # Seen on Dynabeads: "remove the buffer" without the magnet
-                # step before it would pour the beads into the waste.
-                magnet = ensure_magnet()
-                w.body.append(f"    separate(wt, plate={current}, magnet={magnet}, settle_seconds=120, "
-                              f"name={json.dumps(step.id + ': magnet first, so the beads stay')})  # ASSUMED: settle time")
-                w.notes.append(f"{step.id}: the wells hold beads; a 2 min separation is added before removing")
-                on_magnet = True
+            if not on_magnet and beads_in_wells and not _DISCARDS_BEADS.search(step.text):
+                # Seen on Dynabeads: "remove the buffer" with no magnet step
+                # before it would pour the beads into the waste. Whether they
+                # should stay (a separation first, and for how long) is the
+                # protocol's call, not the builder's: ask.
+                raise OpenValues([f"“{' '.join(step.text.split())[:70]}” removes liquid while the beads are "
+                                  "suspended (no magnet step before it). Separate on the magnet first to keep the "
+                                  "beads (for how long?), or discard the beads with the liquid?"])
             elif not on_magnet and any(s.op == "separate" for s in spec.steps):
                 w.notes.append(f"{step.id}: removing liquid off the magnet takes suspended beads along")
             comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
@@ -964,7 +968,10 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
 
         if step.op == "mix" and not (reagent is not None and reagent.role == "per_sample"):
             if well_ul <= 0:
-                w.notes.append(f"{step.id}: nothing to mix; skipped")
+                # Nothing in the plate yet: the mix is of something else (the
+                # bead vial). The operator does it, told in a prompt.
+                w.notes.append(f"{step.id}: nothing in the plate to mix yet; handed to the operator")
+                pending_offdeck.append(step)
                 continue
             cycles = step.cycles if step.cycles is not None else 10
             vol = step.volume_ul if step.volume_ul is not None else round(0.8 * well_ul, 1)
@@ -1032,6 +1039,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
             )
             w.retire(current, sample_tips)
             current, well_ul = eluate, elute_ul - 2.0
+            beads_in_wells = False             # the eluate, off the beads
             well_terms[:] = [f"{well_ul:g}"]
             continue
 
@@ -1081,6 +1089,7 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
                     f"name={json.dumps(f'{step.id}: {final:g} ul of each pre-dilution')})")
             w.retire(current)
             current, well_ul = dest, final
+            beads_in_wells = False
             well_terms[:] = [f"{final:g}"]
             continue
 
@@ -1238,11 +1247,14 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
                 f"    stamp(wt, source={current}, dest={dest}, volume_ul={vol_text}, tips={tips},\n"
                 f"          liquid_class={lc_for('sample')}, name={label}{cols_arg})"
             )
+            # Off the magnet the beads come along; on it, only the supernatant.
+            beads_move = beads_in_wells and not on_magnet
             # The emptied plate leaves the magnet so the next separation can use it.
             release_current(json.dumps(f"{step.id}: spent plate off the magnet"))
             w.retire(current)
             carry = (tips, dest)
             current, well_ul = dest, vol
+            beads_in_wells = beads_move
             well_terms[:] = [vol_text if vol_text.isidentifier() else f"({vol_text})"]
             continue
 
