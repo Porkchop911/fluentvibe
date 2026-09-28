@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from typing import Any
 
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
@@ -132,10 +133,15 @@ def create_server() -> LanguageServer:
         return to_hover(info.to_dict() if info else None)
 
     @server.command("fluentvibe.applyInlineEdit")
-    def _inline_edit(ls: LanguageServer, args: list) -> dict:
+    def _inline_edit(ls: LanguageServer, *args: Any) -> dict:
+        # *args: pygls 2 passes each command argument as its own value and
+        # converts it by the annotation (``args: list`` turned the dict into a
+        # list of its keys); pygls 1 passed one list of all arguments.
         from ..copilot.edit import edit_region
 
         params = args[0] if args else {}
+        if isinstance(params, list):
+            params = params[0] if params else {}
         doc = ls.workspace.get_text_document(params["uri"])
         result = edit_region(
             doc.source,

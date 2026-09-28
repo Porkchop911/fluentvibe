@@ -205,3 +205,33 @@ def test_signature_help_and_hover_mapping() -> None:
     assert "MCA96Head.aspirate(" in hover.contents.value
     assert "Aspirate from target." in hover.contents.value
     assert to_hover(None) is None
+
+
+def test_inline_edit_receives_the_argument_dict_through_pygls(monkeypatch):
+    """pygls 2 converts each command argument by the handler's annotation: an
+    ``args: list`` parameter turned the dict into a list of its keys and every
+    Ctrl+I edit failed with "string indices must be integers"."""
+    from types import SimpleNamespace
+
+    from lsprotocol import types as lsp
+    from pygls.protocol.language_server import _prepare_command_arguments
+
+    from fluentvibe.copilot import edit as edit_mod
+    from fluentvibe.lsp.server import create_server
+
+    server = create_server()
+    handler = server.protocol.fm.commands["fluentvibe.applyInlineEdit"]
+    params = lsp.ExecuteCommandParams(command="fluentvibe.applyInlineEdit", arguments=[
+        {"uri": "file:///p.py", "start_line": 2, "end_line": 3, "instruction": "use 200 ul tips"}])
+    args, kwargs = _prepare_command_arguments(handler, params, server.protocol._converter)
+    seen = {}
+
+    def fake_edit(source, start, end, instruction, path=None):
+        seen.update(start=start, end=end, instruction=instruction)
+        return SimpleNamespace(to_dict=lambda: {"new_text": "x\n", "start_line": start, "end_line": end})
+
+    workspace = SimpleNamespace(get_text_document=lambda uri: SimpleNamespace(source="a\nb\nc\n", path="p.py"))
+    monkeypatch.setattr(server.protocol, "_workspace", workspace)
+    monkeypatch.setattr(edit_mod, "edit_region", fake_edit)
+    result = handler(*args, **kwargs)
+    assert seen == {"start": 2, "end": 3, "instruction": "use 200 ul tips"} and result["new_text"] == "x\n"

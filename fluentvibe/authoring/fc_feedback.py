@@ -193,6 +193,41 @@ def fluentcontrol_available() -> tuple[bool, str]:
     return False, reason
 
 
+def _lock_owner() -> int | None:
+    try:
+        return int(_LOCK.read_text(encoding="utf-8").strip() or 0) or None
+    except (OSError, ValueError):
+        return None
+
+
+def _pid_alive(pid: int | None) -> bool:
+    """True when ``pid`` still runs (unknown counts as alive: never break a live lock).
+    Not ``os.kill(pid, 0)``: on Windows signal 0 is CTRL_C_EVENT."""
+    if not pid:
+        return True
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return True
+        return True
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(0x1000, False, pid)   # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ctypes.GetLastError() == 5                # access denied: it exists
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == 259                         # STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 @contextmanager
 def _fluentcontrol_lock(timeout_s: float = 900.0) -> Iterator[None]:
     """One FluentControl check at a time (it drives a single desktop window)."""
@@ -204,8 +239,8 @@ def _fluentcontrol_lock(timeout_s: float = 900.0) -> Iterator[None]:
             os.close(fd)
             break
         except FileExistsError:
-            try:  # a lock older than the timeout belongs to a dead check
-                if time.time() - _LOCK.stat().st_mtime > timeout_s:
+            try:  # a lock of a process that is gone (Cancel kills the tree), or an old one, is stale
+                if not _pid_alive(_lock_owner()) or time.time() - _LOCK.stat().st_mtime > timeout_s:
                     _LOCK.unlink(missing_ok=True)
                     continue
             except OSError:

@@ -22,8 +22,20 @@ function resolveInRoot(p: string): string {
   return path.isAbsolute(p) ? p : path.join(root, p);
 }
 
+// The deck profile setting as an absolute path, or undefined when not set
+// (an empty setting must not become the workspace root).
+export function profileDir(): string | undefined {
+  const profile = (settings().get<string>("profile", "") ?? "").trim();
+  return profile ? resolveInRoot(profile) : undefined;
+}
+
+function profileArgs(): string[] {
+  const dir = profileDir();
+  return dir ? ["--profile", dir] : [];
+}
+
 // Model settings become the FLUENTVIBE_LM_* variables the CLI reads.
-function cliEnv(): NodeJS.ProcessEnv {
+export function cliEnv(): NodeJS.ProcessEnv {
   const s = settings();
   const env: NodeJS.ProcessEnv = { ...process.env, PYTHONUNBUFFERED: "1", PYTHONIOENCODING: "utf-8" };
   const set = (name: string, value: string | number | undefined) => {
@@ -49,12 +61,29 @@ function runCli(
 ): Promise<{ code: number; stdout: string }> {
   const python = settings().get<string>("pythonPath", "python");
   return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: { code: number; stdout: string }) => {
+      if (!settled) {
+        settled = true;
+        resolve(result);
+      }
+    };
     const child = cp.spawn(python, ["-m", "fluentvibe.cli", ...args], {
       cwd: workspaceRoot(),
       env: { ...cliEnv(), ...extraEnv },
     });
-    // Cancel ends the CLI; its open model request closes with it.
-    cancel?.onCancellationRequested(() => child.kill());
+    // A missing interpreter never emits "close": without this the progress
+    // notification would spin forever.
+    child.on("error", (err) => {
+      output.appendLine(`Could not start ${python}: ${err.message}`);
+      vscode.window.showErrorMessage(
+        `fluentvibe: could not start "${python}" (${err.message}). Set fluentvibe.pythonPath.`
+      );
+      finish({ code: 127, stdout });
+    });
+    // Cancel ends the CLI and everything it started (the FluentControl
+    // check runs in a child process); its open model request closes with it.
+    cancel?.onCancellationRequested(() => killTree(child));
     let stdout = "";
     let pending = "";
     const feed = (chunk: Buffer) => {
@@ -83,9 +112,40 @@ function runCli(
       if (pending) {
         onLine(pending);
       }
-      resolve({ code: code ?? 1, stdout });
+      finish({ code: code ?? 1, stdout });
     });
   });
+}
+
+function killTree(child: cp.ChildProcess): void {
+  if (process.platform === "win32" && child.pid) {
+    // child.kill() ends only the python process on Windows, not its children.
+    cp.spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+  } else {
+    child.kill();
+  }
+}
+
+// The JSON result a command prints last: the last line-start "{" that parses
+// (a log line can contain braces, e.g. "[lm] ... ({...})").
+function lastJson<T>(stdout: string): T | undefined {
+  const starts: number[] = [];
+  const re = /^\{/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stdout)) !== null) {
+    starts.push(m.index);
+  }
+  for (const start of starts.reverse()) {
+    const end = stdout.indexOf("\n}", start);
+    for (const text of [stdout.slice(start), end >= 0 ? stdout.slice(start, end + 2) : "", stdout.slice(start).split(/\r?\n/)[0]]) {
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        // not this one
+      }
+    }
+  }
+  return undefined;
 }
 
 export async function generateFromDocument(): Promise<void> {
@@ -108,7 +168,7 @@ export async function generateFromDocument(): Promise<void> {
   }
   const mode = await vscode.window.showQuickPick(
     [
-      { label: "Fast", description: "document → spec → protocol from checked building blocks (~3 min)", value: "fast" },
+      { label: "Fast", description: "document → spec → protocol from checked building blocks (~15 min)", value: "fast" },
       { label: "Full Python", description: "the model writes the protocol in the DSL (~15-25 min)", value: "full" },
     ],
     { title: "How should the protocol be written?", ignoreFocusOut: true }
@@ -119,14 +179,14 @@ export async function generateFromDocument(): Promise<void> {
   const stem = path.basename(doc, path.extname(doc)).replace(/[^0-9A-Za-z_-]+/g, "_").slice(0, 40);
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const outDir = resolveInRoot(path.join(settings().get<string>("outputDir", "build/eval"), `${stem}-${stamp}`));
-  const profile = resolveInRoot(settings().get<string>("profile", ""));
   const checkInstructions = request.trim() && settings().get<boolean>("checkInstructions", true);
   let args: string[];
   let extraEnv: NodeJS.ProcessEnv = {};
   if (mode.value === "fast") {
-    args = ["author-spec", doc, "--profile", profile, "-o", outDir];
+    args = ["author-spec", doc, ...profileArgs(), "-o", outDir];
     if (request.trim()) {
-      args.push("--request", request.trim());
+      // "--request=" keeps a request that starts with "-" from reading as a flag.
+      args.push(`--request=${request.trim()}`);
     }
     if (checkInstructions) {
       args.push("--check-instructions");
@@ -138,11 +198,13 @@ export async function generateFromDocument(): Promise<void> {
       args.push("--choose");
     }
   } else {
-    args = ["author", request.trim() || "Automate this protocol on this deck.", "--document", doc,
-            "--profile", profile, "--output-dir", outDir, "--lab-scope", "skills", "--model-trace"];
+    args = ["author", "--document", doc, ...profileArgs(), "--output-dir", outDir, "--lab-scope", "skills",
+            "--model-trace"];
     if (checkInstructions) {
       args.push("--check-instructions");
     }
+    // The request last, after "--": it may start with "-".
+    args.push("--", request.trim() || "Automate this protocol on this deck.");
     if (settings().get<boolean>("fluentControlCheck", true)) {
       extraEnv = { FLUENTVIBE_FC_CHECK: "1" };
     }
@@ -199,7 +261,9 @@ export async function generateFromDocument(): Promise<void> {
   const secs = Math.round((Date.now() - started) / 1000);
   const resultPath = path.join(outDir, "result.json");
   if (!fs.existsSync(resultPath)) {
-    vscode.window.showErrorMessage(`fluentvibe: generation failed after ${secs} s — see the fluentvibe output.`);
+    vscode.window.showErrorMessage(
+      result.code === 127 ? "fluentvibe: Python could not be started — see the fluentvibe output."
+        : `fluentvibe: generation failed after ${secs} s — see the fluentvibe output.`);
     return;
   }
   const summary = JSON.parse(fs.readFileSync(resultPath, "utf8"));
@@ -217,17 +281,26 @@ export async function generateFromDocument(): Promise<void> {
     await vscode.window.showTextDocument(opened, vscode.ViewColumn.One);
   }
   const fc = summary.fc_ok === true ? "FluentControl: no InfoPad errors" :
-    summary.fc_ok === false ? `FluentControl: ${summary.fc_findings.length} finding(s)` : "not checked in FluentControl";
+    summary.fc_ok === false ? `FluentControl: ${(summary.fc_findings ?? []).length} finding(s)` : "not checked in FluentControl";
   const todo = summary.todo_steps ? `, ${summary.todo_steps} step(s) left to author` : "";
   const ins = summary.instructions;
   const insText = ins && ins.total
     ? ` — your instructions: ${ins.verified}/${ins.total} verified` +
       (ins.failed ? `, ${ins.failed} NOT met` : "") + (ins.unverified ? `, ${ins.unverified} not checkable` : "")
     : "";
-  const text = summary.stage === "done"
+  // Fast reports "done", Full Python "success".
+  const done = summary.stage === "done" || summary.stage === "success";
+  if (summary.stage === "clarification_required") {
+    const asked = (summary.questions ?? questions).join(" | ");
+    vscode.window.showWarningMessage(
+      `fluentvibe: the model needs answers before it writes the protocol: ${asked || "see the fluentvibe output"}. ` +
+      "Add them to your request and run again.");
+    return;
+  }
+  const text = done
     ? `fluentvibe: protocol generated in ${secs} s — ${fc}${todo}${insText}.`
     : `fluentvibe: stopped at ${summary.stage} after ${secs} s: ${summary.error ?? ""}`;
-  const ok = summary.stage === "done" && summary.fc_ok !== false && !(ins && ins.failed);
+  const ok = done && summary.fc_ok !== false && !(ins && ins.failed);
   (ok ? vscode.window.showInformationMessage : vscode.window.showWarningMessage)(text);
 }
 
@@ -248,24 +321,19 @@ export async function openInFluentControl(): Promise<void> {
   await editor.document.save();
   const checkedVersion = editor.document.version;
   const file = editor.document.uri.fsPath;
-  const args = ["fc-open", file, "--json"];
-  const profile = settings().get<string>("profile", "");
-  if (profile) {
-    args.push("--profile", resolveInRoot(profile));
-  }
+  const args = ["fc-open", file, "--json", ...profileArgs()];
   const started = Date.now();
   const { code, stdout } = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: opening in FluentControl…" },
-    () => runCli(args, (line) => output.appendLine(line))
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: opening in FluentControl…", cancellable: true },
+    (_progress, cancelToken) => runCli(args, (line) => output.appendLine(line), undefined, {}, cancelToken)
   );
   const secs = Math.round((Date.now() - started) / 1000);
-  const jsonLine = stdout.split(/\r?\n/).reverse().find((l) => l.trim().startsWith("{"));
-  if (code !== 0 || !jsonLine) {
+  const result = lastJson<{ opened: boolean; load_error: string; findings: FcFinding[] }>(stdout);
+  if (code !== 0 || !result) {
     vscode.window.showErrorMessage("fluentvibe: FluentControl check failed — see the fluentvibe output.");
     output.show(true);
     return;
   }
-  const result = JSON.parse(jsonLine) as { opened: boolean; load_error: string; findings: FcFinding[] };
   if (!result.opened) {
     vscode.window.showErrorMessage(`FluentControl could not load the script: ${result.load_error}`);
     return;
@@ -306,11 +374,7 @@ export async function pullFluentControlEdits(): Promise<void> {
   if (!editor) {
     return;
   }
-  const args = ["fc-pull", editor.document.uri.fsPath];
-  const profile = settings().get<string>("profile", "");
-  if (profile) {
-    args.push("--profile", resolveInRoot(profile));
-  }
+  const args = ["fc-pull", editor.document.uri.fsPath, ...profileArgs()];
   output.show(true);
   output.appendLine("\n--- FluentControl edits ---");
   await runCli(args, (line) => output.appendLine(line));
@@ -333,7 +397,7 @@ export async function convertOpentrons(): Promise<void> {
   const stem = path.basename(file, ".py").replace(/[^0-9A-Za-z_-]+/g, "_").slice(0, 40);
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const outDir = resolveInRoot(path.join(settings().get<string>("outputDir", "build/eval"), `ot-${stem}-${stamp}`));
-  const args = ["opentrons", file, "--profile", resolveInRoot(settings().get<string>("profile", "")), "-o", outDir];
+  const args = ["opentrons", file, ...profileArgs(), "-o", outDir];
   if (settings().get<boolean>("fluentControlCheck", true)) {
     args.push("--fc-check");
   }
@@ -342,15 +406,15 @@ export async function convertOpentrons(): Promise<void> {
   output.appendLine(`Opentrons protocol: ${file}`);
   const started = Date.now();
   await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: Opentrons → FluentControl" },
-    (progress) =>
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: Opentrons → FluentControl", cancellable: true },
+    (progress, cancelToken) =>
       runCli(args, (line) => {
         output.appendLine(line);
         const m = /^progress: (.*)$/.exec(line);
         if (m) {
           progress.report({ message: `${m[1]} (${Math.round((Date.now() - started) / 1000)} s)` });
         }
-      })
+      }, undefined, {}, cancelToken)
   );
   const secs = Math.round((Date.now() - started) / 1000);
   const resultPath = path.join(outDir, "result.json");
@@ -368,7 +432,7 @@ export async function convertOpentrons(): Promise<void> {
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(draft), vscode.ViewColumn.One);
   }
   const fc = summary.fc_ok === true ? "FluentControl: no InfoPad errors" :
-    summary.fc_ok === false ? `FluentControl: ${summary.fc_findings.length} finding(s)` : "compiled and simulated";
+    summary.fc_ok === false ? `FluentControl: ${(summary.fc_findings ?? []).length} finding(s)` : "compiled and simulated";
   if (summary.stage === "done") {
     vscode.window.showInformationMessage(`fluentvibe: Opentrons protocol converted in ${secs} s — ${fc}.`);
   } else {
@@ -392,21 +456,17 @@ export async function setInstructions(): Promise<void> {
     return;
   }
   await editor.document.save();
-  const args = ["requirements", editor.document.uri.fsPath, "--request", request];
-  const profile = settings().get<string>("profile", "");
-  if (profile) {
-    args.push("--profile", resolveInRoot(profile));
-  }
+  const args = ["requirements", editor.document.uri.fsPath, `--request=${request}`, ...profileArgs()];
   const { stdout } = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: turning your instructions into a checklist…" },
-    () => runCli(args, (line) => output.appendLine(line))
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: turning your instructions into a checklist…",
+      cancellable: true },
+    (_progress, cancelToken) => runCli(args, (line) => output.appendLine(line), undefined, {}, cancelToken)
   );
-  const start = stdout.indexOf("{");
-  if (start < 0) {
+  const result = lastJson<{ verdicts: { status: string }[] }>(stdout);
+  if (!result || !Array.isArray(result.verdicts)) {
     vscode.window.showErrorMessage("fluentvibe: could not build the checklist — see the fluentvibe output.");
     return;
   }
-  const result = JSON.parse(stdout.slice(start)) as { verdicts: { status: string }[] };
   const passed = result.verdicts.filter((v) => v.status === "pass").length;
   // Saving again makes the language server re-check the file with the new checklist.
   await editor.document.save();
@@ -425,14 +485,11 @@ export async function showReplay(): Promise<void> {
   await editor.document.save();
   const file = editor.document.uri.fsPath;
   const out = file.replace(/\.py$/i, "") + ".replay.html";
-  const args = ["replay", file, "-o", out];
-  const profile = settings().get<string>("profile", "");
-  if (profile) {
-    args.push("--profile", resolveInRoot(profile));
-  }
+  const args = ["replay", file, "-o", out, ...profileArgs()];
   const { code } = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: simulating the protocol for the replay…" },
-    () => runCli(args, (line) => output.appendLine(line))
+    { location: vscode.ProgressLocation.Notification, title: "fluentvibe: simulating the protocol for the replay…",
+      cancellable: true },
+    (_progress, cancelToken) => runCli(args, (line) => output.appendLine(line), undefined, {}, cancelToken)
   );
   if (code !== 0 || !fs.existsSync(out)) {
     vscode.window.showErrorMessage("fluentvibe: replay failed — see the fluentvibe output.");

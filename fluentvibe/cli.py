@@ -706,8 +706,9 @@ def _activate_profile(args):
 
 
 def _author_checklist(args, result, python_path, pending, seconds: float) -> None:
-    """Check the instruction/document checklist on the authored protocol and
-    write requirements.md + result.json (same shape as author-spec)."""
+    """Write result.json (same shape as author-spec; the editor reads it after
+    every run) and, when a checklist is pending, check it on the authored
+    protocol and write requirements.md."""
     import json as _json
 
     from .authoring.eval_rubric import build_worktable_from_source
@@ -718,11 +719,16 @@ def _author_checklist(args, result, python_path, pending, seconds: float) -> Non
     summary: dict[str, Any] = {"stage": result.status.value, "error": None, "fc_ok": None, "todo_steps": 0,
                                "draft": str(python_path) if python_path else None,
                                "timings": {"total_s": round(seconds, 1)}}
-    try:
-        reqs, dispositions = pending.result(timeout=1800)
-    except Exception as exc:  # noqa: BLE001
-        summary["error"] = f"checklist: {type(exc).__name__}: {exc}"[:300]
-        reqs, dispositions = [], []
+    if result.status.value == "clarification_required":
+        summary["questions"] = [q.question for q in result.clarification_questions]
+    elif result.status.value not in ("success", "approval_required"):
+        summary["error"] = (result.failure_message or "")[:300] or None
+    reqs, dispositions = [], []
+    if pending is not None:
+        try:
+            reqs, dispositions = pending.result(timeout=1800)
+        except Exception as exc:  # noqa: BLE001
+            summary["error"] = f"checklist: {type(exc).__name__}: {exc}"[:300]
     verdicts = []
     if python_path and Path(python_path).exists() and reqs:
         try:
@@ -834,7 +840,7 @@ def _cmd_author(args) -> int:
         **kwargs,
     )
     python_path = result.validation.python_path if result.validation else None
-    if pending_checklist is not None:
+    if args.output_dir is not None:
         _author_checklist(args, result, python_path, pending_checklist,
                           __import__("time").monotonic() - started)
     if args.as_json:
@@ -1102,7 +1108,11 @@ def _cmd_requirements(args) -> int:
     from .authoring.eval_rubric import build_worktable_from_source
     from .authoring.profile import PROFILE_DIR_ENV
     from .authoring.requirements import (
-        extract_requirements, load_requirements, save_requirements, sidecar_path, verify_all,
+        extract_requirements,
+        load_requirements,
+        save_requirements,
+        sidecar_path,
+        verify_all,
     )
 
     if args.profile is not None:
@@ -1126,6 +1136,14 @@ def _cmd_requirements(args) -> int:
             spec, _problems, _raw = extract_bench_spec(client, document)
             if spec is not None:
                 requirements += requirements_from_spec(spec)
+        if sidecar.exists() and not any(r.kind == "document_sequence" and r.params.get("expected")
+                                        for r in requirements):
+            # New instructions replace the old ones, not the document's own
+            # steps that generation saved (the editor's "Set instructions").
+            from .authoring.requirements import load_requirements
+
+            requirements += [r for r in load_requirements(sidecar)
+                             if r.kind == "document_sequence" and r.params.get("expected")]
         save_requirements(sidecar, requirements)
     if not sidecar.exists():
         print(f"error: no checklist {sidecar}; give --request", file=sys.stderr)
