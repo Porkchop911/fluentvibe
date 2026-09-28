@@ -126,6 +126,11 @@ class LMContinuationUnsupported(LMStudioError):
     /v1/completions, or a chat template without an open reasoning block)."""
 
 
+def _count_streamed(token, text: str) -> None:
+    token.streamed_chars = getattr(token, "streamed_chars", 0) + len(text)
+    token.streamed_tokens = token.streamed_chars // 4
+
+
 def _approx_tokens(text: str) -> int:
     """Token estimate for the reasoning budget (~4 characters per token). A
     budget, not a ceiling: the budget is a time bound, not an exact count."""
@@ -540,7 +545,7 @@ class LMStudioChatClient:
                 continue
             parts.append(piece)
             if token is not None:
-                token.streamed_tokens += 1
+                _count_streamed(token, piece)
             joined = "".join(parts)
             if "</think>" not in joined:
                 if show_thinking:
@@ -712,8 +717,6 @@ class LMStudioChatClient:
             token.thinking = ""
         for raw_line in response:
             _cancel.check()
-            if token is not None:
-                token.streamed_tokens += 1
             if deadline is not None and time.monotonic() > deadline:
                 raise TimeoutError
             line = raw_line.decode("utf-8").strip()
@@ -749,6 +752,12 @@ class LMStudioChatClient:
             finish_reason = choice.get("finish_reason") or finish_reason
             stop_reason = choice.get("stop_reason", stop_reason)
             delta = choice.get("delta") or {}
+            if token is not None:
+                # What the page shows: an estimate from the text streamed so far.
+                _count_streamed(token, (delta.get("content") or "")
+                                + "".join(v for v in _reasoning_fields(delta).values() if isinstance(v, str))
+                                + "".join((c.get("function") or {}).get("arguments") or ""
+                                          for c in delta.get("tool_calls") or []))
             if delta.get("content"):
                 content_parts.append(delta["content"])
                 if watch is not None:

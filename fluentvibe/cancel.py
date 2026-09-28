@@ -25,7 +25,8 @@ class CancelToken:
         self._closers: list[Callable[[], None]] = []
         # Stream chunks (about one token each) the model sent for this job: a liveness signal
         # for the page ("the model is writing: 3,400 tokens").
-        self.streamed_tokens = 0
+        self.streamed_tokens = 0   # estimate: streamed characters / 4
+        self.streamed_chars = 0
         # The tail of the model's current reasoning, shown live on the page.
         self.thinking = ""
 
