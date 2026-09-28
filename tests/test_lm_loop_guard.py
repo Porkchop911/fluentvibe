@@ -56,45 +56,131 @@ def test_the_guard_can_be_turned_off(monkeypatch):
         _client().complete(messages=[], tools=[])
 
 
+_TOOLS = [{"type": "function", "function": {"name": "submit_bench_spec"}}]
+_CUT = {"role": "assistant", "content": None, "tool_calls": [],
+        "reasoning_fields": {"reasoning_content": "10. Wash 2-3 times with 1"}}
+_DONE = {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "submit_bench_spec"}}],
+         "reasoning_fields": {"reasoning_content": "X B&W. Done."}}
+
+
 def test_a_reply_cut_off_inside_its_reasoning_is_continued_from_there(monkeypatch):
     """Seen on Dynabeads: the model ends its output mid-sentence of its
     reasoning (~15k tokens). The reply is continued, not started over."""
-    calls = []
+    continued = []
+    monkeypatch.setattr(LMStudioChatClient, "_complete_once", lambda self, **kw: dict(_CUT))
 
-    def fake_once(self, *, messages, tools, continue_final=False, **_kw):
-        calls.append((messages, continue_final))
-        if len(calls) == 1:
-            return {"role": "assistant", "content": None, "tool_calls": [],
-                    "reasoning_fields": {"reasoning_content": "10. Wash 2-3 times with 1"}}
-        return {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "submit_bench_spec"}}],
-                "reasoning_fields": {"reasoning_content": "X B&W. Done."}}
+    def fake_continue(self, *, messages, tools, effort, reasoning, budget):
+        continued.append((reasoning, effort, budget))
+        return dict(_DONE)
 
-    monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
-    message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=[{"type": "function"}])
-    assert message["tool_calls"] and len(calls) == 2 and calls[1][1] is True
-    assert calls[1][0][-1] == {"role": "assistant", "content": "<think>\n10. Wash 2-3 times with 1"}
+    monkeypatch.setattr(LMStudioChatClient, "_continue_reasoning", fake_continue)
+    message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=_TOOLS)
+    assert message["tool_calls"] and continued == [("10. Wash 2-3 times with 1", None, 30000 - 6)]
     assert message["reasoning_fields"]["reasoning_content"] == "10. Wash 2-3 times with 1X B&W. Done."
 
 
 def test_a_reply_that_keeps_ending_inside_its_reasoning_is_retried_at_medium_then_fails(monkeypatch):
-    calls = []
+    once, continued = [], []
 
-    def fake_once(self, *, messages, tools, effort=None, continue_final=False, **_kw):
-        calls.append((messages, effort, continue_final))
+    def fake_once(self, *, messages, tools, effort=None, **_kw):
+        once.append((messages, effort))
         return {"role": "assistant", "content": None, "tool_calls": [],
                 "reasoning_fields": {"reasoning_content": "def build_worktable(): ..."}}
 
+    def fake_continue(self, *, effort, **_kw):
+        continued.append(effort)
+        return dict(_CUT)
+
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
+    monkeypatch.setattr(LMStudioChatClient, "_continue_reasoning", fake_continue)
     with pytest.raises(LMReasoningOnlyError, match="twice"):
-        _client().complete(messages=[{"role": "user", "content": "go"}],
-                           tools=[{"type": "function", "function": {"name": "edit_draft"}}])
-    per_attempt = 1 + lm_client.MAX_CONTINUATIONS
-    assert len(calls) == 2 * per_attempt
-    assert [c[2] for c in calls[:per_attempt]] == [False] + [True] * lm_client.MAX_CONTINUATIONS
-    retry_messages, retry_effort, _ = calls[per_attempt]
-    assert retry_effort == "medium" and "ended inside your reasoning" in retry_messages[-1]["content"]
-    # The retry gets the first attempt's reasoning back instead of starting over.
-    assert "def build_worktable(): ..." in retry_messages[-2]["content"]
+        _client().complete(messages=[{"role": "user", "content": "go"}], tools=_TOOLS)
+    assert [e for _, e in once] == [None, "medium"]                   # two logical attempts, no third
+    assert continued == [None] * lm_client.MAX_CONTINUATIONS + ["medium"] * lm_client.MAX_CONTINUATIONS
+    retry_messages = once[1][0]
+    assert "ended inside your reasoning" in retry_messages[-1]["content"]
+    assert "def build_worktable(): ..." in retry_messages[-2]["content"]   # its notes handed back
+
+
+def test_a_failing_retry_is_final_and_stays_within_the_budget(monkeypatch):
+    """Codex review: budget -> medium -> repetition used to start a third,
+    unbudgeted request at xhigh."""
+    calls = []
+
+    def fake_once(self, *, messages, tools, effort=None, budget=None):
+        calls.append((effort, budget))
+        if len(calls) == 1:
+            raise lm_client.LMReasoningBudgetError("notes", 30000)
+        raise LMRepetitionError("Let me try again.")
+
+    monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
+    with pytest.raises(LMRepetitionError):
+        _client().complete(messages=[{"role": "user", "content": "go"}], tools=_TOOLS)
+    assert calls == [(None, 30000), ("medium", 30000)]
+
+
+def test_a_server_that_cannot_continue_falls_back_to_the_retry(monkeypatch):
+    calls = []
+
+    def fake_once(self, *, messages, tools, effort=None, **_kw):
+        calls.append(effort)
+        return dict(_CUT) if len(calls) == 1 else dict(_DONE)
+
+    def refuse(self, **_kw):
+        raise lm_client.LMContinuationUnsupported("tokenize: HTTP 404")
+
+    monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
+    monkeypatch.setattr(LMStudioChatClient, "_continue_reasoning", refuse)
+    client = _client()
+    assert client.complete(messages=[{"role": "user", "content": "go"}], tools=_TOOLS)["tool_calls"]
+    assert calls == [None, "medium"] and client._continuation_ok is False
+
+
+def test_continuation_is_token_exact(monkeypatch):
+    """The server renders the prompt with its own template (ending in an
+    open <think>), the reasoning is appended as raw tokens, and the raw
+    completion's XML tool call is typed by the tool schema."""
+    import io
+    import json as _json
+
+    posted = []
+
+    def fake_post(self, url, body, **_kw):
+        posted.append((url, body))
+        if "messages" in body:
+            return {"tokens": [1, 2, 3], "token_strs": ["assistant", "\u010a", "<think>\u010a"],
+                    "max_model_len": 1000}
+        return {"tokens": [7, 8]}
+
+    sent = {}
+
+    class Stream(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout):
+        sent.update(_json.loads(req.data))
+        text = ('51 = 391.\n</think>\n\n<tool_call>\n<function=submit>\n<parameter=value>\n391\n'
+                '</parameter>\n<parameter=note>\n391\n</parameter>\n</function>\n</tool_call>')
+        lines = [b"data: " + _json.dumps({"choices": [{"text": text[i:i + 20]}]}).encode() + b"\n"
+                 for i in range(0, len(text), 20)]
+        return Stream(b"".join(lines) + b"data: [DONE]\n")
+
+    monkeypatch.setattr(LMStudioChatClient, "_post_json", fake_post)
+    monkeypatch.setattr(lm_client.urllib.request, "urlopen", fake_urlopen)
+    tools = [{"type": "function", "function": {"name": "submit", "parameters": {"type": "object", "properties": {
+        "value": {"type": "number"}, "note": {"type": "string"}}}}}]
+    client = LMStudioChatClient(endpoint="http://h:1/v1/chat/completions", model="m", reasoning_effort="xhigh")
+    message = client._continue_reasoning(messages=[{"role": "user", "content": "go"}], tools=tools,
+                                         effort="medium", reasoning="17*3 = ", budget=1000)
+    assert posted[0][0] == "http://h:1/tokenize" and posted[0][1]["chat_template_kwargs"] == {"reasoning_effort": "medium"}
+    assert posted[1][1] == {"model": "m", "prompt": "17*3 = ", "add_special_tokens": False}
+    assert sent["prompt"] == [1, 2, 3, 7, 8] and sent["max_tokens"] == 995
+    assert message["reasoning_fields"]["reasoning_content"] == "51 = 391.\n"
+    assert _json.loads(message["tool_calls"][0]["function"]["arguments"]) == {"value": 391, "note": "391"}
 
 
 def test_no_tool_fields_are_sent_without_tools(monkeypatch):
@@ -180,7 +266,7 @@ def test_a_turn_over_budget_is_retried_once_at_medium_with_its_notes(monkeypatch
     def fake_once(self, *, messages, tools, effort=None, budget=None):
         calls.append((messages, effort, budget))
         if len(calls) == 1:
-            raise lm_client.LMReasoningBudgetError("volumes: 50 ul beads, 100 ul DNA", 20000)
+            raise lm_client.LMReasoningBudgetError("volumes: 50 ul beads, 100 ul DNA", 30000)
         return {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "submit_bench_spec"}}]}
 
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
