@@ -109,12 +109,21 @@ FALLBACK_REASONING_EFFORT = "medium"
 
 def _reasoning_budget_from_env() -> int | None:
     """Reasoning tokens a turn may use before it is stopped and retried
-    (``FLUENTVIBE_LM_REASONING_BUDGET``; default 20000, 0 = no limit)."""
+    (``FLUENTVIBE_LM_REASONING_BUDGET``; default 30000, 0 = no limit)."""
     raw = os.environ.get("FLUENTVIBE_LM_REASONING_BUDGET", "").strip()
     if not raw:
-        return 20000
+        return 30000
     value = int(raw)
     return value if value > 0 else None
+
+
+# A reply cut off inside its reasoning is continued this many times.
+MAX_CONTINUATIONS = 2
+
+
+def _longest_reasoning(message: dict[str, Any]) -> str:
+    return max((v for v in (message.get("reasoning_fields") or {}).values() if isinstance(v, str)),
+               key=len, default="")
 
 
 def _dump_reasoning_only(message: dict[str, Any], label: str) -> None:
@@ -302,8 +311,8 @@ class LMStudioChatClient:
         instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
         try:
             try:
-                message = self._complete_once(messages=messages, tools=tools,
-                                              budget=_reasoning_budget_from_env() if tools else None)
+                message = self._complete_continued(messages=messages, tools=tools,
+                                                   budget=_reasoning_budget_from_env() if tools else None)
             except LMReasoningBudgetError as exc:
                 if not _loop_guard_enabled():
                     raise
@@ -325,11 +334,11 @@ class LMStudioChatClient:
                             key=len, default="")[-8000:]
                 handback = ([{"role": "assistant", "content": f"(My notes from the previous attempt:)\n{notes}"}]
                             if notes.strip() else [])
-                retry = self._complete_once(messages=[*messages, *handback, {"role": "user", "content": (
+                retry = self._complete_continued(messages=[*messages, *handback, {"role": "user", "content": (
                     "Your previous reply ended inside your reasoning (or ran too long), without a tool call. "
                     + ("Your notes are above: do not re-derive them. " if handback else "")
                     + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
-                )}], tools=tools, effort=FALLBACK_REASONING_EFFORT)
+                )}], tools=tools, effort=FALLBACK_REASONING_EFFORT, budget=_reasoning_budget_from_env())
                 if _reasoning_only(retry):
                     _dump_reasoning_only(retry, "retry")
                     raise LMReasoningOnlyError(
@@ -356,6 +365,39 @@ class LMStudioChatClient:
                 )
             return self._complete_once(messages=[*messages, {"role": "user", "content": nudge}], tools=tools)
 
+    def _complete_continued(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        effort: str | None = None,
+        budget: int | None = None,
+    ) -> dict[str, Any]:
+        """One reply. The model sometimes ends its output in mid-sentence of its
+        reasoning (seen at ~15k reasoning tokens, xhigh and medium alike); that
+        reply is continued from where it stopped instead of started over."""
+        message = self._complete_once(messages=messages, tools=tools, effort=effort, budget=budget)
+        reasoning = _longest_reasoning(message)
+        for _ in range(MAX_CONTINUATIONS):
+            if not (tools and _loop_guard_enabled() and _reasoning_only(message)):
+                break
+            _dump_reasoning_only(message, "cut")
+            left = None if budget is None else budget - len(reasoning) // 4
+            if left is not None and left <= 0:
+                raise LMReasoningBudgetError(reasoning[-8000:], budget)
+            if self.trace_recorder is not None:
+                self.trace_recorder.record("turn_retry", reason="reasoning_cut_continued")
+            print("[lm] reply stopped inside its reasoning -- continuing it from there", flush=True)
+            try:
+                message = self._complete_once(
+                    messages=[*messages, {"role": "assistant", "content": "<think>\n" + reasoning}],
+                    tools=tools, effort=effort, budget=left, continue_final=True)
+            except LMReasoningBudgetError as exc:
+                raise LMReasoningBudgetError((reasoning + exc.notes)[-8000:], budget or 0) from exc
+            reasoning += _longest_reasoning(message)
+            message["reasoning_fields"] = {"reasoning_content": reasoning}
+        return message
+
     def _complete_once(
         self,
         *,
@@ -363,6 +405,7 @@ class LMStudioChatClient:
         tools: list[dict[str, Any]],
         effort: str | None = None,
         budget: int | None = None,
+        continue_final: bool = False,
     ) -> dict[str, Any]:
         request_tools = _strict_workflow_tools(tools) if _truthy(os.environ.get("FLUENTVIBE_LM_STRICT_WORKFLOW")) else tools
         payload = {
@@ -390,6 +433,9 @@ class LMStudioChatClient:
             payload["reasoning_effort"] = effort or self.reasoning_effort
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
+        if continue_final:
+            # vLLM: continue the last (assistant) message instead of starting a reply.
+            payload.update({"continue_final_message": True, "add_generation_prompt": False})
         if self.trace_recorder is not None:
             self.trace_recorder.record(
                 "request_payload",
