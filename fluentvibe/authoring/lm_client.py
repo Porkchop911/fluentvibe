@@ -121,6 +121,40 @@ def _reasoning_budget_from_env() -> int | None:
 MAX_CONTINUATIONS = 2
 
 
+class LMContinuationUnsupported(LMStudioError):
+    """The endpoint cannot continue a reply token-exactly (no /tokenize or
+    /v1/completions, or a chat template without an open reasoning block)."""
+
+
+def _approx_tokens(text: str) -> int:
+    """Token estimate for the reasoning budget (~4 characters per token). A
+    budget, not a ceiling: the budget is a time bound, not an exact count."""
+    return len(text) // 4
+
+
+def _schema_calls(text: str, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Tool calls written as Qwen XML in raw completion text, with parameter
+    values typed by the tool's schema (a string parameter stays a string)."""
+    schemas = {str((t.get("function") or {}).get("name")): ((t.get("function") or {}).get("parameters") or {})
+               for t in tools or ()}
+    calls = []
+    for idx, body in enumerate(_TOOL_CALL_BLOCK_RE.findall(text)):
+        fn = _FUNCTION_RE.search(body)
+        if fn is None:
+            continue
+        name = fn.group(1).strip()
+        props = (schemas.get(name) or {}).get("properties") or {}
+        args = {}
+        for pname, pval in _PARAMETER_RE.findall(fn.group(2)):
+            pname = pname.strip()
+            kind = (props.get(pname) or {}).get("type")
+            is_str = kind == "string" or (isinstance(kind, list) and kind and kind[0] == "string")
+            args[pname] = pval.strip("\n") if is_str else _coerce_arg(pval)
+        calls.append({"id": f"continued-{idx}", "type": "function",
+                      "function": {"name": name, "arguments": json.dumps(args, default=str)}})
+    return calls
+
+
 def _longest_reasoning(message: dict[str, Any]) -> str:
     return max((v for v in (message.get("reasoning_fields") or {}).values() if isinstance(v, str)),
                key=len, default="")
@@ -306,64 +340,52 @@ class LMStudioChatClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        """One model turn. A reply that loops on one line, or runs out of
-        output tokens before any tool call, is retried once with a short
-        instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
+        """One model turn, bounded: at most two logical attempts -- the
+        configured effort, then ONE recovery at FALLBACK_REASONING_EFFORT (the
+        user's approved exception to always-xhigh) -- each within the
+        reasoning budget and with up to MAX_CONTINUATIONS token-exact
+        continuations of a reply cut off inside its reasoning. A failure of the
+        recovery is final. ``FLUENTVIBE_LM_LOOP_GUARD=0`` turns recovery off."""
+        if not _loop_guard_enabled():
+            return self._complete_once(messages=messages, tools=tools)
+        budget = _reasoning_budget_from_env() if tools else None
+        notes = ""
         try:
-            try:
-                message = self._complete_continued(messages=messages, tools=tools,
-                                                   budget=_reasoning_budget_from_env() if tools else None)
-            except LMReasoningBudgetError as exc:
-                if not _loop_guard_enabled():
-                    raise
-                if self.trace_recorder is not None:
-                    self.trace_recorder.record("turn_retry", reason="reasoning_budget")
-                print(f"[lm] {exc} -- retrying once at {FALLBACK_REASONING_EFFORT} effort", flush=True)
-                message = {"reasoning_fields": {"reasoning_content": exc.notes}}
-            if tools and _loop_guard_enabled() and _reasoning_only(message):
-                # The turn ended inside the reasoning (seen with vLLM: the draft
-                # written in reasoning, finish_reason=stop, no text, no tool call).
-                _dump_reasoning_only(message, "first")
-                if self.trace_recorder is not None:
-                    self.trace_recorder.record("turn_retry", reason="reasoning_only")
-                print(f"[lm] reply ended inside its reasoning without a tool call -- retrying the turn once "
-                      f"at {FALLBACK_REASONING_EFFORT} effort", flush=True)
-                # Hand the model its own reasoning back: re-deriving it from
-                # scratch costs another 5-8 minutes at high effort.
-                notes = max((v for v in (message.get("reasoning_fields") or {}).values() if isinstance(v, str)),
-                            key=len, default="")[-8000:]
-                handback = ([{"role": "assistant", "content": f"(My notes from the previous attempt:)\n{notes}"}]
-                            if notes.strip() else [])
-                retry = self._complete_continued(messages=[*messages, *handback, {"role": "user", "content": (
-                    "Your previous reply ended inside your reasoning (or ran too long), without a tool call. "
-                    + ("Your notes are above: do not re-derive them. " if handback else "")
-                    + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
-                )}], tools=tools, effort=FALLBACK_REASONING_EFFORT, budget=_reasoning_budget_from_env())
-                if _reasoning_only(retry):
-                    _dump_reasoning_only(retry, "retry")
-                    raise LMReasoningOnlyError(
-                        "Model ended inside reasoning twice without text or a tool call."
-                    )
-                return retry
-            return message
-        except (LMRepetitionError, LMOutputLimitError) as exc:
-            if not _loop_guard_enabled():
-                raise
-            if self.trace_recorder is not None:
-                self.trace_recorder.record("turn_retry", reason=type(exc).__name__, error=str(exc))
-            print(f"[lm] {exc} -- retrying the turn once", flush=True)
-            if isinstance(exc, LMRepetitionError):
-                nudge = (
-                    f"Your previous reply got stuck repeating the same line ({exc.line[:120]!r}) and was "
-                    "stopped. Do not re-derive it. Decide now and make one of the offered tool calls: "
-                    f"{_tool_names(tools)}."
-                )
-            else:
-                nudge = (
-                    "Your previous reply ran out of output tokens before any tool call. Keep the "
-                    f"reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
-                )
-            return self._complete_once(messages=[*messages, {"role": "user", "content": nudge}], tools=tools)
+            message = self._complete_continued(messages=messages, tools=tools, budget=budget)
+            if not (tools and _reasoning_only(message)):
+                return message
+            _dump_reasoning_only(message, "first")
+            notes = _longest_reasoning(message)[-8000:]
+            why, reason = "ended inside your reasoning, without a tool call or any text", "reasoning_only"
+        except LMReasoningBudgetError as exc:
+            notes = exc.notes
+            why, reason = "reasoned past its budget without a tool call", "reasoning_budget"
+        except LMRepetitionError as exc:
+            why, reason = f"got stuck repeating the same line ({exc.line[:120]!r}) and was stopped", "repetition"
+        except LMOutputLimitError:
+            why, reason = "ran out of output tokens before any tool call", "output_limit"
+        if self.trace_recorder is not None:
+            self.trace_recorder.record("turn_retry", reason=reason)
+        print(f"[lm] reply {why} -- one retry at {FALLBACK_REASONING_EFFORT} effort", flush=True)
+        # Hand the model its own reasoning back: re-deriving it from scratch
+        # costs another 5-8 minutes.
+        handback = ([{"role": "assistant", "content": f"(My notes from the previous attempt:)\n{notes}"}]
+                    if notes.strip() else [])
+        retry_messages = [*messages, *handback, {"role": "user", "content": (
+            f"Your previous reply {why}. "
+            + ("Your notes are above: do not re-derive them. " if handback else "Do not re-derive it. ")
+            + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
+        )}]
+        try:
+            retry = self._complete_continued(messages=retry_messages, tools=tools,
+                                             effort=FALLBACK_REASONING_EFFORT, budget=budget)
+        except LMReasoningBudgetError as exc:
+            raise LMReasoningOnlyError("Model reasoned past its budget on the retry too, without a tool call.") \
+                from exc
+        if tools and _reasoning_only(retry):
+            _dump_reasoning_only(retry, "retry")
+            raise LMReasoningOnlyError("Model ended inside reasoning twice without text or a tool call.")
+        return retry
 
     def _complete_continued(
         self,
@@ -373,30 +395,165 @@ class LMStudioChatClient:
         effort: str | None = None,
         budget: int | None = None,
     ) -> dict[str, Any]:
-        """One reply. The model sometimes ends its output in mid-sentence of its
-        reasoning (seen at ~15k reasoning tokens, xhigh and medium alike); that
-        reply is continued from where it stopped instead of started over."""
+        """One logical attempt. The model sometimes ends its output in
+        mid-sentence of its reasoning (seen at ~15k reasoning tokens, xhigh and
+        medium alike); that reply is continued from exactly where it stopped
+        (:meth:`_continue_reasoning`) instead of started over."""
         message = self._complete_once(messages=messages, tools=tools, effort=effort, budget=budget)
         reasoning = _longest_reasoning(message)
         for _ in range(MAX_CONTINUATIONS):
-            if not (tools and _loop_guard_enabled() and _reasoning_only(message)):
+            if not (tools and _reasoning_only(message)) or not getattr(self, "_continuation_ok", True):
                 break
             _dump_reasoning_only(message, "cut")
-            left = None if budget is None else budget - len(reasoning) // 4
+            left = None if budget is None else budget - _approx_tokens(reasoning)
             if left is not None and left <= 0:
                 raise LMReasoningBudgetError(reasoning[-8000:], budget)
             if self.trace_recorder is not None:
-                self.trace_recorder.record("turn_retry", reason="reasoning_cut_continued")
+                self.trace_recorder.record("turn_retry", reason="reasoning_cut_continued",
+                                           stop_reason=message.get("stop_reason"))
             print("[lm] reply stopped inside its reasoning -- continuing it from there", flush=True)
             try:
-                message = self._complete_once(
-                    messages=[*messages, {"role": "assistant", "content": "<think>\n" + reasoning}],
-                    tools=tools, effort=effort, budget=left, continue_final=True)
+                message = self._continue_reasoning(messages=messages, tools=tools, effort=effort,
+                                                   reasoning=reasoning, budget=left)
+            except LMContinuationUnsupported as exc:
+                self._continuation_ok = False
+                print(f"[lm] this server cannot continue a reply ({exc}); retrying instead", flush=True)
+                break
             except LMReasoningBudgetError as exc:
                 raise LMReasoningBudgetError((reasoning + exc.notes)[-8000:], budget or 0) from exc
             reasoning += _longest_reasoning(message)
             message["reasoning_fields"] = {"reasoning_content": reasoning}
         return message
+
+    def _post_json(self, url: str, body: dict[str, Any], *, timeout: float = 120.0) -> dict[str, Any]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise LMContinuationUnsupported(f"{url.rsplit('/', 1)[-1]}: HTTP {exc.code}") from exc
+        except (urllib.error.URLError, json.JSONDecodeError) as exc:
+            raise LMContinuationUnsupported(f"{url.rsplit('/', 1)[-1]}: {exc}") from exc
+
+    def _continue_reasoning(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        effort: str | None,
+        reasoning: str,
+        budget: int | None,
+    ) -> dict[str, Any]:
+        """Continue a reply cut off inside its reasoning, token-exact: the
+        server renders the conversation with its own chat template (the
+        generation prompt ends in an open ``<think>`` block), the reasoning so
+        far is appended as raw tokens, and ``/v1/completions`` carries on.
+        (A chat request with the reasoning as assistant content renders as an
+        empty closed block plus a new one: not the same context.)"""
+        root = self.endpoint.split("/v1/", 1)[0]
+        request_tools = _strict_workflow_tools(tools) if _truthy(os.environ.get("FLUENTVIBE_LM_STRICT_WORKFLOW")) else tools
+        body: dict[str, Any] = {"model": self.model, "messages": messages, "add_generation_prompt": True,
+                                "return_token_strs": True}
+        if request_tools:
+            body["tools"] = request_tools
+        chosen = effort or self.reasoning_effort
+        if chosen is not None:
+            body["chat_template_kwargs"] = {"reasoning_effort": chosen}
+        prompt = self._post_json(root + "/tokenize", body)
+        tail = "".join((prompt.get("token_strs") or [])[-4:])
+        if not prompt.get("tokens") or "<think>" not in tail:
+            raise LMContinuationUnsupported("the rendered prompt does not end in an open reasoning block")
+        more = self._post_json(root + "/tokenize", {"model": self.model, "prompt": reasoning,
+                                                    "add_special_tokens": False})
+        payload: dict[str, Any] = {"model": self.model, "prompt": prompt["tokens"] + (more.get("tokens") or []),
+                                   "stream": True, "temperature": self.temperature, "skip_special_tokens": False}
+        for name in ("top_p", "top_k", "min_p", "presence_penalty", "repetition_penalty"):
+            value = getattr(self, name)
+            if value is not None:
+                payload[name] = value
+        # /v1/completions defaults to 16 tokens (chat: the rest of the context).
+        room = (int(prompt["max_model_len"]) - len(payload["prompt"])) if prompt.get("max_model_len") else 32768
+        if room <= 0:
+            raise LMOutputLimitError("the context is full; the reply cannot be continued")
+        payload["max_tokens"] = min(self.max_tokens, room) if self.max_tokens is not None else room
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(root + "/v1/completions", data=json.dumps(payload).encode("utf-8"),
+                                     headers=headers, method="POST")
+        from .. import cancel as _cancel
+
+        _cancel.check()
+        token = _cancel.current()
+        started = time.monotonic()
+        try:
+            with urllib.request.urlopen(req, timeout=self.request_timeout_s) as response, \
+                    (token.closing(response.close) if token is not None else contextlib.nullcontext()):
+                text, finish, stop = self._read_text_stream(response, deadline=started + self.request_timeout_s,
+                                                            budget=budget)
+        except urllib.error.HTTPError as exc:
+            raise LMContinuationUnsupported(f"completions: HTTP {exc.code}") from exc
+        except TimeoutError as exc:
+            raise LMStudioError(f"LM Studio request timed out after {self.request_timeout_s:g}s") from exc
+        head, closed, rest = text.partition("</think>")
+        rest = rest.replace("<|im_end|>", "").replace("<|endoftext|>", "").strip()
+        calls = _schema_calls(rest, request_tools) if closed else []
+        content = _TOOL_CALL_BLOCK_RE.sub("", rest).strip() if closed else ""
+        message = {"role": "assistant", "content": content or None, "tool_calls": calls,
+                   "finish_reason": "tool_calls" if calls else finish, "stop_reason": stop,
+                   "reasoning_fields": {"reasoning_content": head}}
+        if self.trace_recorder is not None:
+            self.trace_recorder.record("response_final", model=self.model, endpoint=root + "/v1/completions",
+                                       finish_reason=message["finish_reason"], assistant_content=message["content"],
+                                       tool_calls=calls, reasoning_fields=message["reasoning_fields"])
+        return message
+
+    def _read_text_stream(self, response, *, deadline: float, budget: int | None) -> tuple[str, Any, Any]:
+        """A streamed /v1/completions reply: its text, finish and stop reason.
+        Reasoning (text before ``</think>``) counts against ``budget``."""
+        from .. import cancel as _cancel
+
+        token = _cancel.current()
+        show_thinking = token is not None and _cancel.is_own_thread(token)
+        watch = _RepetitionWatch() if _loop_guard_enabled() else None
+        parts: list[str] = []
+        finish = stop = None
+        for raw_line in response:
+            _cancel.check()
+            if time.monotonic() > deadline:
+                raise TimeoutError
+            line = raw_line.decode("utf-8").strip()
+            if not line.startswith("data:"):
+                continue
+            data_text = line[5:].strip()
+            if data_text == "[DONE]":
+                break
+            chunk = json.loads(data_text)
+            choice = (chunk.get("choices") or [{}])[0]
+            finish = choice.get("finish_reason") or finish
+            stop = choice.get("stop_reason", stop)
+            piece = choice.get("text") or ""
+            if not piece:
+                continue
+            parts.append(piece)
+            if token is not None:
+                token.streamed_tokens += 1
+            joined = "".join(parts)
+            if "</think>" not in joined:
+                if show_thinking:
+                    token.thinking = (token.thinking + piece)[-1200:]
+                if watch is not None:
+                    watch.feed(piece)
+                    looping = watch.looping_line()
+                    if looping is not None:
+                        raise LMRepetitionError(looping)
+                if budget is not None and _approx_tokens(joined) > budget:
+                    response.close()
+                    raise LMReasoningBudgetError(joined[-8000:], budget)
+        return "".join(parts), finish, stop
 
     def _complete_once(
         self,
@@ -405,7 +562,6 @@ class LMStudioChatClient:
         tools: list[dict[str, Any]],
         effort: str | None = None,
         budget: int | None = None,
-        continue_final: bool = False,
     ) -> dict[str, Any]:
         request_tools = _strict_workflow_tools(tools) if _truthy(os.environ.get("FLUENTVIBE_LM_STRICT_WORKFLOW")) else tools
         payload = {
@@ -433,9 +589,6 @@ class LMStudioChatClient:
             payload["reasoning_effort"] = effort or self.reasoning_effort
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
-        if continue_final:
-            # vLLM: continue the last (assistant) message instead of starting a reply.
-            payload.update({"continue_final_message": True, "add_generation_prompt": False})
         if self.trace_recorder is not None:
             self.trace_recorder.record(
                 "request_payload",
@@ -540,6 +693,7 @@ class LMStudioChatClient:
                      budget: int | None = None) -> dict[str, Any]:
         content_parts: list[str] = []
         reasoning_chars = 0
+        stop_reason = None
         tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason: str | None = None
         reasoning_parts: dict[str, list[str]] = {}
@@ -593,6 +747,7 @@ class LMStudioChatClient:
                 raise LMStudioError(f"LM Studio provider error: {provider_error}")
             choice = (chunk.get("choices") or [{}])[0]
             finish_reason = choice.get("finish_reason") or finish_reason
+            stop_reason = choice.get("stop_reason", stop_reason)
             delta = choice.get("delta") or {}
             if delta.get("content"):
                 content_parts.append(delta["content"])
@@ -608,7 +763,7 @@ class LMStudioChatClient:
                         token.thinking = (token.thinking + value)[-1200:]
                     reasoning_chars += len(value)
                     # ~4 characters per token; only while nothing is answered yet.
-                    if budget is not None and reasoning_chars > 4 * budget and not tool_calls \
+                    if budget is not None and reasoning_chars // 4 > budget and not tool_calls \
                             and not "".join(content_parts).strip():
                         response.close()
                         notes = max(("".join(v) for v in reasoning_parts.values()), key=len, default="")
@@ -654,6 +809,8 @@ class LMStudioChatClient:
             "content": "".join(content_parts) or None,
             "tool_calls": [tool_calls[i] for i in sorted(tool_calls)],
             "finish_reason": finish_reason,
+            # vLLM: the token id / string that stopped generation (None = EOS).
+            "stop_reason": stop_reason,
         }
         if reasoning_parts:
             message["reasoning_fields"] = {
