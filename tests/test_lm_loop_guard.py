@@ -56,42 +56,45 @@ def test_the_guard_can_be_turned_off(monkeypatch):
         _client().complete(messages=[], tools=[])
 
 
-def test_a_reply_that_ends_inside_its_reasoning_is_retried(monkeypatch):
+def test_a_reply_cut_off_inside_its_reasoning_is_continued_from_there(monkeypatch):
+    """Seen on Dynabeads: the model ends its output mid-sentence of its
+    reasoning (~15k tokens). The reply is continued, not started over."""
     calls = []
 
-    def fake_once(self, *, messages, tools, **_kw):
-        calls.append(messages)
+    def fake_once(self, *, messages, tools, continue_final=False, **_kw):
+        calls.append((messages, continue_final))
         if len(calls) == 1:
             return {"role": "assistant", "content": None, "tool_calls": [],
-                    "reasoning_fields": {"reasoning_content": "def build_worktable(): ..."}}
-        return {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "simulate_python_draft"}}]}
+                    "reasoning_fields": {"reasoning_content": "10. Wash 2-3 times with 1"}}
+        return {"role": "assistant", "content": None, "tool_calls": [{"function": {"name": "submit_bench_spec"}}],
+                "reasoning_fields": {"reasoning_content": "X B&W. Done."}}
 
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
     message = _client().complete(messages=[{"role": "user", "content": "go"}], tools=[{"type": "function"}])
-    assert message["tool_calls"] and "ended inside your reasoning" in calls[1][-1]["content"]
-    # The retry gets the first attempt's reasoning back instead of starting over.
-    assert "def build_worktable(): ..." in calls[1][-2]["content"] and calls[1][-2]["role"] == "assistant"
+    assert message["tool_calls"] and len(calls) == 2 and calls[1][1] is True
+    assert calls[1][0][-1] == {"role": "assistant", "content": "<think>\n10. Wash 2-3 times with 1"}
+    assert message["reasoning_fields"]["reasoning_content"] == "10. Wash 2-3 times with 1X B&W. Done."
 
 
-def test_a_second_reasoning_only_reply_fails_immediately(monkeypatch):
+def test_a_reply_that_keeps_ending_inside_its_reasoning_is_retried_at_medium_then_fails(monkeypatch):
     calls = []
 
-    def fake_once(self, *, messages, tools, **_kw):
-        calls.append(messages)
-        return {
-            "role": "assistant",
-            "content": None,
-            "tool_calls": [],
-            "reasoning_fields": {"reasoning_content": "Still thinking about the same repair."},
-        }
+    def fake_once(self, *, messages, tools, effort=None, continue_final=False, **_kw):
+        calls.append((messages, effort, continue_final))
+        return {"role": "assistant", "content": None, "tool_calls": [],
+                "reasoning_fields": {"reasoning_content": "def build_worktable(): ..."}}
 
     monkeypatch.setattr(LMStudioChatClient, "_complete_once", fake_once)
     with pytest.raises(LMReasoningOnlyError, match="twice"):
-        _client().complete(
-            messages=[{"role": "user", "content": "go"}],
-            tools=[{"type": "function", "function": {"name": "edit_draft"}}],
-        )
-    assert len(calls) == 2
+        _client().complete(messages=[{"role": "user", "content": "go"}],
+                           tools=[{"type": "function", "function": {"name": "edit_draft"}}])
+    per_attempt = 1 + lm_client.MAX_CONTINUATIONS
+    assert len(calls) == 2 * per_attempt
+    assert [c[2] for c in calls[:per_attempt]] == [False] + [True] * lm_client.MAX_CONTINUATIONS
+    retry_messages, retry_effort, _ = calls[per_attempt]
+    assert retry_effort == "medium" and "ended inside your reasoning" in retry_messages[-1]["content"]
+    # The retry gets the first attempt's reasoning back instead of starting over.
+    assert "def build_worktable(): ..." in retry_messages[-2]["content"]
 
 
 def test_no_tool_fields_are_sent_without_tools(monkeypatch):
@@ -186,6 +189,6 @@ def test_a_turn_over_budget_is_retried_once_at_medium_with_its_notes(monkeypatch
     message = client.complete(messages=[{"role": "user", "content": "go"}],
                               tools=[{"type": "function", "function": {"name": "submit_bench_spec"}}])
     assert message["tool_calls"] and len(calls) == 2
-    assert calls[0][1] is None and calls[0][2] == 20000          # first: the client's xhigh, with a budget
+    assert calls[0][1] is None and calls[0][2] == 30000          # first: the client's xhigh, with a budget
     assert calls[1][1] == "medium"                                 # retry: medium
     assert "50 ul beads" in calls[1][0][-2]["content"]             # its notes handed back
