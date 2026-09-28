@@ -75,6 +75,13 @@ UNDERSTAND_PROMPT = (
 )
 
 
+SAMPLE_SHEET_NOTE = (
+    "(Attached: a sample sheet with the DNA concentrations of {n} samples. The samples "
+    "are NOT normalised yet: where the document prepares an amount per sample (e.g. "
+    "\"50 ng in 9 ul\"), the robot does it as a normalize step from these concentrations.)"
+)
+
+
 def understand_request(client: Any, source_text: str, request: str) -> tuple[str, list[str], bool]:
     """One short model call: what the model will automate, what it must ask
     first, and whether the request holds instructions worth a checklist."""
@@ -298,6 +305,10 @@ def author_from_document(
         source_text = trimmed.text
         note(trimmed.note)
     request_has_instructions = True
+    if sample_sheet:
+        # The model never sees the concentrations, but it must know they
+        # exist: otherwise "50 ng in 9 ul" reads as already done.
+        request = ((request or "").rstrip() + "\n\n" + SAMPLE_SHEET_NOTE.format(n=len(sample_sheet))).strip()
     context_parts = [f"Request: {request}"] if request else []
     if understand and ask is not None and ask is not choose_yourself:
         # Generation takes minutes: first make sure the request is understood.
