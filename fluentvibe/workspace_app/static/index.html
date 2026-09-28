@@ -1145,7 +1145,7 @@
       const running = job.status === 'queued' || job.status === 'running';
       const summary = job.result && job.result.summary;
       const failed = job.status === 'failure' || job.status === 'stopped' || (summary && summary.stage !== 'done');
-      const tokens = job.streamed_tokens ? ` · model writing, ${job.streamed_tokens.toLocaleString()} tokens` : '';
+      const tokens = job.streamed_tokens ? ` · model writing, ~${job.streamed_tokens.toLocaleString()} tokens` : '';
       const rows = FAST_STAGES.map((stage, k) => {
         if (k === 4 && !instructionsChecked) return '';
         if (k === 5 && !fcChecked) return '';
