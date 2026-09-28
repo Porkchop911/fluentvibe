@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -80,6 +81,66 @@ SAMPLE_SHEET_NOTE = (
     "are NOT normalised yet: where the document prepares an amount per sample (e.g. "
     "\"50 ng in 9 ul\"), the robot does it as a normalize step from these concentrations.)"
 )
+
+
+_DOC_AMOUNT = re.compile(r"(\d+(?:\.\d+)?)\s*ng\b[^.\n]{0,60}?\bin\s+(\d+(?:\.\d+)?)\s*(?:µ|μ|u)l", re.I)
+_UNUSED_SHEET_QUESTION = (
+    "You attached DNA concentrations for {n} samples, but the protocol as read does not normalise the "
+    "samples, so they would not be used. {proposal}Reply with the amount (e.g. \"50 ng in 9 µl\"), or "
+    "\"prepared\" if the samples are already prepared."
+)
+
+
+def _settle_unused_sample_sheet(spec, sample_sheet, source_text, ask, note, result):
+    """(spec, stop): a normalize step from the user's answer (or the document's
+    amount when the model may decide), or the spec as it is when the user says
+    the samples are prepared."""
+    doc = _DOC_AMOUNT.search(source_text or "")
+    default = (float(doc.group(1)), float(doc.group(2))) if doc else None
+    proposal = (f"The document prepares {default[0]:g} ng in {default[1]:g} µl per sample: \"ok\" normalises "
+                "to that. " if default else "")
+    question = _UNUSED_SHEET_QUESTION.format(n=len(sample_sheet), proposal=proposal)
+    if ask is None:
+        result.stage = "questions"
+        result.rounds.append({"questions": [question], "answer": None})
+        return spec, True
+    if ask is choose_yourself:
+        answer = ACCEPT if default else "prepared"
+    else:
+        answer = ask([question])
+        if answer is None:
+            result.stage = "questions"
+            return spec, True
+    result.rounds.append({"questions": [question], "answer": answer, "kind": "sample_sheet"})
+    amount = re.search(r"(\d+(?:\.\d+)?)\s*ng\b.*?(\d+(?:\.\d+)?)\s*(?:µ|μ|u)l", str(answer), re.I)
+    target = ((float(amount.group(1)), float(amount.group(2))) if amount
+              else default if (answer == ACCEPT or re.match(r"\s*(ok|okay|yes|y|fine|sure)\b", str(answer), re.I))
+              else None)
+    if target is None:
+        note("sample sheet not used: the samples are prepared (your answer)")
+        spec.notes.append("The attached sample sheet is not used: the samples are prepared before the run.")
+        return spec, False
+    return _with_normalize(spec, *target), False
+
+
+def _with_normalize(spec, target_ng: float, volume_ul: float):
+    from dataclasses import replace as _replace
+
+    from .bench_spec import SpecReagent, SpecStep
+
+    reagents = list(spec.reagents)
+    diluent = next((r for r in reagents if re.search(r"water|\bEB\b|elution buffer|\bTE\b", r.name, re.I)
+                    and r.role not in ("sample", "eluent")), None)
+    if diluent is None:
+        diluent = SpecReagent(id="norm_water", name="Nuclease-free water", role="reagent")
+        reagents.append(diluent)
+    step = SpecStep(id="normalize", op="normalize", location="deck", reagent=diluent.id, target_ng=target_ng,
+                    volume_ul=volume_ul,
+                    text=f"Normalise every sample to {target_ng:g} ng in {volume_ul:g} µl (from your sample sheet)")
+    steps = list(spec.steps)
+    first_deck = next((i for i, s in enumerate(steps) if s.location == "deck"), len(steps))
+    steps.insert(first_deck, step)
+    return _replace(spec, reagents=reagents, steps=steps, sample_volume_ul=volume_ul)
 
 
 def understand_request(client: Any, source_text: str, request: str) -> tuple[str, list[str], bool]:
@@ -169,24 +230,47 @@ def _spec_cache_put(path: Path | str | None, key: str, raw: dict[str, Any] | Non
         pass
 
 
+# The units a field's value is written in, and the factor to the field's unit.
+_FIELD_UNITS: dict[str, list[tuple[str, float]]] = {
+    **{f: [(r"(?:µ|μ|u)\s*l\b|microlit", 1.0), (r"ml\b|millilit", 1000.0)]
+       for f in ("volume_ul", "wash_ul", "elute_ul", "residual_ul")},
+    "minutes": [(r"min(?:ute)?s?\b", 1.0), (r"(?:s|sec|seconds?)\b", 1 / 60), (r"h(?:ours?|rs?)?\b", 60.0)],
+    "temp_c": [(r"°\s*c\b|degrees?\b|c\b", 1.0)],
+    "cycles": [(r"times\b|cycles?\b|x\b|×", 1.0)],
+    "washes": [(r"times\b|washes\b|x\b|×", 1.0)],
+    "ratio": [(r"x\b|×", 1.0)],
+}
+def _quoted_with_unit(quote: str, value: Any, field_name: str) -> bool:
+    """``value`` is written in ``quote`` with a unit that fits ``field_name``
+    ("20 min" for minutes = 20; "20 µl" is not)."""
+    if not isinstance(value, (int, float)):
+        return False
+    units = _FIELD_UNITS.get(field_name)
+    if not units:
+        return False
+    for m in re.finditer(r"(\d+(?:[.,]\d+)?)\s*([^\d\s,;.)]{1,12})", quote):
+        number = float(m.group(1).replace(",", "."))
+        for pattern, factor in units:
+            if re.match(pattern, m.group(2), re.I) and abs(number * factor - float(value)) < 1e-6:
+                return True
+    return False
+
+
 def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
     """What the model assumed, for the user to confirm: every value it chose
     itself (``proposed``) and every question it left in its notes."""
     unit = {"volume_ul": "{} µl per well", "ratio": "{}× ratio", "washes": "{} washes", "wash_ul": "{} µl wash",
             "elute_ul": "{} µl elution", "residual_ul": "{} µl left in the well", "cycles": "{} mix cycles",
             "temp_c": "{} °C", "minutes": "{} min"}
-    from .bench_spec import _numbers_in_text
-
     out: list[str] = []
     for step in spec.steps:
-        quoted = _numbers_in_text(step.source_quote or "")
         for name in step.proposed:
             value = getattr(step, name, None)
             if value in (None, [], ""):
                 continue
             values = value if isinstance(value, list) else [value]
-            if quoted and all(isinstance(v, (int, float)) and float(v) in quoted for v in values):
-                continue   # written in the document's own words for this step
+            if all(_quoted_with_unit(step.source_quote or "", v, name) for v in values):
+                continue   # written in the document's own words for this step, unit and all
             shown = ", ".join(f"{v:g}" for v in value) if isinstance(value, list) else (
                 f"{value:g}" if isinstance(value, (int, float)) else str(value))
             text = " ".join(step.text.split())
@@ -429,6 +513,14 @@ def author_from_document(
 
     from .sample_sheet import parse_concentrations
     from .skeleton import SAMPLE_SHEET_QUESTION
+
+    if sample_sheet and spec is not None and not any(s.op == "normalize" for s in spec.steps):
+        # The model was told about the concentrations but did not normalise:
+        # the attachment would be silently ignored. The user decides.
+        spec, stop = _settle_unused_sample_sheet(spec, sample_sheet, source_text, ask, note, result)
+        if stop:
+            return result
+        result.spec = spec
 
     deck = load_deck(profile_dir)
     for _ in range(max_rounds + 1):
