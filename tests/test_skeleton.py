@@ -1276,3 +1276,41 @@ def test_the_users_sample_count_wins_over_the_models_reading():
     assert _stated_sample_count("my 48 amplicon samples") == 48
     assert _stated_sample_count("2 samples, then 96 samples") is None
     assert _stated_sample_count("add 100 ul") is None
+
+
+def test_prompt_text_parentheses_become_brackets_in_the_fluentcontrol_script():
+    """FluentControl failed at run time on a prompt "Buffer (10 mM Tris-HCl pH
+    7.5, 1 mM EDTA, 2 M NaCl)" ("Stack empty"); brackets pass (checked in FC)."""
+    from fluentvibe.compiler.renderer import _fc_prompt_text
+
+    assert _fc_prompt_text("Buffer (10 mM Tris, 2 M NaCl) ready") == "Buffer [10 mM Tris, 2 M NaCl] ready"
+
+
+def test_a_reagent_name_inside_another_does_not_steal_its_labware(profile, tmp_path):
+    """Seen on Dynabeads: "Distilled water" matched the DNA plate ("DNA in
+    distilled water") and the DNA stamp read as 'add water'; "PBS pH 7.4"
+    matched the bead stock ("... in PBS pH 7.4 ...")."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import requirements_from_spec, skeleton_notes, verify_all
+
+    raw = {
+        "title": "Immobilize DNA", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Dynabeads M-280 in PBS pH 7.4", "role": "bead_carrier"},
+                     {"id": "dna", "name": "Biotinylated DNA in distilled water", "role": "sample"},
+                     {"id": "pbs", "name": "PBS pH 7.4", "role": "reagent"},
+                     {"id": "water", "name": "Distilled water", "role": "reagent"}],
+        "steps": [
+            {"id": "b", "op": "add", "text": "Add 50 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 50},
+            {"id": "d", "op": "add", "text": "Add 50 µl DNA", "location": "deck", "reagent": "dna",
+             "volume_ul": 50},
+            {"id": "p", "op": "add", "text": "Add 20 µl PBS", "location": "deck", "reagent": "pbs",
+             "volume_ul": 20},
+        ],
+    }
+    spec = _spec(raw)
+    source = build_skeleton(spec, load_deck(profile))
+    wt = build_worktable_from_source(source, str(tmp_path / "d.py"))
+    wt.simulate()
+    (verdict,) = verify_all(wt, requirements_from_spec(spec, skeleton_notes(source)))
+    assert verdict.status == "pass", verdict

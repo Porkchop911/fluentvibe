@@ -33,6 +33,14 @@ from ..ir.schema import (
 )
 
 
+
+def _fc_prompt_text(text: str) -> str:
+    """User-prompt text as FluentControl accepts it. Some parenthesised text
+    makes the prompt fail at run time ("Unhandled exception in script
+    command: Stack empty", seen with "Buffer (10 mM Tris-HCl pH 7.5, 1 mM
+    EDTA, 2 M NaCl)"); square brackets read the same and pass."""
+    return str(text).replace("(", "[").replace(")", "]")
+
 def sanitize_text(text: str) -> str:
     """Sanitize text for XML - replace problematic characters."""
     if not text:
@@ -1551,7 +1559,7 @@ class Renderer:
 
             case StepType.USER_PROMPT:
                 params.update({
-                    "Prompt": step.prompt,
+                    "Prompt": _fc_prompt_text(step.prompt),
                     "AutoClose": str(step.timeout > 0),
                     # FC's range is 1-7200 even with AutoClose off; FC-authored
                     # prompts without auto-close carry Timeout 1 (InfoPad
