@@ -231,6 +231,13 @@ def _check_wait_between(wt, ops: list[_Op], req: Requirement) -> Verdict:
     minimum = float(req.params["min_seconds"])
     first = _anchor(wt, ops, req.params["after"], 0)
     if first is None:
+        # Steps after a pool are handed to the operator in one prompt.
+        named = _norm(req.params["after"][-1]) if req.params.get("after") else ""
+        for op in ops:
+            if type(op.step).__name__ == "UserPromptStep" and named and named in _norm(
+                    getattr(op.step, "prompt", "") or ""):
+                return Verdict(req.id, UNKNOWN, "the operator does this (hand-off"
+                               + (f" on line {op.line})" if op.line else ")"), op.line)
         return Verdict(req.id, UNKNOWN, f"anchor {req.params['after']} not found")
     last = _anchor(wt, ops, req.params["before"], first.index + 1)
     if last is None:
@@ -293,6 +300,21 @@ def _check_sample_volume(wt, ops: list[_Op], req: Requirement) -> Verdict:
                       if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)})
     if volumes == [round(want, 2)]:
         return Verdict(req.id, PASS, f"every sample well starts with {want:g} ul")
+    # Normalised on the deck: the samples reach that volume in another plate.
+    count = sum(1 for plate in plates for well in plate.wells.values()
+                if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers))
+    initial = {plate.label for plate in plates}
+    for snap in getattr(wt, "snapshots", None) or ():
+        for stack in snap.slot_map.values():
+            for lw in stack:
+                if lw.label in initial or getattr(lw, "category", "") != "plate":
+                    continue
+                held = [round(sum(layer.volume_ul for layer in well.layers), 2) for well in lw.wells.values()
+                        if any(getattr(layer.reagent, "role", "") == "analyte" for layer in well.layers)]
+                if len(held) == count and set(held) == {round(want, 2)}:
+                    line = getattr(getattr(snap.step, "source_pos", None), "line", None)
+                    return Verdict(req.id, PASS, f"every sample holds {want:g} ul in {lw.label}"
+                                   + (f" after line {line}" if line else ""))
     return Verdict(req.id, FAIL, f"sample wells start with {volumes} ul, not {want:g} ul")
 
 

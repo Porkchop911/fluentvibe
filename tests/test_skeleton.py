@@ -977,6 +977,11 @@ def test_normalisation_asks_for_the_sheet_and_takes_it_from_the_chat(profile, tm
     final = wt.snapshots[-1].labware("norm_Plate")
     volumes = [sum(layer.volume_ul for layer in final.well(f"{row}1").layers) for row in "ABCDEFGH"]
     assert all(abs(v - 9) < 0.01 for v in volumes), volumes
+    # "50 ng in 9 ul per sample" is met in the normalised plate, not the stock.
+    from fluentvibe.authoring.requirements import Requirement, verify_all
+
+    (verdict,) = verify_all(wt, [Requirement("r", "50 ng in 9 ul", "sample_volume", {"ul": 9})])
+    assert verdict.status == "pass" and "norm_Plate" in verdict.evidence, verdict
 
 
 def test_a_repeat_the_operator_does_is_not_an_empty_loop(profile, tmp_path):
