@@ -13,7 +13,6 @@ is one such order packaged as a macro.
 from __future__ import annotations
 
 import math
-
 from typing import Iterable
 
 from ..variables import num, per_trip, vround

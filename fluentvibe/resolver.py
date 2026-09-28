@@ -219,7 +219,7 @@ class Resolver:
         if not self.deck.fca_tips:
             raise ResolutionError("the deck profile lists no FCA tip box")
         if self.fca_uses % _FCA_USES_PER_BOX == 0:
-            from . import FCA200Box, FCA1000Box, FCA50Box
+            from . import FCA50Box, FCA200Box, FCA1000Box
 
             catalog, cls_name = self.deck.fca_tips
             cls = {"FCA200Box": FCA200Box, "FCA1000Box": FCA1000Box, "FCA50Box": FCA50Box}.get(cls_name, FCA200Box)
