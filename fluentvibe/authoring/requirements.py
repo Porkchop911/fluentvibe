@@ -554,8 +554,32 @@ def requirements_markdown(requirements: list[Requirement], verdicts: list[Verdic
 # ── document completeness: the spec's deck steps, in order ──────────────
 
 
+def _wells(op: _Op) -> list[Any]:
+    """The wells one aspirate or dispense addresses, as keys comparable within
+    one labware. An address the scan cannot resolve (a loop variable) counts
+    as its own well, so it never makes a move look like a pool."""
+    step = op.step
+    if op.head == "mca":
+        # MCA96 on a 96-well plate: one column of tips per plate column.
+        return [("col", c) for c in (step.columns or range(1, 13))]
+    selection = getattr(step, "selection", None)
+    if selection:
+        return [w.strip().upper() for w in str(selection).split(";") if w.strip()]
+    offset = getattr(step, "well_offset", None)
+    if offset is None:
+        offset = 0
+    if not isinstance(offset, int):
+        return [("?", op.index)]
+    channels = getattr(step, "channels", None) or range(8)
+    return [offset + i for i in range(len(channels))]
+
+
 def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple[str, float, int | None]]:
-    """The protocol as a sequence of physical events: (token, seconds, line)."""
+    """The protocol as a sequence of physical events: (token, seconds, line).
+
+    A run of plate-to-plate moves between the same two plates is one token:
+    "pool" when it lands in fewer wells than it drew from (many samples
+    combined), else "transfer" (1:1)."""
     holders = {name: _initial_holders(wt, name) for name in reagent_names}
     placed = getattr(wt, "_placed", {})
 
@@ -567,11 +591,16 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
 
     tokens: list[tuple[str, float, int | None]] = []
     last_source = None
+    drawn: set[Any] = set()          # source wells since the last dispense
+    run: dict[str, Any] | None = None   # the plate-to-plate run tokens[-1] stands for
     on_magnet: set[str] = set()
     for op in ops:
         kind = type(op.step).__name__
         if op.action == "aspirate":
+            if op.labware != last_source:
+                drawn = set()
             last_source = op.labware
+            drawn.update(_wells(op))
         elif op.action == "dispense" and last_source is not None:
             if is_waste(op.labware):
                 tokens.append(("waste", 0.0, op.line))
@@ -580,7 +609,16 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
                 if reagent is not None:
                     tokens.append((f"add:{_norm(reagent)}", 0.0, op.line))
                 elif category(last_source) == "plate" and category(op.labware) == "plate" and op.labware != last_source:
-                    tokens.append(("transfer", 0.0, op.line))
+                    pair = (last_source, op.labware)
+                    if run is None or run["pair"] != pair or not tokens or tokens[-1] is not run["token"]:
+                        run = {"pair": pair, "src": set(), "dst": set(), "line": op.line}
+                        tokens.append(("transfer", 0.0, op.line))
+                    run["src"] |= drawn
+                    run["dst"] |= set(_wells(op))
+                    # Pooling is many wells into fewer: a 1:1 stamp into the pool plate is not one.
+                    name = "pool" if len(run["dst"]) < len(run["src"]) else "transfer"
+                    run["token"] = tokens[-1] = (name, 0.0, run["line"])
+            drawn = set()
         elif kind in ("Mca384EmptyTipsStep", "LihaEmptyTipsStep") and is_waste(op.labware):
             tokens.append(("waste", 0.0, op.line))
         elif op.action == "mix":
@@ -672,7 +710,9 @@ def requirements_from_spec(spec, notes: Iterable[str] = ()) -> list[Requirement]
             push("mag_off" if step.engage is False else "mag_on", text)
         elif step.op == "remove":
             push("waste", text)
-        elif step.op in ("pool", "transfer"):
+        elif step.op == "pool":
+            push("pool", text)
+        elif step.op == "transfer":
             push("transfer", text)
         elif step.op == "mix":
             push("mix", text)
@@ -707,6 +747,7 @@ def _check_document_sequence(wt, ops: list[_Op], req: Requirement) -> Verdict:
         if i == len(tokens):
             what = (f"a wait of {exp['seconds']:g} s" if exp["token"] == "wait"
                     else "an operator prompt for this step" if exp["token"] == "operator"
+                    else "a pool (many sample wells into fewer)" if exp["token"] == "pool"
                     else exp["token"].replace(":", " "))
             last_line = tokens[-1][2] if tokens else None
             return Verdict(req.id, FAIL, f"missing or out of order: {what} ({exp['text']})", last_line)
