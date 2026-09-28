@@ -894,7 +894,11 @@
     async function api(path, options) {
       const res = await fetch(path, options);
       const data = await res.json();
-      if (!res.ok || data.ok === false) throw new Error(data.message || 'Request failed');
+      if (!res.ok || data.ok === false) {
+        const err = new Error(data.message || 'Request failed');
+        err.status = res.ok ? 400 : res.status;   // the server answered: not a lost connection
+        throw err;
+      }
       return data;
     }
 
@@ -1050,17 +1054,21 @@
     }
 
     async function pollJobUntilDone(jobId, statusId, resultId, done) {
-      let transientFailures = 0;
+      // A long job must not be lost to a few seconds without an answer
+      // (seen while FluentControl was checking): keep reconnecting for 10 min.
+      let failingSince = null;
       while (true) {
         let data;
         try {
           data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
-          transientFailures = 0;
+          failingSince = null;
         } catch (err) {
-          transientFailures += 1;
-          if (transientFailures >= 4) throw err;
-          setStatus(statusId, `Connection interrupted; retrying (${transientFailures}/3)…`, 'running');
-          await sleep(1000 * transientFailures);
+          if (err.status && err.status < 500) throw err;
+          failingSince = failingSince || Date.now();
+          const lost = (Date.now() - failingSince) / 1000;
+          if (lost > 600) throw err;
+          setStatus(statusId, `Connection interrupted; reconnecting (${formatDuration(lost)})…`, 'running');
+          await sleep(Math.min(5000, 1000 + lost * 200));
           continue;
         }
         const job = data.job;
