@@ -201,10 +201,14 @@ def test_no_tool_fields_are_sent_without_tools(monkeypatch):
 
 
 def test_temperature_comes_from_the_environment_when_not_given(monkeypatch):
-    monkeypatch.setenv("FLUENTVIBE_LM_TEMPERATURE", "1.0")
-    assert _client().temperature == 1.0
+    monkeypatch.setenv("FLUENTVIBE_LM_TEMPERATURE", "0.6")
+    monkeypatch.setenv("FLUENTVIBE_LM_TOP_P", "0.8")
+    assert (_client().temperature, _client().top_p) == (0.6, 0.8)
     monkeypatch.delenv("FLUENTVIBE_LM_TEMPERATURE")
-    assert _client().temperature == 0.2
+    monkeypatch.delenv("FLUENTVIBE_LM_TOP_P")
+    # Default: the model's recommended thinking-mode sampling (not 0.2).
+    c = _client()
+    assert (c.temperature, c.top_p, c.top_k) == (1.0, 0.95, 20)
 
 
 def _stream(arguments_chunks):

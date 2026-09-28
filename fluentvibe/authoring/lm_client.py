@@ -185,10 +185,29 @@ def _reasoning_only(message: dict[str, Any]) -> bool:
     return any(str(value).strip() for value in fields.values())
 
 
+# Qwen3's recommended sampling with thinking on (the model card: temperature
+# 1.0, top_p 0.95, top_k 20). Until 2026-09-28 the default was 0.2: low
+# temperature with long reasoning is a known cause of loops and replies cut
+# off inside the reasoning.
+DEFAULT_TEMPERATURE = 1.0
+DEFAULT_TOP_P = 0.95
+DEFAULT_TOP_K = 20
+
+
+def _number_from_env(name: str, default, kind=float):
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return kind(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number") from exc
+
+
 def _temperature_from_env() -> float:
     raw = os.environ.get("FLUENTVIBE_LM_TEMPERATURE")
     if raw is None or not raw.strip():
-        return 0.2
+        return DEFAULT_TEMPERATURE
     try:
         return float(raw)
     except ValueError as exc:
@@ -278,10 +297,11 @@ class LMStudioChatClient:
         # a small default when it is omitted, which cuts long reasoning turns
         # off before any tool call. FLUENTVIBE_LM_MAX_TOKENS sets it globally.
         self.max_tokens = max_tokens if max_tokens is not None else _max_tokens_from_env()
-        # FLUENTVIBE_LM_TEMPERATURE sets it globally (benchmarks); 0.2 otherwise.
+        # FLUENTVIBE_LM_TEMPERATURE / _TOP_P / _TOP_K set them globally; the
+        # defaults are the model's recommended thinking-mode sampling.
         self.temperature = float(temperature) if temperature is not None else _temperature_from_env()
-        self.top_p = None if top_p is None else float(top_p)
-        self.top_k = None if top_k is None else int(top_k)
+        self.top_p = float(top_p) if top_p is not None else _number_from_env("FLUENTVIBE_LM_TOP_P", DEFAULT_TOP_P)
+        self.top_k = int(top_k) if top_k is not None else _number_from_env("FLUENTVIBE_LM_TOP_K", DEFAULT_TOP_K, int)
         self.min_p = None if min_p is None else float(min_p)
         self.presence_penalty = (
             None if presence_penalty is None else float(presence_penalty)
@@ -994,7 +1014,7 @@ def make_chat_client(
     model: str = DEFAULT_LM_STUDIO_MODEL,
     endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
     api_key: str | None = None,
-    temperature: float = 0.2,
+    temperature: float | None = None,
     streaming: bool = True,
 ) -> Any:
     """Return a `langchain_openai.ChatOpenAI` configured for the LM Studio endpoint.
@@ -1011,7 +1031,7 @@ def make_chat_client(
         model=model,
         base_url=_endpoint_to_base_url(endpoint),
         api_key=api_key or os.environ.get("FLUENTVIBE_LM_API_KEY") or "lm-studio",
-        temperature=temperature,
+        temperature=temperature if temperature is not None else _temperature_from_env(),
         streaming=streaming,
         model_kwargs={"parallel_tool_calls": True},
     )
