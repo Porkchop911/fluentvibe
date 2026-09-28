@@ -567,6 +567,7 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
 def requirements_from_spec(spec) -> list[Requirement]:
     """The document's deck steps as one ordered completeness requirement."""
     reagents = {r.id: r.name for r in spec.reagents}
+    samples = {r.id for r in spec.reagents if r.role == "sample"}
     expected: list[dict[str, Any]] = []
 
     def push(token, text, seconds=0.0):
@@ -578,7 +579,11 @@ def requirements_from_spec(spec) -> list[Requirement]:
         if step.location != "deck":
             continue
         text = f"{step.id}: {step.text}"
-        if step.op == "add" and step.reagent in reagents:
+        if step.op == "add" and step.reagent in samples:
+            # The samples come from a sample plate, one well each: a plate-to-plate
+            # transfer (the protocol scan does not read sample liquid as a reagent).
+            push("transfer", text)
+        elif step.op == "add" and step.reagent in reagents:
             push(f"add:{_norm(reagents[step.reagent])}", text)
         elif step.op == "separate":
             push("mag_off" if step.engage is False else "mag_on", text)
