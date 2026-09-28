@@ -5,8 +5,8 @@ This module defines Pydantic models that represent protocol steps
 in a structured, validated format before rendering to XML.
 """
 
-from enum import Enum
 import typing
+from enum import Enum
 from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator

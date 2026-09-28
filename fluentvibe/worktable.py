@@ -53,6 +53,7 @@ def _is_fc_identifier(name: str) -> bool:
 if TYPE_CHECKING:
     from .simulator.report import SimulationReport
     from .simulator.snapshots import Snapshot
+    from .variables import Volume
 
 
 # Catalog-name markers of SBS-footprint reservoirs: they may sit on plate nests
