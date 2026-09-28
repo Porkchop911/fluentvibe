@@ -552,7 +552,7 @@
     .author-advanced > summary { cursor: pointer; font-weight: 600; }
     #tab-author .author-shell { display: block; height: auto; min-height: 0; }
     #tab-author .author-shell > * { margin-bottom: 10px; }
-    .author-advanced .author-sb-fields { grid-template-columns: .8fr .65fr 1fr .7fr auto auto; }
+    #fullOptions .author-sb-fields { grid-template-columns: 1fr .7fr 1.2fr; }
     #tab-author .author-chat { min-height: 320px; max-height: 62vh; margin: 10px 0; }
     .author-top { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
     .author-top .fp-field { display: flex; flex-direction: column; }
@@ -716,6 +716,10 @@
             </div>
           </div>
           <p class="mode-help" id="modeHelp"></p>
+          <div class="fp-field">
+            <label for="authorTimeout" title="How long one model call may take before it is given up (both modes). Stop ends a run at any time.">Response limit (s)</label>
+            <input id="authorTimeout" type="number" min="60" step="60" value="3600" style="width:110px">
+          </div>
           <button id="authorStop" class="danger" disabled>Stop</button>
         </div>
         <div class="mode-options" id="fastOptions">
@@ -742,10 +746,6 @@
             <div>
               <label for="authorModel">Model</label>
               <input id="authorModel" placeholder="default">
-            </div>
-            <div>
-              <label for="authorTimeout">Response limit (s)</label>
-              <input id="authorTimeout" type="number" min="15" step="15" value="1800">
             </div>
           </div>
         </details>
@@ -1268,6 +1268,7 @@
           profile_name: profile, request: message, attachments,
           check_instructions: $('fastCheckInstructions').checked,
           fc_check: fcChecked, choose: $('fastChoose').checked,
+          request_timeout_s: Number($('authorTimeout').value || 3600),
         });
       } catch (err) {
         pushAuthorMessage('error', 'Could not start', String(err.message || err));
@@ -1706,7 +1707,7 @@
           retry_budget: Number($('authorRetry').value || 8),
           model: $('authorModel').value,
           lab_scope: $('authorLabScope').value,
-          request_timeout_s: Number($('authorTimeout').value || 240)
+          request_timeout_s: Number($('authorTimeout').value || 3600)
         };
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
