@@ -94,6 +94,18 @@ def _tool_names(tools: list[dict[str, Any]]) -> str:
     return ", ".join(n for n in names if n) or "the next tool call"
 
 
+def _dump_reasoning_only(message: dict[str, Any], label: str) -> None:
+    """Keep the raw reply of a reasoning-only turn for diagnosis
+    (``FLUENTVIBE_LM_DUMP_DIR``, an existing folder)."""
+    folder = os.environ.get("FLUENTVIBE_LM_DUMP_DIR", "").strip()
+    if not folder or not os.path.isdir(folder):
+        return
+    with contextlib.suppress(OSError):
+        path = os.path.join(folder, f"reasoning_only-{time.strftime('%Y%m%d-%H%M%S')}-{label}.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(message, fh, ensure_ascii=False, indent=1, default=str)
+
+
 def _reasoning_only(message: dict[str, Any]) -> bool:
     """A reply with reasoning but neither text nor a tool call."""
     if message.get("tool_calls") or (message.get("content") or "").strip():
@@ -270,6 +282,7 @@ class LMStudioChatClient:
             if tools and _loop_guard_enabled() and _reasoning_only(message):
                 # The turn ended inside the reasoning (seen with vLLM: the draft
                 # written in reasoning, finish_reason=stop, no text, no tool call).
+                _dump_reasoning_only(message, "first")
                 if self.trace_recorder is not None:
                     self.trace_recorder.record("turn_retry", reason="reasoning_only")
                 print("[lm] reply ended inside its reasoning without a tool call -- retrying the turn once",
@@ -286,6 +299,7 @@ class LMStudioChatClient:
                     + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
                 )}], tools=tools)
                 if _reasoning_only(retry):
+                    _dump_reasoning_only(retry, "retry")
                     raise LMReasoningOnlyError(
                         "Model ended inside reasoning twice without text or a tool call."
                     )

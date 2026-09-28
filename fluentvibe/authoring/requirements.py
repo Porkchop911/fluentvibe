@@ -351,8 +351,14 @@ def verify(wt, requirements: Iterable[Requirement]) -> list[Verdict]:
     """Check each requirement on the protocol's resolved operations."""
     wt._finalize_resolution()
     ops = _operations(wt)
+    requirements = list(requirements)
+    # "Do the protocol of this document" from the request is checked
+    # against the document's own steps when they are known.
+    document = next((r for r in requirements if r.kind == "document_sequence" and r.params.get("expected")), None)
     verdicts = []
     for req in requirements:
+        if document is not None and req.kind == "document_sequence" and not req.params.get("expected"):
+            req = Requirement(**{**asdict(req), "params": {**req.params, **document.params}})
         check = _CHECKS.get(req.kind)
         if check is None:
             verdicts.append(Verdict(req.id, UNKNOWN, f"no check for kind {req.kind!r}"))
