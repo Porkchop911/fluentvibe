@@ -91,6 +91,16 @@ _UNUSED_SHEET_QUESTION = (
 )
 
 
+_SAMPLE_COUNT = re.compile(r"\b(\d{1,3})\s+(?:[A-Za-z-]+\s+){0,2}?samples?\b", re.I)
+
+
+def _stated_sample_count(text: str) -> int | None:
+    """The one sample count the user's words state ("96 samples", "48 amplicon
+    samples"); None when there is none or they state several."""
+    counts = {int(m.group(1)) for m in _SAMPLE_COUNT.finditer(text or "") if 0 < int(m.group(1)) <= 384}
+    return counts.pop() if len(counts) == 1 else None
+
+
 def _settle_unused_sample_sheet(spec, sample_sheet, source_text, ask, note, result):
     """(spec, stop): a normalize step from the user's answer (or the document's
     amount when the model may decide), or the spec as it is when the user says
@@ -513,6 +523,17 @@ def author_from_document(
 
     from .sample_sheet import parse_concentrations
     from .skeleton import SAMPLE_SHEET_QUESTION
+
+    stated = _stated_sample_count(request or "")
+    if spec is not None and stated and spec.sample_count != stated:
+        # The user's number, not the model's reading (seen: "96 samples" in
+        # the answer, sample_count 1 in the spec).
+        from dataclasses import replace as _replace
+
+        note(f"{stated} samples, as you said (the spec read {spec.sample_count})")
+        spec.notes.append(f"Sample count {stated} from the request (the model read {spec.sample_count}).")
+        spec = _replace(spec, sample_count=stated)
+        result.spec = spec
 
     if sample_sheet and spec is not None and not any(s.op == "normalize" for s in spec.steps):
         # The model was told about the concentrations but did not normalise:

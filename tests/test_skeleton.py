@@ -1186,3 +1186,93 @@ def test_set_instructions_keeps_the_documents_own_steps(tmp_path, monkeypatch):
         pass   # verifying the placeholder draft may fail; the sidecar is written first
     saved = R.load_requirements(R.sidecar_path(draft))
     assert [r.id for r in saved] == ["req_1", "DOC"]
+
+
+def test_one_reagent_on_both_heads_gets_two_labware_names(profile, tmp_path):
+    """Seen at temperature 1.0: the 1X buffer by the FCA (requested) and in
+    bulk by the MCA; both troughs were called "bw1x_trough" (FluentControl:
+    "Labware name already exists")."""
+    import re
+
+    raw = {
+        "title": "Bead wash", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Beads", "role": "bead_carrier"},
+                     {"id": "bw1x", "name": "1X B&W buffer", "role": "wash"}],
+        "steps": [
+            {"id": "b", "op": "add", "text": "Add 20 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 20},
+            {"id": "a1", "op": "add", "text": "Add 20 µl 1X B&W", "location": "deck", "reagent": "bw1x",
+             "volume_ul": 20, "head": "fca"},
+            {"id": "s", "op": "separate", "text": "Magnet 1 min", "location": "deck", "minutes": [1]},
+            {"id": "r", "op": "remove", "text": "Discard the supernatant", "location": "deck"},
+            {"id": "a2", "op": "add", "text": "Add 150 µl 1X B&W", "location": "deck", "reagent": "bw1x",
+             "volume_ul": 150},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    labels = re.findall(r'wt\.place\(\w+\("([^"]+)"', source)
+    assert len(labels) == len(set(labels)), labels
+
+
+def test_a_later_sample_plate_of_one_sample_is_stamped_as_a_whole_column(profile, tmp_path):
+    """Seen at temperature 1.0 (sample_count 1): the MCA stamps column 1 of the
+    DNA plate, but only A1 held liquid ("well B1 short by 100 uL")."""
+    raw = {
+        "title": "Immobilize DNA", "sample_count": 1, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Beads", "role": "bead_carrier"},
+                     {"id": "dna", "name": "Biotinylated DNA", "role": "sample"}],
+        "steps": [
+            {"id": "b", "op": "add", "text": "Add 50 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 50},
+            {"id": "d", "op": "add", "text": "Add 100 µl DNA", "location": "deck", "reagent": "dna",
+             "volume_ul": 100},
+        ],
+    }
+    namespace: dict = {}
+    exec(compile(build_skeleton(_spec(raw), load_deck(profile)), str(tmp_path / "d.py"), "exec"), namespace)
+    namespace["build_worktable"]().simulate(strict=True)
+
+
+def test_mixing_beads_on_the_magnet_takes_the_plate_off_first(profile, tmp_path):
+    """Seen at temperature 1.0: a wash repeat that starts at the add left the
+    plate on the magnet, so the beads were 'mixed' while held."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import requirements_from_spec, skeleton_notes, verify_all
+
+    raw = {
+        "title": "Wash", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Beads", "role": "bead_carrier"},
+                     {"id": "bw", "name": "Wash buffer", "role": "wash"}],
+        "steps": [
+            {"id": "b", "op": "add", "text": "Add 50 µl beads", "location": "deck", "reagent": "beads",
+             "volume_ul": 50},
+            {"id": "s", "op": "separate", "text": "Magnet 1 min", "location": "deck", "minutes": [1]},
+            {"id": "r", "op": "remove", "text": "Discard the supernatant", "location": "deck"},
+            {"id": "w", "op": "add", "text": "Add 150 µl wash buffer", "location": "deck", "reagent": "bw",
+             "volume_ul": 150},
+            {"id": "m", "op": "mix", "text": "Mix to resuspend", "location": "deck"},
+            {"id": "s2", "op": "separate", "text": "Magnet 1 min", "location": "deck", "minutes": [1]},
+            {"id": "r2", "op": "remove", "text": "Discard the wash", "location": "deck"},
+            {"id": "rep", "op": "repeat", "text": "Repeat the wash twice more", "location": "deck",
+             "first_step": "w", "last_step": "r2", "times": 2},
+        ],
+    }
+    spec = _spec(raw)
+    source = build_skeleton(spec, load_deck(profile))
+    assert "off the magnet to resuspend" in source
+    wt = build_worktable_from_source(source, str(tmp_path / "d.py"))
+    wt.simulate(strict=True)
+    from fluentvibe.authoring.bench_spec import expand_repeats
+
+    expanded, _ = expand_repeats(spec)
+    (verdict,) = verify_all(wt, requirements_from_spec(expanded, skeleton_notes(source)))
+    assert verdict.status == "pass", verdict       # the loop counts 3 washes, not 1
+
+
+def test_the_users_sample_count_wins_over_the_models_reading():
+    from fluentvibe.authoring.spec_path import _stated_sample_count
+
+    assert _stated_sample_count("automate this for DNA\n96 samples; otherwise ok") == 96
+    assert _stated_sample_count("my 48 amplicon samples") == 48
+    assert _stated_sample_count("2 samples, then 96 samples") is None
+    assert _stated_sample_count("add 100 ul") is None

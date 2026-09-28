@@ -283,14 +283,21 @@ class _Writer:
         return self.fca_boxes[-1]
 
     def trough(self, label: str, *, large: bool) -> str:
-        label = _label(label)
         """An MCA-compatible SBS reservoir: large ones on a 7 mm nest, small on a plate nest."""
+        label = _label(label)
         if large and self.deck.free_large_sites:
+            # Unique like every other labware name: the same reagent can also
+            # sit in an FCA trough ("Labware name already exists" in FC).
+            taken = set(self.labels.values())
+            base, n = label, 2
+            while label in taken:
+                label, n = f"{base}_{n}", n + 1
             loc, pos = self.deck.free_large_sites.pop(0)
             var = self.var(label)
             self.placements.append(
                 f'    {var} = wt.place(Trough25mL("{label}", catalog="{self.deck.reservoir_large}"), "{loc}", {pos})'
             )
+            self.labels[var] = label
             return var
         return self._put(label, f'Trough100mL("{label}", catalog="{self.deck.reservoir_small}")')
 
@@ -973,6 +980,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
                 w.notes.append(f"{step.id}: nothing in the plate to mix yet; handed to the operator")
                 pending_offdeck.append(step)
                 continue
+            if on_magnet and beads_in_wells:
+                # Mixing on the magnet does not resuspend the beads (seen: a
+                # wash repeat that starts at the add, after the separation).
+                release_current(json.dumps(f"{step.id}: off the magnet to resuspend"))
+                w.notes.append(f"{step.id}: the plate leaves the magnet first, so the beads resuspend")
             cycles = step.cycles if step.cycles is not None else 10
             vol = step.volume_ul if step.volume_ul is not None else round(0.8 * well_ul, 1)
             if step.volume_ul is not None:
@@ -1160,6 +1172,11 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
                 w.fills.append(f"    {source}.fill_wells({wells}, Reagent({json.dumps(reagent.name + ' matrix')}), "
                                f"{per_well - m:g})")
                 w.fills.append(f"    {source}.layer_wells({wells}, {reagent_var(reagent)}, {m:g})")
+                if n > sample_n:
+                    # The MCA stamps whole columns: as on the starting sample
+                    # plate, the unused wells are modelled as blank liquid.
+                    w.fills.append(f"    {source}.fill_wells({source}.first_wells({n})[{sample_n}:], "
+                                   f"Reagent(\"Blank (unused well of a pipetted column)\"), {per_well:g})")
             else:
                 w.fills.append(f"    {source}.fill_all({reagent_var(reagent)}, {per_well:g})")
             tips = w.mca_box(f"{step.id}_Tips")
