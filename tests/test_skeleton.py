@@ -254,6 +254,32 @@ def test_extraction_retries_an_empty_spec_and_drops_invented_supplies():
     assert bw.supply_ul is None and any("treated as lab stock" in n for n in spec.notes)
 
 
+def test_a_broken_first_spec_is_not_sent_back_as_a_tool_call():
+    """Dynabeads: the first call's arguments were invalid JSON; sending them
+    back in the retry's history made vLLM reject it (HTTP 400 'Expecting
+    value: line 1 column 866'). The retry says what failed, in plain text."""
+    from fluentvibe.authoring.bench_spec import extract_bench_spec
+
+    good = json.loads(json.dumps(_STREPTAVIDIN))
+
+    class Broken:
+        calls = []
+
+        def complete(self, *, messages, tools):
+            self.calls.append(messages)
+            if len(self.calls) == 1:
+                return {"content": "", "tool_calls": [{"function": {"name": "submit_bench_spec",
+                                                                    "arguments": '{"title": "x", "steps": [,'}}]}
+            return {"content": "", "tool_calls": [{"function": {"name": "submit_bench_spec",
+                                                                "arguments": json.dumps(good)}}]}
+
+    client = Broken()
+    spec, problems, raw = extract_bench_spec(client, "Streptavidin beads. B&W buffer. 2 minutes, 15 minutes.")
+    assert spec is not None and len(client.calls) == 2
+    assert not any(m.get("tool_calls") for m in client.calls[1])
+    json.dumps(client.calls[1])   # the retry request is plain, valid JSON
+
+
 def test_spec_path_asks_revises_and_builds(profile, tmp_path):
     from fluentvibe.authoring.spec_path import ACCEPT, author_from_document
 

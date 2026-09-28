@@ -665,9 +665,12 @@ def extract_bench_spec(client: Any, source_text: str, *, extra_context: str | No
                 return spec, _drop_untraced_supply(spec, problems), raw
             fatal = problems
         if attempt == 0:
+            # Not the failed tool call itself: the server parses tool-call
+            # arguments in the history, and broken JSON there makes it reject
+            # the whole retry (HTTP 400 "Expecting value ...").
             messages += [
-                {"role": "assistant", "content": message.get("content") or "",
-                 **({"tool_calls": message["tool_calls"]} if message.get("tool_calls") else {})},
+                {"role": "assistant", "content": (message.get("content") or "").strip()
+                 or f"(my {EXTRACTION_TOOL_NAME} call could not be used)"},
                 {"role": "user", "content": "The spec could not be used: "
                  + "; ".join(f"{p.where}: {p.message}" for p in fatal)
                  + f". Call {EXTRACTION_TOOL_NAME} again with the complete spec, every step included."},
