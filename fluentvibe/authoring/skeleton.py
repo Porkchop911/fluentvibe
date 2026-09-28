@@ -934,7 +934,15 @@ def build_skeleton(spec: BenchSpec, deck: _Deck, *, sample_sheet: dict[str, floa
             if vol <= 0:
                 w.notes.append(f"{step.id}: nothing to remove ({well_ul:g} ul in the wells); skipped")
                 continue
-            if not on_magnet and any(s.op == "separate" for s in spec.steps):
+            if not on_magnet and beads_in_wells:
+                # Seen on Dynabeads: "remove the buffer" without the magnet
+                # step before it would pour the beads into the waste.
+                magnet = ensure_magnet()
+                w.body.append(f"    separate(wt, plate={current}, magnet={magnet}, settle_seconds=120, "
+                              f"name={json.dumps(step.id + ': magnet first, so the beads stay')})  # ASSUMED: settle time")
+                w.notes.append(f"{step.id}: the wells hold beads; a 2 min separation is added before removing")
+                on_magnet = True
+            elif not on_magnet and any(s.op == "separate" for s in spec.steps):
                 w.notes.append(f"{step.id}: removing liquid off the magnet takes suspended beads along")
             comment = "  # ASSUMED: residual" if step.volume_ul is None and step.residual_ul is None else ""
             if step.volume_ul is not None and step.volume_ul <= well_ul:

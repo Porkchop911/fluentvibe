@@ -175,12 +175,18 @@ def assumptions(spec: BenchSpec, limit: int = 20) -> list[str]:
     unit = {"volume_ul": "{} µl per well", "ratio": "{}× ratio", "washes": "{} washes", "wash_ul": "{} µl wash",
             "elute_ul": "{} µl elution", "residual_ul": "{} µl left in the well", "cycles": "{} mix cycles",
             "temp_c": "{} °C", "minutes": "{} min"}
+    from .bench_spec import _numbers_in_text
+
     out: list[str] = []
     for step in spec.steps:
+        quoted = _numbers_in_text(step.source_quote or "")
         for name in step.proposed:
             value = getattr(step, name, None)
             if value in (None, [], ""):
                 continue
+            values = value if isinstance(value, list) else [value]
+            if quoted and all(isinstance(v, (int, float)) and float(v) in quoted for v in values):
+                continue   # written in the document's own words for this step
             shown = ", ".join(f"{v:g}" for v in value) if isinstance(value, list) else (
                 f"{value:g}" if isinstance(value, (int, float)) else str(value))
             text = " ".join(step.text.split())
@@ -507,9 +513,10 @@ def author_from_document(
         try:
             reqs, dispositions = (pending_requirements.result(timeout=1800)
                                   if pending_requirements is not None else ([], []))
-            from .requirements import requirements_from_spec
+            from .requirements import requirements_from_spec, skeleton_notes
 
-            reqs = reqs + requirements_from_spec(result.spec)  # the document's steps, in order
+            # The document's steps, in order, as the builder built them.
+            reqs = reqs + requirements_from_spec(result.spec, skeleton_notes(result.source))
             wt = build_worktable_from_source(result.source, str(out / "draft.py"))
             wt.simulate()
             verdicts = verify_all(wt, reqs)
