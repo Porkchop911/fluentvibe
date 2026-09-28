@@ -94,6 +94,29 @@ def _tool_names(tools: list[dict[str, Any]]) -> str:
     return ", ".join(n for n in names if n) or "the next tool call"
 
 
+class LMReasoningBudgetError(LMStudioError):
+    """The reply reasoned past its budget without text or a tool call."""
+
+    def __init__(self, notes: str, budget: int):
+        super().__init__(f"Model reasoned past its budget (~{budget} tokens) without a tool call.")
+        self.notes = notes
+
+
+# Fallback for a turn whose first attempt failed inside its reasoning: the
+# user's rule is xhigh, with medium only as the retry after a failed attempt.
+FALLBACK_REASONING_EFFORT = "medium"
+
+
+def _reasoning_budget_from_env() -> int | None:
+    """Reasoning tokens a turn may use before it is stopped and retried
+    (``FLUENTVIBE_LM_REASONING_BUDGET``; default 20000, 0 = no limit)."""
+    raw = os.environ.get("FLUENTVIBE_LM_REASONING_BUDGET", "").strip()
+    if not raw:
+        return 20000
+    value = int(raw)
+    return value if value > 0 else None
+
+
 def _dump_reasoning_only(message: dict[str, Any], label: str) -> None:
     """Keep the raw reply of a reasoning-only turn for diagnosis
     (``FLUENTVIBE_LM_DUMP_DIR``, an existing folder)."""
@@ -278,15 +301,24 @@ class LMStudioChatClient:
         output tokens before any tool call, is retried once with a short
         instruction to act (``FLUENTVIBE_LM_LOOP_GUARD=0`` turns this off)."""
         try:
-            message = self._complete_once(messages=messages, tools=tools)
+            try:
+                message = self._complete_once(messages=messages, tools=tools,
+                                              budget=_reasoning_budget_from_env() if tools else None)
+            except LMReasoningBudgetError as exc:
+                if not _loop_guard_enabled():
+                    raise
+                if self.trace_recorder is not None:
+                    self.trace_recorder.record("turn_retry", reason="reasoning_budget")
+                print(f"[lm] {exc} -- retrying once at {FALLBACK_REASONING_EFFORT} effort", flush=True)
+                message = {"reasoning_fields": {"reasoning_content": exc.notes}}
             if tools and _loop_guard_enabled() and _reasoning_only(message):
                 # The turn ended inside the reasoning (seen with vLLM: the draft
                 # written in reasoning, finish_reason=stop, no text, no tool call).
                 _dump_reasoning_only(message, "first")
                 if self.trace_recorder is not None:
                     self.trace_recorder.record("turn_retry", reason="reasoning_only")
-                print("[lm] reply ended inside its reasoning without a tool call -- retrying the turn once",
-                      flush=True)
+                print(f"[lm] reply ended inside its reasoning without a tool call -- retrying the turn once "
+                      f"at {FALLBACK_REASONING_EFFORT} effort", flush=True)
                 # Hand the model its own reasoning back: re-deriving it from
                 # scratch costs another 5-8 minutes at high effort.
                 notes = max((v for v in (message.get("reasoning_fields") or {}).values() if isinstance(v, str)),
@@ -294,10 +326,10 @@ class LMStudioChatClient:
                 handback = ([{"role": "assistant", "content": f"(My notes from the previous attempt:)\n{notes}"}]
                             if notes.strip() else [])
                 retry = self._complete_once(messages=[*messages, *handback, {"role": "user", "content": (
-                    "Your previous reply ended inside your reasoning, without a tool call or any text. "
+                    "Your previous reply ended inside your reasoning (or ran too long), without a tool call. "
                     + ("Your notes are above: do not re-derive them. " if handback else "")
                     + f"Keep the reasoning short and make one of the offered tool calls now: {_tool_names(tools)}."
-                )}], tools=tools)
+                )}], tools=tools, effort=FALLBACK_REASONING_EFFORT)
                 if _reasoning_only(retry):
                     _dump_reasoning_only(retry, "retry")
                     raise LMReasoningOnlyError(
@@ -329,6 +361,8 @@ class LMStudioChatClient:
         *,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]],
+        effort: str | None = None,
+        budget: int | None = None,
     ) -> dict[str, Any]:
         request_tools = _strict_workflow_tools(tools) if _truthy(os.environ.get("FLUENTVIBE_LM_STRICT_WORKFLOW")) else tools
         payload = {
@@ -353,7 +387,7 @@ class LMStudioChatClient:
         # Qwen-compatible servers accept this optional control. Omit it by
         # default so other OpenAI-compatible providers retain their behavior.
         if self.reasoning_effort is not None:
-            payload["reasoning_effort"] = self.reasoning_effort
+            payload["reasoning_effort"] = effort or self.reasoning_effort
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
         if self.trace_recorder is not None:
@@ -393,7 +427,7 @@ class LMStudioChatClient:
             with urllib.request.urlopen(req, timeout=effective_timeout) as response,                     (token.closing(response.close) if token is not None else contextlib.nullcontext()):
                 content_type = response.headers.get("Content-Type", "")
                 if "text/event-stream" in content_type:
-                    return _raise_if_truncated(self._read_stream(response, deadline=deadline))
+                    return _raise_if_truncated(self._read_stream(response, deadline=deadline, budget=budget))
                 data = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:
@@ -456,8 +490,10 @@ class LMStudioChatClient:
             )
         return _raise_if_truncated(message)
 
-    def _read_stream(self, response, *, deadline: float | None = None) -> dict[str, Any]:
+    def _read_stream(self, response, *, deadline: float | None = None,
+                     budget: int | None = None) -> dict[str, Any]:
         content_parts: list[str] = []
+        reasoning_chars = 0
         tool_calls: dict[int, dict[str, Any]] = {}
         finish_reason: str | None = None
         reasoning_parts: dict[str, list[str]] = {}
@@ -524,6 +560,13 @@ class LMStudioChatClient:
                     if show_thinking:
                         # The page shows what the model is thinking, as a chat does.
                         token.thinking = (token.thinking + value)[-1200:]
+                    reasoning_chars += len(value)
+                    # ~4 characters per token; only while nothing is answered yet.
+                    if budget is not None and reasoning_chars > 4 * budget and not tool_calls \
+                            and not "".join(content_parts).strip():
+                        response.close()
+                        notes = max(("".join(v) for v in reasoning_parts.values()), key=len, default="")
+                        raise LMReasoningBudgetError(notes[-8000:], budget)
                 else:
                     reasoning_parts.setdefault(key, []).append(json.dumps(value, default=str))
             if watch is not None and not tool_calls:
