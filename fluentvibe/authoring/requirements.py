@@ -144,6 +144,36 @@ def _initial_holders(wt, reagent_match: str) -> set[str]:
     return holders
 
 
+def _distinct_holders(wt, reagent_names: list[str]) -> dict[str, set[str]]:
+    """Which labware holds which reagent, each labware for one reagent only.
+
+    Names match by substring ("elutionbuffer" in "Elution buffer"), so one
+    name can sit inside another: "Distilled water" inside the DNA plate's
+    "DNA in distilled water", "PBS pH 7.4" inside the bead stock's "... in
+    PBS pH 7.4 ...". A labware then belongs to the reagent it holds by its
+    exact name, else to the longest matching name; a plate holding the
+    samples is never a reagent source (moving samples is a transfer)."""
+    placed = getattr(wt, "_placed", {})
+
+    def contents(label):
+        return {_norm(getattr(layer.reagent, "name", "")) for well in getattr(placed.get(label), "wells", {}).values()
+                for layer in well.layers}
+
+    def holds_samples(label):
+        return any(getattr(layer.reagent, "role", "") == "analyte"
+                   for well in getattr(placed.get(label), "wells", {}).values() for layer in well.layers)
+
+    raw = {name: _initial_holders(wt, name) for name in reagent_names}
+    owner: dict[str, str] = {}
+    for label in {lab for labs in raw.values() for lab in labs}:
+        if holds_samples(label):
+            continue
+        names = [n for n, labs in raw.items() if label in labs]
+        exact = [n for n in names if _norm(n) in contents(label)]
+        owner[label] = max(exact or names, key=lambda n: len(_norm(n)))
+    return {name: {lab for lab, who in owner.items() if who == name} for name in reagent_names}
+
+
 def _seconds(wt, value) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
@@ -604,7 +634,7 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
     A run of plate-to-plate moves between the same two plates is one token:
     "pool" when it lands in fewer wells than it drew from (many samples
     combined), else "transfer" (1:1)."""
-    holders = {name: _initial_holders(wt, name) for name in reagent_names}
+    holders = _distinct_holders(wt, reagent_names)
     placed = getattr(wt, "_placed", {})
 
     def category(label):
