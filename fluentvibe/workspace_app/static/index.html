@@ -1053,25 +1053,33 @@
       }
     }
 
-    async function pollJobUntilDone(jobId, statusId, resultId, done) {
-      // A long job must not be lost to a few seconds without an answer
-      // (seen while FluentControl was checking): keep reconnecting for 10 min.
+    // One job-status read that rides out a lost connection: every request is
+    // limited to 30 s and failures are retried for 10 min. A long job must not
+    // be lost because the page missed a few answers (seen while FluentControl
+    // was checking). A server answer (job unknown, …) is final.
+    async function fetchJob(jobId, statusId) {
       let failingSince = null;
       while (true) {
-        let data;
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 30000);
         try {
-          data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
-          failingSince = null;
+          return (await api(`/api/job?id=${encodeURIComponent(jobId)}`, { signal: ctrl.signal })).job;
         } catch (err) {
-          if (err.status && err.status < 500) throw err;
+          if (err.status) throw err;
           failingSince = failingSince || Date.now();
           const lost = (Date.now() - failingSince) / 1000;
           if (lost > 600) throw err;
           setStatus(statusId, `Connection interrupted; reconnecting (${formatDuration(lost)})…`, 'running');
           await sleep(Math.min(5000, 1000 + lost * 200));
-          continue;
+        } finally {
+          clearTimeout(timer);
         }
-        const job = data.job;
+      }
+    }
+
+    async function pollJobUntilDone(jobId, statusId, resultId, done) {
+      while (true) {
+        const job = await fetchJob(jobId, statusId);
         if (statusId === 'authorStatus' && state.authorPending && job.thinking !== state.authorThinking) {
           state.authorThinking = job.thinking || '';
           renderAuthorChat();
@@ -1282,14 +1290,21 @@
         pushAuthorMessage('error', 'Could not start', String(err.message || err));
         return;
       }
-      const jobId = created.job.id;
+      const run = { jobId: created.job.id, fcChecked, instructionsChecked, noQuestions };
+      try { localStorage.setItem('fastRun', JSON.stringify(run)); } catch (_) { /* per-viewer convenience only */ }
+      await followFast(run);
+    }
+
+    // Follows a Fast job to its end: questions, progress, result. Also picks
+    // up a job that was running when the page was reloaded.
+    async function followFast({ jobId, fcChecked, instructionsChecked, noQuestions }) {
       state.fastJobId = jobId; state.fastWaiting = false;
       authorBusy(true);
       const runId = `fast-${jobId}`;
       let shownQuestions = '', job;
       try {
         while (true) {
-          job = (await api(`/api/job?id=${encodeURIComponent(jobId)}`)).job;
+          job = await fetchJob(jobId, 'authorStatus');
           upsertAuthorMessage(runId, 'model', 'Fast', fastStepsHtml(job, fcChecked, instructionsChecked, noQuestions));
           const questions = job.question || [];
           const key = JSON.stringify(questions);
@@ -1342,8 +1357,15 @@
         setStatus('authorStatus', String(err.message || err), 'error');
       } finally {
         state.fastJobId = null; state.fastWaiting = false;
+        try { localStorage.removeItem('fastRun'); } catch (_) { /* ignore */ }
         authorBusy(false);
       }
+    }
+
+    function resumeFast() {
+      let run = null;
+      try { run = JSON.parse(localStorage.getItem('fastRun') || 'null'); } catch (_) { run = null; }
+      if (run && run.jobId && !state.fastJobId) followFast(run);
     }
 
     function bindAuthor() {
@@ -1384,7 +1406,7 @@
           const created = await post('/api/jobs/replay-source', {
             source: $('generatedCode').value, profile_name: $('authorProfile').value, title: 'Protocol replay' });
           let job;
-          do { await sleep(700); job = (await api(`/api/job?id=${encodeURIComponent(created.job.id)}`)).job; }
+          do { await sleep(700); job = await fetchJob(created.job.id, 'authorStatus'); }
           while (job.status === 'queued' || job.status === 'running');
           if (job.status !== 'success') { setStatus('authorStatus', job.error ? job.error.message : 'replay failed', 'error'); win && win.close(); return; }
           const url = URL.createObjectURL(new Blob([job.result.html], { type: 'text/html' }));
@@ -1399,6 +1421,7 @@
       bindSetup();
       bindWorkbench();
       bindAuthor();
+      resumeFast();
       try {
         await loadCapabilities();
         const [configs, workspaces, liquidClasses] = await Promise.all([
