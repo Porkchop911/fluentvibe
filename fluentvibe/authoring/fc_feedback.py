@@ -14,7 +14,9 @@ finding the model can act on:
   aspirate) and repeats are folded into one finding with a count.
 
 FluentControl is one desktop application, so checks are serialised with a lock
-file, and the UserSpecific shell script is restored after every check.
+file, and the UserSpecific shell script is restored after every check. The UI
+automation runs in a child process (``fc_worker``) with a timeout, so it never
+stalls the web server that asked for it.
 
 ``FLUENTVIBE_FC_CHECK=1`` makes the authoring graph run this check itself
 before accepting a draft (see ``graph.py``); the ``check_in_fluentcontrol``
@@ -23,17 +25,21 @@ tool lets the model run it whenever it wants.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterator
 
 FC_CHECK_ENV = "FLUENTVIBE_FC_CHECK"
+FC_CHECK_TIMEOUT_ENV = "FLUENTVIBE_FC_CHECK_TIMEOUT_S"  # the worker is killed after this
 FC_CHECK_BUDGET = 2  # repair turns the graph gives for InfoPad findings
 _LOCK = Path(tempfile.gettempdir()) / "fluentvibe_fluentcontrol.lock"
 _LINE = re.compile(r"^\s*(\d+)\s*:\s*(.+)$")
@@ -213,6 +219,65 @@ def _fluentcontrol_lock(timeout_s: float = 900.0) -> Iterator[None]:
         _LOCK.unlink(missing_ok=True)
 
 
+def _fc_check_timeout_s() -> float:
+    try:
+        return float(os.environ.get(FC_CHECK_TIMEOUT_ENV, "") or 300.0)
+    except ValueError:
+        return 300.0
+
+
+def _run_fc_worker(xscr_path: Path) -> SimpleNamespace:
+    """Run the UI check in ``fc_worker`` (a child process) and read its result.
+
+    UI Automation in the web server's job thread stalled the job polling, so
+    the COM work gets its own process. Called under ``_fluentcontrol_lock``;
+    a timeout kills the child, and the shell script it was patching is put
+    back here because the child's own restore never ran.
+    """
+    from .fc_worker import RESULT_PREFIX
+    from .fluentcontrol_shell import DEFAULT_SHELL_XSCR, read_xscr_text, write_xscr_text
+
+    try:
+        shell_text = read_xscr_text(DEFAULT_SHELL_XSCR)
+    except Exception:
+        shell_text = None
+    timeout_s = _fc_check_timeout_s()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "fluentvibe.authoring.fc_worker", str(Path(xscr_path).resolve())],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_s,
+            cwd=str(Path(__file__).resolve().parents[2]),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired:  # run() has killed the child
+        _restore_shell(shell_text, write_xscr_text, DEFAULT_SHELL_XSCR)
+        raise RuntimeError(f"FluentControl did not finish within {timeout_s:g} s (worker killed)") from None
+    lines = [line for line in (proc.stdout or "").splitlines() if line.startswith(RESULT_PREFIX)]
+    if proc.returncode != 0 or not lines:
+        _restore_shell(shell_text, write_xscr_text, DEFAULT_SHELL_XSCR)
+        detail = (proc.stderr or "").strip().splitlines()[-1:] or ["no result"]
+        raise RuntimeError(f"worker exited with code {proc.returncode}: {detail[0][:300]}")
+    try:
+        data = json.loads(lines[-1][len(RESULT_PREFIX):])
+    except ValueError as exc:
+        raise RuntimeError(f"worker printed an unreadable result: {exc}") from None
+    return SimpleNamespace(
+        opened=bool(data.get("opened", False)),
+        load_failed=bool(data.get("load_failed", False)),
+        load_error_text=str(data.get("load_error_text") or ""),
+        error_lines=[str(line) for line in data.get("error_lines") or []],
+    )
+
+
+def _restore_shell(text, write, path) -> None:
+    if text is None:
+        return
+    try:
+        write(path, text)
+    except Exception:
+        pass
+
+
 def check_in_fluentcontrol(xscr_path: Path, *, source: str | None = None, source_file: str | None = None,
                            validator=None) -> dict[str, Any]:
     """Open ``xscr_path`` in FluentControl, read the InfoPad, explain the findings.
@@ -225,10 +290,7 @@ def check_in_fluentcontrol(xscr_path: Path, *, source: str | None = None, source
         available, reason = fluentcontrol_available()
         if not available:
             return {"ok": None, "available": False, "message": f"FluentControl check skipped: {reason}"}
-        from .fluentcontrol_shell import validate_generated_xscr_via_shell
-
-        def validator(path):
-            return validate_generated_xscr_via_shell(path, restore_shell=True)
+        validator = _run_fc_worker
 
     try:
         with _fluentcontrol_lock():
