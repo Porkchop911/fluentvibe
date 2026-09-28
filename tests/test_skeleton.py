@@ -583,6 +583,20 @@ def test_document_sequence_catches_a_missing_wait_and_a_skipped_step(profile, tm
     assert verdict(no_transfer).status == "fail"
 
 
+def test_do_this_protocol_from_the_request_is_checked_on_the_document_steps(profile, tmp_path):
+    """'for DNA immobilisation' in the request names the document's protocol:
+    it is checked on the document's steps, not left as 'not checkable'."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import Requirement, requirements_from_spec, verify_all
+
+    spec = _spec(_SPRI_PRIMITIVES)
+    asked = Requirement("req_1", "for SPRI clean-up", "document_sequence", {"protocol": "SPRI"})
+    wt = build_worktable_from_source(build_skeleton(spec, load_deck(profile)), str(tmp_path / "d.py"))
+    wt.simulate()
+    verdicts = verify_all(wt, [asked, *requirements_from_spec(spec)])
+    assert [v.status for v in verdicts] == ["pass", "pass"]
+
+
 def test_named_volumes_carry_a_change_through(profile, tmp_path):
     """Editing one per-well volume in the Python (e.g. with Ctrl+I) must not
     break the removals and mixes that depend on it."""
