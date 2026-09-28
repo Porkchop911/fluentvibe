@@ -305,6 +305,7 @@ def author_from_document(
         source_text = trimmed.text
         note(trimmed.note)
     request_has_instructions = True
+    user_request = request  # the checklist is the user's words only
     if sample_sheet:
         # The model never sees the concentrations, but it must know they
         # exist: otherwise "50 ng in 9 ul" reads as already done.
@@ -350,13 +351,13 @@ def author_from_document(
     # Only when the request says something concrete (as the understanding
     # call judged): a checklist call on "automate this" costs minutes of GPU
     # time for nothing. The document's own steps are checked either way.
-    if check_requirements and request and request_has_instructions:
+    if check_requirements and user_request and request_has_instructions:
         from concurrent.futures import ThreadPoolExecutor
 
         from .requirements import extract_requirements
 
         pool = ThreadPoolExecutor(max_workers=1)
-        pending_requirements = pool.submit(extract_requirements, client, request, source_text)
+        pending_requirements = pool.submit(extract_requirements, client, user_request, source_text)
         pool.shutdown(wait=False)
         note("extracting your instructions into a checklist (model, in parallel)")
     extra_context = "\n\n".join(context_parts) or None
