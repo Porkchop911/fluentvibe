@@ -385,8 +385,10 @@ def answer_job(payload: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True}
 
 
-def _job_ask(payload: dict[str, Any], questions: list[str], timeout_s: float = 1800.0) -> str | None:
-    """Pause the job with ``questions`` until the page answers (or time runs out)."""
+def _job_ask(payload: dict[str, Any], questions: list[str], timeout_s: float | None = None) -> str | None:
+    """Pause the job with ``questions`` until the page answers or Stop is
+    pressed. No time limit by default: a question left for lunch must not end
+    the run (Stop ends it)."""
     job_id = payload.get("_job_id")
     event = threading.Event()
     with _JOB_LOCK:
@@ -400,7 +402,7 @@ def _job_ask(payload: dict[str, Any], questions: list[str], timeout_s: float = 1
 
     _job_progress(payload, "waiting for your answer")
     token = cancel.current()
-    deadline = time.time() + timeout_s
+    deadline = time.time() + timeout_s if timeout_s else float("inf")
     answered = False
     while time.time() < deadline:
         if event.wait(0.5):
@@ -468,7 +470,9 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("attach a protocol document or describe the protocol")
     os.environ[PROFILE_DIR_ENV] = str(profile_dir)
     result = author_from_document(
-        LMStudioChatClient(request_timeout_s=1800), document, profile_dir, output_dir,
+        # One model call may take this long (the page's "response limit"; 60 min default).
+        LMStudioChatClient(request_timeout_s=float(payload.get("request_timeout_s") or 3600)),
+        document, profile_dir, output_dir,
         request=request or None,
         ask=choose_yourself if payload.get("choose") else (lambda questions: _job_ask(payload, questions)),
         fluentcontrol=bool(payload.get("fc_check", False)),
