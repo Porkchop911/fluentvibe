@@ -133,3 +133,21 @@ def test_injected_validator_stays_in_process(tmp_path, monkeypatch):
     out = check_in_fluentcontrol(tmp_path / "x.xscr",
                                  validator=lambda p: SimpleNamespace(opened=True, load_failed=False, error_lines=[]))
     assert out["ok"] is True
+
+
+def test_a_lock_left_by_a_killed_check_is_taken_over_at_once(tmp_path, monkeypatch):
+    """Cancel in the editor kills the CLI and its worker: their lock must not
+    block the next check for 15 minutes."""
+    import subprocess
+    import sys
+    import time
+
+    dead = subprocess.Popen([sys.executable, "-c", "pass"])
+    dead.wait()
+    lock = tmp_path / "fc.lock"
+    lock.write_text(str(dead.pid), encoding="utf-8")
+    monkeypatch.setattr(fc_feedback, "_LOCK", lock)
+    started = time.monotonic()
+    with fc_feedback._fluentcontrol_lock(timeout_s=30):
+        assert lock.read_text(encoding="utf-8") == str(__import__("os").getpid())
+    assert time.monotonic() - started < 5

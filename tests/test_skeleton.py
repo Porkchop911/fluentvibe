@@ -1162,3 +1162,27 @@ def test_a_document_number_in_another_unit_is_still_an_assumption():
                       "proposed": ["minutes"], "source_quote": "Incubate for 15 minutes"}]}
     listed = assumptions(_spec(raw))
     assert len(listed) == 1 and "20 min" in listed[0]
+
+
+def test_set_instructions_keeps_the_documents_own_steps(tmp_path, monkeypatch):
+    """The editor's "Set instructions" replaces the instructions, not the
+    document-order check that generation saved beside the protocol."""
+    import argparse
+
+    from fluentvibe import cli
+    from fluentvibe.authoring import requirements as R
+
+    draft = tmp_path / "draft.py"
+    draft.write_text("x = 1\n", encoding="utf-8")
+    doc = R.Requirement("DOC", "every deck step of the document, in order", "document_sequence",
+                        {"expected": [{"token": "mix", "text": "s1", "seconds": 0.0}], "reagents": []})
+    R.save_requirements(R.sidecar_path(draft), [R.Requirement("old", "old", "sample_count", {"count": 8}), doc])
+    new = R.Requirement("req_1", "20 ul samples", "sample_volume", {"ul": 20})
+    monkeypatch.setattr(R, "extract_requirements", lambda client, request, document: ([new], []))
+    args = argparse.Namespace(draft=draft, request="20 ul samples", document=None, profile=None)
+    try:
+        cli._cmd_requirements(args)
+    except Exception:
+        pass   # verifying the placeholder draft may fail; the sidecar is written first
+    saved = R.load_requirements(R.sidecar_path(draft))
+    assert [r.id for r in saved] == ["req_1", "DOC"]

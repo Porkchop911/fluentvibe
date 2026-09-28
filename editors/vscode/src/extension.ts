@@ -9,7 +9,9 @@ import {
 
 import {
   clearFluentControlDiagnostics,
+  cliEnv,
   convertOpentrons,
+  profileDir,
   setInstructions,
   showReplay,
   generateFromDocument,
@@ -35,6 +37,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("fluentvibe.convertOpentrons", convertOpentrons),
     vscode.commands.registerCommand("fluentvibe.setInstructions", setInstructions),
     vscode.commands.registerCommand("fluentvibe.showReplay", showReplay),
+    // Always registered: Ctrl+I must say why it does nothing, not "command not found".
+    vscode.commands.registerCommand("fluentvibe.inlineEdit", inlineEdit),
     // InfoPad findings describe the file as it was checked; an edit invalidates them.
     vscode.workspace.onDidChangeTextDocument((e) => clearFluentControlDiagnostics(e.document))
   );
@@ -46,7 +50,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // The server is `python -m fluentvibe lsp`, speaking LSP over stdio. Never
   // rebuild the catalog index on startup — that would block the LSP handshake.
-  const env = { ...process.env, FLUENTVIBE_NO_AUTO_REBUILD: "1" };
+  // It gets the same model settings as the commands (Ctrl+I calls the model)
+  // and the deck profile (wt.add() resolves against it; without it every
+  // protocol that uses it shows a false error).
+  const env: NodeJS.ProcessEnv = { ...cliEnv(), FLUENTVIBE_NO_AUTO_REBUILD: "1" };
+  const profile = profileDir();
+  if (profile) {
+    env.FLUENTVIBE_PROFILE_DIR = profile;
+  }
   const run = {
     command: pythonPath,
     args: ["-m", "fluentvibe", "lsp"],
@@ -64,10 +75,20 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   client = new LanguageClient("fluentvibe", "fluentvibe", serverOptions, clientOptions);
-  context.subscriptions.push(
-    vscode.commands.registerCommand("fluentvibe.inlineEdit", inlineEdit)
-  );
   context.subscriptions.push({ dispose: () => client?.stop() });
+  // The server reads the settings once, at start.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("fluentvibe")) {
+        vscode.window.showInformationMessage("fluentvibe: settings changed; reload the window to apply them.",
+          "Reload").then((choice) => {
+          if (choice === "Reload") {
+            vscode.commands.executeCommand("workbench.action.reloadWindow");
+          }
+        });
+      }
+    })
+  );
   client.start().catch((err) => {
     vscode.window.showErrorMessage(`fluentvibe language server failed to start: ${err}`);
   });
@@ -75,7 +96,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 async function inlineEdit(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
-  if (!editor || !client) {
+  if (!editor) {
+    return;
+  }
+  if (!client) {
+    vscode.window.showWarningMessage("fluentvibe: the language server is off (setting fluentvibe.enable).");
     return;
   }
   const instruction = await vscode.window.showInputBox({
@@ -87,7 +112,9 @@ async function inlineEdit(): Promise<void> {
   }
   const sel = editor.selection;
   const startLine = sel.start.line + 1; // server is 1-based, inclusive
-  const endLine = sel.end.line + 1;
+  // A selection that ends at column 0 of the next line (triple-click,
+  // Shift+Down) does not include that line.
+  const endLine = sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line : sel.end.line + 1;
 
   const result = (await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "fluentvibe: editing…" },
