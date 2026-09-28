@@ -82,9 +82,33 @@ class _Op:
     step: Any
 
 
+def _steps_as_run(wt):
+    """Every authored step in run order, a loop body as often as the loop
+    runs (its count resolved from the simulation values): a 3x wash in a
+    FluentControl loop is three washes, not one."""
+    def walk(steps):
+        for step in steps:
+            yield step
+            if type(step).__name__ == "LoopStep":
+                count = getattr(step, "number_of_loops", None)
+                count = getattr(step, "iterations", 1) if count is None else count
+                times = _seconds(wt, count)
+                for _ in range(max(1, int(times)) if times else 1):
+                    yield from walk(step.steps or [])
+                continue
+            inner = getattr(step, "steps", None)
+            if inner:
+                yield from walk(inner)
+            for branch in ("then_steps", "else_steps"):
+                if getattr(step, branch, None):
+                    yield from walk(getattr(step, branch))
+    for group in wt._groups:
+        yield from walk(group.steps)
+
+
 def _operations(wt) -> list[_Op]:
     ops: list[_Op] = []
-    for index, step in enumerate(wt._iter_all_steps()):
+    for index, step in enumerate(_steps_as_run(wt)):
         kind = type(step).__name__
         pos = getattr(step, "source_pos", None)
         line = getattr(pos, "line", None)
