@@ -1003,3 +1003,35 @@ def test_a_repeat_the_operator_does_is_not_an_empty_loop(profile, tmp_path):
     source = build_skeleton(_spec(raw), load_deck(profile))
     assert "wt.loop(" not in source
     compile(source, "d.py", "exec")
+
+
+def test_removing_off_the_magnet_with_beads_gets_a_separation_first(profile, tmp_path):
+    """Seen on Dynabeads: the spec said 'remove the 1X buffer' with no magnet
+    step; the beads must not go to the waste. Also: the checklist follows what
+    the builder did (a vial mix before anything is in the plate is skipped, a
+    transfer into the empty plate is an add)."""
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.requirements import requirements_from_spec, skeleton_notes, verify_all
+
+    raw = {
+        "title": "Bead wash", "sample_count": 96, "starts_empty": True,
+        "reagents": [{"id": "beads", "name": "Dynabeads M-280", "role": "bead_carrier"},
+                     {"id": "bw", "name": "1X B&W buffer", "role": "wash"}],
+        "steps": [
+            {"id": "vial", "op": "mix", "text": "Resuspend the beads in the vial", "location": "deck"},
+            {"id": "t", "op": "transfer", "text": "Transfer 25 µl beads to the plate", "location": "deck",
+             "reagent": "beads", "volume_ul": 25},
+            {"id": "a", "op": "add", "text": "Add 25 µl 1X B&W", "location": "deck", "reagent": "bw",
+             "volume_ul": 25},
+            {"id": "m", "op": "mix", "text": "Mix", "location": "deck"},
+            {"id": "r", "op": "remove", "text": "Remove the 1X B&W", "location": "deck"},
+        ],
+    }
+    source = build_skeleton(_spec(raw), load_deck(profile))
+    assert "r: magnet first, so the beads stay" in source
+    body = source[source.index("magnet first"):]
+    assert "remove_liquid(" in body                          # the separation comes before the removal
+    wt = build_worktable_from_source(source, str(tmp_path / "d.py"))
+    wt.simulate()
+    (verdict,) = verify_all(wt, requirements_from_spec(_spec(raw), skeleton_notes(source)))
+    assert verdict.status == "pass", verdict

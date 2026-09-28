@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -592,10 +592,30 @@ def _protocol_tokens(wt, ops: list[_Op], reagent_names: list[str]) -> list[tuple
     return collapsed
 
 
-def requirements_from_spec(spec) -> list[Requirement]:
-    """The document's deck steps as one ordered completeness requirement."""
+def skeleton_notes(source: str) -> list[str]:
+    """The builder's ``Note:`` lines from the head of a generated protocol."""
+    return [line.strip()[len("Note: "):] for line in (source or "").splitlines()[:200]
+            if line.strip().startswith("Note: ")]
+
+
+def requirements_from_spec(spec, notes: Iterable[str] = ()) -> list[Requirement]:
+    """The document's deck steps as one ordered completeness requirement.
+
+    ``notes`` are the builder's notes (:func:`skeleton_notes`): steps it skipped
+    (nothing to mix in an empty plate) or turned into something else (a
+    transfer into empty wells adds that liquid) are expected as built."""
     reagents = {r.id: r.name for r in spec.reagents}
     samples = {r.id for r in spec.reagents if r.role == "sample"}
+    skipped: set[str] = set()
+    adds: dict[str, str] = {}
+    for note in notes:
+        step_id = note.split(":", 1)[0].split(" (", 1)[0].strip()
+        if note.endswith("; skipped") or "is done by the operator" in note:
+            skipped.add(step_id)
+        elif (m := re.search(r"this transfer adds (\S+)$", note)):
+            adds[step_id] = m.group(1)
+        elif "is the samples (one per well" in note:
+            samples.add(note.split(": ", 1)[1].split(" is the samples", 1)[0])
     expected: list[dict[str, Any]] = []
 
     def push(token, text, seconds=0.0):
@@ -607,6 +627,10 @@ def requirements_from_spec(spec) -> list[Requirement]:
         if step.location != "deck":
             continue
         text = f"{step.id}: {step.text}"
+        if step.id in skipped:
+            continue
+        if step.id in adds:
+            step = replace(step, op="add", reagent=adds[step.id])
         if step.op == "add" and step.reagent in samples:
             # The samples come from a sample plate, one well each: a plate-to-plate
             # transfer (the protocol scan does not read sample liquid as a reagent).
