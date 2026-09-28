@@ -595,7 +595,12 @@ def requirements_from_spec(spec) -> list[Requirement]:
             push("mag_off" if step.engage is False else "mag_on", text)
         elif step.op == "remove":
             push("waste", text)
-        elif step.op in ("transfer", "pool"):
+        elif step.op == "pool":
+            push("transfer", text)
+            # The builder hands everything after a pool to the operator in
+            # one step (see skeleton: ``pooled``).
+            break
+        elif step.op == "transfer":
             push("transfer", text)
         elif step.op == "mix":
             push("mix", text)

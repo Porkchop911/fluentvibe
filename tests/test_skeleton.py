@@ -897,7 +897,12 @@ def test_steps_after_pooling_are_one_operator_hand_off(profile, tmp_path):
     assert len(hand_offs) == 1 and "column 1 of" in hand_offs[0] and "equal volume of AXP" in hand_offs[0]
     namespace: dict = {}
     exec(compile(source, str(tmp_path / "d.py"), "exec"), namespace)
-    namespace["build_worktable"]().simulate()
+    wt = namespace["build_worktable"]()
+    wt.simulate()
+    # The checklist does not expect the operator's steps on the deck.
+    from fluentvibe.authoring.requirements import requirements_from_spec, verify_all
+
+    assert verify_all(wt, requirements_from_spec(_spec(raw)))[0].status == "pass"
 
 
 def test_samples_added_later_come_from_a_sample_plate(profile, tmp_path):
