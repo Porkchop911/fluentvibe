@@ -6,6 +6,9 @@ always_on: false
 ---
 ## `wt.odtc_*` — Inheco underdeck ODTC (driver module `SiLA-ODTC`)
 
+**Only if the deck section lists an ODTC position (e.g. `Inheco_Pos`).** The 1080 deck has none: there a
+thermal program is an operator step (`thermal_step` without `odtc_position`, or `offdeck_step`).
+
 ```python
 wt.odtc_open_door()
 wt.gripper.move(plate, to=('Inheco_Pos', 4))   # load plate into the ODTC

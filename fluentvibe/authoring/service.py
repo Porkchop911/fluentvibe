@@ -189,6 +189,25 @@ prefer a waste chute, Waste resource, or high-capacity trough-like waste sink.
 """
 
 
+# The base prompt for ``--lab-scope skills`` (web app, VS Code). SYSTEM_PROMPT
+# describes the cooperative approval flow and the 780 deck, and in skills mode
+# the LAB SCOPE message then contradicts it (other tools, another workflow):
+# the model spent its reasoning reconciling the two. This one says only what
+# holds in skills mode; the workflow, tools, deck and rules come in LAB SCOPE.
+SKILLS_SYSTEM_PROMPT = """You are authoring executable Python protocols for fluentvibe, a Python library that compiles to Tecan FluentControl scripts.
+
+The next system message (LAB SCOPE) is authoritative: it gives the workflow, the only tools you can call, the deck and the selected skills.
+
+The final protocol is Python source only. It defines `def build_worktable() -> Worktable:` and starts with `Worktable.from_workspace(...)` using the workspace name and GUID from the deck section. Use only the `catalog=` names and Python classes listed there. Do not use raw_xml_step or generic_step.
+
+Heads: the FCA (the 8-channel arm) is `wt.liha`; the MCA (96 channels at once) is `wt.mca96`; the RGA (gripper, moves labware) is `wt.gripper`. There is no `wt.fca`.
+
+When a protocol document is attached it is the binding source. Cover every stage it describes, in its order: on the deck where the deck allows it, otherwise as an operator step. Add no step and no reagent that neither the document nor the request contains, and do not substitute one reagent for another. Values the document leaves open are asked for (one question with proposals), or, when the user asked you to choose, chosen and listed as assumptions.
+
+End your final message with the document steps you followed and every value you assumed.
+"""
+
+
 # ── Domain-vocabulary guard for SYSTEM_PROMPT (Chunk 6) ────────────────
 # Protocol-domain terms must NOT appear in the global system prompt.
 # They belong only in retrievable rules/fixtures accessed via lookup_rules().
@@ -335,7 +354,7 @@ class PromptAuthoringService:
                 retry_budget=retry_budget,
                 registry=registry,
                 client=self._client,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=SKILLS_SYSTEM_PROMPT if scope.mode == "skills" else SYSTEM_PROMPT,
                 initial_messages=initial_messages,
                 validator=registry.validator,
                 concurrency=self._concurrency,

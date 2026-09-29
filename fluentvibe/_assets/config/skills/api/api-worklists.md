@@ -6,6 +6,10 @@ always_on: false
 ---
 ## When to use a worklist
 
+For per-well volumes computed in the protocol (normalisation, variable fills) use the blocks
+`transfer_volumes` / `distribute_volumes` (api-blocks): no file needed. A worklist is for a pick list that
+comes as a file (CSV/GWL).
+
 Scalar `aspirate`/`dispense` + a native `wt.loop` express *uniform* or
 *column-wise* volumes. When each well needs a **different** volume, or the
 source→destination mapping is arbitrary (a CSV pick list), use a **worklist** —
@@ -33,7 +37,7 @@ wt.group("Cherrypick from pick list")
 source = wt.place(Plate96("Source", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
 dest   = wt.place(Plate96("Dest",   catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
 # REQUIRED: an FCA DiTi box matching the worklist's diti_type (default FCA, 1000ul SBS)
-fca_tips = wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
+fca_tips = wt.place(FCA1000Box("FcaTips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
 
 wt.worklist(r"C:\ProgramData\Tecan\VisionX\Worklists\picklist.csv",
             liquid_class="Water Free Single")

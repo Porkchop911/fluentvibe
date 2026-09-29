@@ -116,6 +116,18 @@ Reagent tips dispense from above and stay clean; mixing needs a separate
 row-A samples). A single tube pool needs a final operator step
 (`offdeck_step`).
 
+### `pool_wells` — named wells into one well (FCA)
+
+`pool_wells(wt, source=samples, dest=pool_plate, volume_ul=5.0, tips=fca_box, liquid_class=LC, source_wells=samples.first_wells(24), dest_well="A1")`
+— fresh tips per source column; for pools that are not whole columns.
+
+### `transfer_volumes` / `distribute_volumes` — a different volume per well (FCA)
+
+`distribute_volumes(wt, source=water_trough, plate=norm_plate, volumes={"A1": 7.4, "B1": 5.7}, tips=fca_box, liquid_class=LC, name="Diluent")`
+`transfer_volumes(wt, source=samples, dest=norm_plate, volumes={"A1": 1.6, "B1": 3.3}, tips=fca_box, liquid_class=LC, name="Samples")`
+— normalisation and any per-well volumes; `distribute_volumes` is a reagent from one source, `transfer_volumes`
+is well to same well with fresh tips per sample. No worklist file needed.
+
 ### `offdeck_step` — operator hand-off
 
 `offdeck_step(wt, "Run 30 C 2 min, 80 C 2 min on the thermal cycler, then return the plate.", labware=samples, handoff=("Nest61mm_Pos", 10), name="Tagmentation")`

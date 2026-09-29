@@ -24,21 +24,20 @@ question, each with a concrete proposal and the reason it fits:
 ```
 ask_user(
   question=(
-    "The guide gives no plate-scale volumes. Proposed per well (96 wells), please confirm or correct:\n"
-    "1. Bead slurry: 20 µL (0.2 mg; guide: titrate, ~20 µg dsDNA capacity per mg)\n"
-    "2. Bead washes: 3 × 100 µL 1X B&W (guide: equal volume, 3 washes)\n"
-    "3. Resuspend in 2X B&W: 40 µL, then 40 µL probe (guide: equal volumes)\n"
-    "4. Immobilization: 15 min at room temperature with mixing\n"
-    "5. Coated-bead washes: 2 × 100 µL 1X B&W; final resuspension 20 µL"
+    "The document gives no plate-scale volumes. Proposed per well (96 wells), please confirm or correct:\n"
+    "1. Reagent A: 50 µL (the document's 1:1 ratio to the 50 µL sample)\n"
+    "2. Incubation: 30 min at room temperature on the deck (document: 30 min, RT)\n"
+    "3. Washes: 3 × 150 µL wash buffer (document: 'wash three times', volume open)\n"
+    "4. Final volume: 50 µL (document: 'resuspend in a suitable volume')"
   ),
-  axes=["bead_volume_ul", "wash_volume_ul", "binding_volume_ul", "probe_volume_ul", "final_volume_ul"],
+  axes=["reagent_a_ul", "incubation_min", "wash_ul", "final_ul"],
 )
 ```
 
 Proposals must fit the deck, so the answer can be used as is:
 - one tip trip ≤ 200 µL with `MCA96, 200ul` / `FCA, 200ul` tips (larger
   volumes need trips — blocks split them);
-- a 96-well plate well holds ~300 µL working volume in total;
+- a 96-well plate well holds at most ~330 µL (≤ 180 µL while beads are in it);
 - a mix volume ≤ the liquid in the well and ≤ 90% of the tip capacity;
 - reagent totals for 96 wells fit their trough (25 mL / 100 mL) with dead volume.
 

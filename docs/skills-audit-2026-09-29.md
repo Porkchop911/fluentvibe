@@ -162,3 +162,31 @@ monoliths. Rendering rules, Opentrons IDs, roadmap links, whitelist to-do notes.
 3. Family skills: rewrite as chemistry notes + verified example protocols (point 2 above), or fix the existing
    skeletons in place?
 4. The June drafts: fold in or drop?
+
+## Changes on this branch (rewrite)
+
+| | Before | After |
+|---|---|---|
+| Skill files | 28 | 30 (+ `core-lab-rules`, + `family-bead-immobilization`) |
+| Catalogue size | 130.5k chars | 82.1k chars |
+| Always-on size | 27.6k | 25.5k |
+| Family skills | 76.6k | 31.0k |
+| Old files failing the new consistency test | 17 of 28 | 0 |
+
+- Base prompt for skills mode (`SKILLS_SYSTEM_PROMPT`): the document is binding, no added steps or reagents,
+  open values asked or assumed; the skills header no longer lists example stages.
+- `Water Mix` / `Empty Tip` always allowed (`REQUIRED_LIQUID_CLASSES`).
+- Core and api skills: one vocabulary (FCA = `wt.liha`, MCA = `wt.mca96`, RGA = `wt.gripper`), real classes
+  and catalogs, capacities, liquid classes, per-well volume blocks; examples checked in the simulator.
+- Family skills: chemistry notes (what the product is, steps to keep, typical values, what to ask, which block),
+  no head-call skeletons. New `family-bead-immobilization` (streptavidin/biotin: product stays on the beads,
+  final buffer role `plain`, no elution).
+- Selection: a skill body that names another skill loads it (`_expand_cross_references`); bodies no longer
+  name unrelated families. SPRI triggers no longer fire on bare "bead"/"magnet".
+- `tests/test_skills_catalogue.py`: API names and keywords in examples, roles, liquid classes, tip-box classes,
+  stale worklist claims, family cross-links, the complete example simulated strict.
+- Deleted `docs/skill-authoring/_drafts/*.additions.md` (June proposals; superseded).
+
+Found on the way, not fixed here: the simulator moves the top layer on aspirate and a mix does not
+homogenise, so in a serial dilution the stock layer travels intact to the last column (volumes are right,
+composition is not).

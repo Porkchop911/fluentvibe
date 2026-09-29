@@ -1,68 +1,40 @@
 ---
 name: family-cherrypicking
 axis: family
-description: Cherry-pick samples between plates or tubes from a pick list — per-well variable volumes and arbitrary source-to-destination moves via a worklist (the canonical path), with in-tip dilution, buffer pre-fill, and volume-threshold pipette selection. Select for cherry-picking, hit-picking, sample selection, targeted transfers, CSV-driven well-to-well moves, or subset plating workflows.
+description: Cherry-pick selected samples (hits, passing samples) from source plates into a destination plate, each pick with its own source well, destination well and volume, optionally with diluent first. Select for cherry-picking, hit-picking, sample selection, targeted transfers or pick-list-driven well-to-well moves.
 always_on: false
 ---
-## Canonical workflow: cherrypicking via worklist (CSV pick list)
+## What the product is
 
-Cherrypicking IS per-well variable volumes from a pick list — so the canonical
-path is a **worklist**: a CSV with one record per pick (source well, dest well,
-volume), executed with `wt.worklist(...)`. Each record carries its own volume
-and arbitrary source→dest mapping, so the defining feature is native — no
-"uniform approximation." See `api-worklists`.
+A destination plate holding the picked samples in the listed positions.
 
-### Labware Placement
+## Where the pick list comes from
 
-- Source plate(s) — `Plate96` or troughs (labware names must match the CSV's
-  `SourceLabel` column)
-- Destination plate(s) — `Plate96` (matches `DestLabel`)
-- FCA tip box
+| Source of the list | Use |
+|---|---|
+| In the request or document, each sample stays at its address | `transfer_volumes` (FCA; `volumes={"A1": 5, ...}`; well X goes to well X) |
+| In the request or document, samples move to new addresses | FCA by hand, one pick at a time (below) |
+| A CSV/GWL file the lab produces at run time | a worklist (`wt.worklist`); tell the user it is checked only if the file exists at simulation time |
+| Neither | ask for it; never invent picks |
 
-```python
-wt.group("Cherrypick from pick list")
-# CSV columns: SourceLabel, SourcePosition, DestLabel, DestPosition, Volume
-wt.worklist(r"C:\ProgramData\Tecan\VisionX\Worklists\picklist.csv",
-            liquid_class="LIQUID_CLASS_SAMPLE")
-```
-
-A worklist `wash` record between transfers gives one-tip-per-pick behavior;
-omit it to reuse a tip across consecutive same-source picks.
-
-**Simulator caveat:** worklist steps are VALIDATION_ONLY — the protocol renders
-and validates, but `wt.snapshots` will not reflect the per-well transfers. Say
-so when shipping a worklist-based cherrypick.
-
-### Fallback: uniform-volume loop (no CSV)
-
-If every pick is the same volume and the picks are regular (e.g. column-wise),
-a scalar `wt.loop` is simpler and *is* simulator-walked:
+A pick to a new address (one channel, fresh tips per pick; a Python list of picks is fine here):
 
 ```python
-head = wt.liha
-with wt.loop(times=NUM_PICKS, name="Cherrypick transfers", loop_variable="i"):
-    head.get_tips(fca_tips)
-    head.aspirate(source, "PICK_VOLUME_UL", liquid_class="LIQUID_CLASS_SAMPLE")
-    head.dispense(dest, "PICK_VOLUME_UL", liquid_class="LIQUID_CLASS_SAMPLE")
-    head.drop_tips()
+for src_well, dst_well, vol in PICKS:          # e.g. [("C5", "A1", 10), ("H12", "B1", 7)]
+    fca.get_tips(fca_tips)
+    fca.aspirate(source, vol, liquid_class="Water Free Single", wells=[src_well], channels=[0])
+    fca.dispense(dest, vol, liquid_class="Water Free Single", wells=[dst_well], channels=[0])
+    fca.drop_tips()
 ```
 
-### Technique variants
+With **diluent first** (pick into a pre-filled well): `distribute_volumes` from the diluent trough, then the picks,
+then a mix if the document asks for one.
 
-- **In-tip dilution** (`cherrypicking-sick-kids`): declare `DILUENT_VOLUME_UL`
-  and, in one tip, aspirate diluent then aspirate sample before dispensing the
-  combined volume; follow with `head.mix(...)` in the destination well. Build
-  this as a `Gwl` with paired aspirate records per pick, or two worklists.
-- **Buffer pre-fill** (`2bba96`): distribute a fixed buffer volume to all
-  destination wells first (a scalar `wt.loop` or `reagent_distribution`), then
-  run the sample pick worklist.
-- **Volume-threshold pipette selection** (`2bba96`): split the pick list into
-  ≤20 µL and >20 µL groups and route each to the appropriate LiHa
-  configuration (or branch with `wt.conditional` on the row volume).
+## What to ask
 
-### Tip reuse strategy
+The list (source well, destination well, volume), the destination layout if not given, and whether a diluent goes in
+first.
 
-- **One tip per pick** (default): safest, avoids cross-contamination between
-  unrelated samples. Consumes one tip well per pick from the FCA box.
-- **Reuse within groups**: if multiple picks share the same source well, reuse
-  the tip across that group and change only between groups.
+## Pitfalls
+
+One fresh tip per pick (samples never share a tip). Keep the list's order unless the document says otherwise.

@@ -1,105 +1,86 @@
 ---
 name: core-worktable-api
 axis: api
-description: Worktable construction (from_workspace), the variable-passing-by-name rule, native FluentControl loops, liquid-class variable shape, and the universal authoring idioms every protocol needs. Always loaded.
+description: The Worktable, the three heads (FCA = wt.liha, MCA = wt.mca96, RGA = wt.gripper), variables with wt.volume, native loops and waits. Always loaded.
 always_on: true
 ---
-## `Worktable`
+## Words
 
-Take the exact workspace **name + GUID** and the valid deck positions from the
-**deck skill** (the `Worktable.from_workspace(...)` line under "Deck /
-workspace"). Do not hardcode a workspace from this example — copy the deck
-skill's line verbatim. The shape is:
+| The lab says | In fluentvibe | What it is |
+|---|---|---|
+| FCA | `wt.liha` | the 8-channel arm; FCA tip boxes (`FCA200Box`, `FCA1000Box`) |
+| MCA | `wt.mca96` | the 96-channel head: one move touches all 96 wells (or the columns you name) |
+| RGA | `wt.gripper` | moves plates, e.g. onto and off the magnet |
+
+There is no `wt.fca`. Most work goes through the blocks (see api-blocks); write head calls by hand only
+for what no block covers.
+
+## Shape of a protocol
 
 ```python
-wt = Worktable.from_workspace(DECK_WORKSPACE_NAME, workspace_guid=DECK_WORKSPACE_GUID, auto_place=False)
-plate = wt.place(Plate96('DestPlate', catalog='96_ABgene_SuperPlate_Thermo_AB2800'), 'Nest61mm_Pos', 2)
-wt.group('Transfer')
-# native FluentControl loop — do NOT unroll with a Python for-loop
-with wt.loop(times=12, name='Dispense columns', loop_variable='col'):
-    head.aspirate(trough, 'BEAD_VOLUME_UL', liquid_class='LIQUID_CLASS_BEADS')
-    head.dispense(plate, 'BEAD_VOLUME_UL', liquid_class='LIQUID_CLASS_BEADS', well_offset='(col-1)*8')
-wt.declare_variable('RunId', 'demo')
-wt.set_sim_value('RunId', 'demo')
-wt.set_variable('RunId', 'demo')
-wt.wait(30)
-wt.add_comment('Incubate at room temperature')
+from fluentvibe import Worktable, Plate96, MCA200Box, Reagent
+from fluentvibe.blocks import stamp
+
+def build_worktable() -> Worktable:
+    wt = Worktable.from_workspace(WORKSPACE_NAME, workspace_guid=WORKSPACE_GUID, auto_place=False,
+                                  protocol_name="Copy samples")
+    wt.group("Variables")
+    SAMPLE_UL = wt.volume("SAMPLE_UL", 20)
+
+    wt.group("Labware Placement")
+    samples = wt.place(Plate96("Samples", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 1)
+    copy = wt.place(Plate96("Copy", catalog="96_ABgene_SuperPlate_Thermo_AB2800"), "Nest61mm_Pos", 2)
+    tips = wt.place(MCA200Box("CopyTips", catalog="MCA96, 200ul, Box"), "Nest61mm_Pos", 3)
+    samples.fill_all(Reagent("Sample", role="analyte"), 50)
+
+    stamp(wt, source=samples, dest=copy, volume_ul=SAMPLE_UL, tips=tips,
+          liquid_class="Water Free Single", name="Copy samples")
+    return wt
 ```
-**Attributes:** liha, mca96, gripper
-**Never call:** `wt.pick_up(...)`, `wt.aspirate(...)`, `wt.dispense(...)`
 
-## Authoring idioms — get these right the FIRST time
+Take the workspace name, GUID, positions and classes from the deck section; every labware label is unique in the
+whole protocol.
 
-These are the exact mistakes that otherwise cost dozens of failed
-`simulate_python_draft` repair rounds. Follow them up front.
+## Volumes: `wt.volume`, passed as values
 
-**No `wt.comment(...)`.** `comment` is only the
-`Worktable.from_workspace(..., comment="...")` keyword argument — it is a
-string attribute, not a method. Calling `wt.comment("...")` raises
-`'str' object is not callable`. For step notes use plain `#` Python
-comments.
+Every per-well volume is a FluentControl variable in a `Variables` group at the top. A volume computed from
+others keeps its formula, so an edit in FluentControl carries through:
 
-**Object-draft `liquid_classes` shape is fixed.** Resolve the class once,
-then make every entry exactly:
-`{"name": "Water Free Single", "default_value": "Water Free Single", "variable_name": "LIQUID_CLASS_<ROLE>"}`.
-`name` must be the resolved class string (not the variable). Declare the
-matching `wt.declare_variable("LIQUID_CLASS_<ROLE>", "Water Free Single")`
-+ `wt.set_sim_value(...)`.
-
-**Volumes: a variables group with `wt.volume`.** Every per-well volume is a
-FluentControl variable, declared in a `Variables` group before placement;
-a volume computed from others keeps its calculation (a Set Variable step
-FluentControl re-evaluates when someone edits a base volume):
 ```python
 wt.group("Variables")
 SAMPLE_UL = wt.volume("SAMPLE_UL", 20)
 BEADS_UL = wt.volume("BEADS_UL", 36)
 SUPERNATANT_UL = wt.volume("SUPERNATANT_UL", SAMPLE_UL + BEADS_UL - 5)
-wt.group("Labware Placement")
 ```
-Pass the returned values themselves (not strings) to blocks and head calls:
-`head.aspirate(plate, SUPERNATANT_UL, liquid_class="LIQUID_CLASS_SAMPLE")`,
-`spri_cleanup(..., sample_volume_ul=SAMPLE_UL, ...)`. They are numbers for
-Python arithmetic and fills, and the steps reference the variable. Blocks
-declare variables for anything else they need (`<NAME>_BEAD_VOLUME_UL` …).
 
-**Liquid classes by name.** For head calls you write by hand, pass a declared
-liquid-class variable **as a string**: `liquid_class="LIQUID_CLASS_BEADS"`,
-not the Python value (that bakes a literal into the protocol). The same holds
-for any other variable declared with `wt.declare_variable` + `wt.set_sim_value`.
+Pass these values themselves to blocks and head calls (`volume_ul=SUPERNATANT_UL`), never a string. They also work
+in Python arithmetic and in fills. Liquid classes are strings: the class name (`"Water Free Single"`), or the name
+of a string variable you declared with `wt.declare_variable("LC_BEADS", "Water Free Single")` and
+`wt.set_sim_value("LC_BEADS", "Water Free Single")`.
 
-**Never change approved labware across staged groups.** The `catalog=`,
-`python_class`, and label of every object are locked at object-draft
-approval — re-emit them identically; do not add, drop, or rename labware
-mid-draft.
+## Repeats: a native loop, not a Python `for`
 
-**Iterate columns with a native `wt.loop`, never a Python `for`.** A
-Python `for col in range(12)` unrolls into 12 hardcoded steps in the
-rendered protocol; the lab wants ONE FluentControl loop. Use the
-loop counter to address each column with a `well_offset` **expression
-string** (the counter is 1-based):
+A Python `for` writes N copies into the protocol; FluentControl should get one loop:
+
 ```python
-head.get_tips(fca_tips)
-with wt.loop(times=12, name="Add beads", loop_variable="col"):
-    head.aspirate(bead_trough, "BEAD_VOLUME_UL", liquid_class="LIQUID_CLASS_BEADS")
-    head.dispense(sample_plate, "BEAD_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_BEADS", well_offset="(col-1)*8")
-head.drop_tips()
+wt.declare_variable("WASHES", 3)
+wt.set_sim_value("WASHES", 3)
+with wt.loop(times="WASHES", name="Washes"):
+    ...   # the steps of one wash, written once
 ```
-This renders as a single `LoopGroup` with `<WellOffset>(col-1)*8</WellOffset>`
-and simulates across all 96 wells. The MCA96 head touches all 96 wells in
-one call, so it needs **no** column loop — only the LiHa column-wise
-trough dispenses do.
 
-## Rendering rules (always apply)
+`times` is a number or a declared numeric variable name. The FCA addresses columns inside a loop with
+`well_offset="(col-1)*8"` and `loop_variable="col"` (declare `col` first); the MCA needs no column loop.
 
-- **Canonical step-type names only** (e.g. `aspirate`, `dispense`,
-  `pick_up_tips`, `set_tips_back`, `get_head_adapter`, `drop_head_adapter`,
-  `liha_*`). Avoid vendor-prefixed aliases like `mca384_aspirate`.
-- **`wait` uses `duration_seconds`** (integer). For minutes multiply by 60
-  (5 min → `duration_seconds: 300`). Never `duration_minutes`/`duration`.
-- **Loop count must be numeric or a declared variable** with a numeric
-  `set_variable`. A `LoopGroup` uses a variable named `LoopVariable` for the
-  current counter.
-- **`calculate_variable.operation`** must map to Add/Subtract/Multiply/Divide
-  (or `+ - * /`) so the renderer can emit valid expressions.
+## Waiting and operator steps
+
+- `wt.wait(duration_seconds=300)`: only a wait at room temperature on the deck.
+- Anything that needs a device the deck does not have (heating, cooling, shaking, a rotator, a centrifuge, a
+  thermal cycler, a plate reader) is an operator step: `offdeck_step(...)` from the blocks. Never a `wt.wait` with a
+  comment.
+- `wt.add_comment("...")` only annotates; it does not stop the run.
+
+## Never
+
+`wt.aspirate`, `wt.dispense`, `wt.pick_up` (use a head or a block), `wt.comment(...)` (`comment` is a keyword of
+`from_workspace`), raw XML or generic steps.

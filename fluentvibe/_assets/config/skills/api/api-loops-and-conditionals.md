@@ -17,8 +17,7 @@ wt.set_variable("cycles", 3)            # optional runtime re-assignment
 
 `declare_variable` + `set_sim_value` is the pair you need for anything a loop
 count or conditional predicate reads. Pass the **name string** wherever the
-value is used (see core-worktable-api), so the renderer emits a variable
-reference rather than baking in a literal.
+value is used (see core-worktable-api).
 
 ## Native loops
 
@@ -27,8 +26,7 @@ hardcoded steps; the lab wants ONE `LoopGroup`).
 
 ```python
 with wt.loop(times="cycles", name="Wash cycles"):
-    head.aspirate(src, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
-    head.dispense(waste, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
+    ...   # the blocks of one wash cycle: separate, remove_liquid, release, add_reagent, mix_wells
 ```
 
 - `times` is an integer literal **or** a declared numeric variable name
@@ -43,7 +41,7 @@ with wt.loop(times="cycles", name="Wash cycles"):
   wt.declare_variable("col", 1)        # required for FC to resolve `col` in well_offset
   wt.set_sim_value("col", 1)
   with wt.loop(times=12, name="Dispense columns", loop_variable="col"):
-      head.dispense(plate, "VOL_UL", liquid_class="LIQUID_CLASS_X",
+      fca.dispense(plate, "VOL_UL", liquid_class="LIQUID_CLASS_X",
                     well_offset="(col-1)*8")
   ```
   This renders `<WellOffset>(col-1)*8</WellOffset>` and simulates all 96 wells.
@@ -57,8 +55,8 @@ inside the `with` becomes the **then** branch.
 
 ```python
 with wt.conditional(left="ph", op=">=", right=7, name="Extra rinse if pH high"):
-    head.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
-    head.dispense(waste, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
+    fca.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
+    fca.dispense(waste, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
 ```
 
 - `op` is one of `==`, `!=`, `<`, `<=`, `>`, `>=`.
@@ -66,12 +64,12 @@ with wt.conditional(left="ph", op=">=", right=7, name="Extra rinse if pH high"):
 - The simulator follows the then-branch when the predicate is true (it uses
   the `set_sim_value`s).
 
-**`else_steps` caveat (known gap G4):** the `with wt.conditional(...)` context
+**No `else` block:** the `with wt.conditional(...)` context
 manager only populates the **then** branch. There is no `with ... else:`. To
 author an else branch, populate it directly on the returned object:
 ```python
 with wt.conditional(left="ph", op=">=", right=7) as cond:
-    head.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
+    fca.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
 cond.else_steps.append(...)   # build the else branch steps explicitly
 ```
 
@@ -81,14 +79,14 @@ cond.else_steps.append(...)   # build the else branch steps explicitly
 wt.declare_variable("cycles", 3); wt.set_sim_value("cycles", 3)
 wt.declare_variable("ph", 7);     wt.set_sim_value("ph", 7)
 
-head.get_tips(tips)
+fca.get_tips(tips)
 with wt.loop(times="cycles", name="Wash cycles"):
-    head.aspirate(src, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
-    head.dispense(waste, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
+    fca.aspirate(src, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
+    fca.dispense(waste, "WASH_VOLUME_UL", liquid_class="LIQUID_CLASS_WASH")
     with wt.conditional(left="ph", op=">=", right=7, name="Extra rinse"):
-        head.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
-        head.dispense(waste, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
-head.drop_tips()
+        fca.aspirate(src, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
+        fca.dispense(waste, "RINSE_UL", liquid_class="LIQUID_CLASS_WASH")
+fca.drop_tips()
 ```
 
 The renderer emits a `<LoopGroup>` / `<ConditionalGroup>`; the simulator runs
