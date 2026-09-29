@@ -1,126 +1,35 @@
 ---
 name: family-pcr-setup
 axis: family
-description: PCR master mix preparation — dispense water, DNA template, and chilled master mix into a 96- or 384-well PCR plate; also library-quant qPCR setup with stepwise sample dilution, standard-curve dispensing, and replicate splitting. Select for PCR setup, master mix plating, qPCR prep, library quantification, multiplex PCR, or amplification reaction assembly workflows.
+description: PCR / qPCR reaction assembly - master mix, primers, water and template into a 96- or 384-well PCR plate, then the thermal program (operator or an on-deck thermocycler). Includes qPCR library quantification with standards and replicates. Select for PCR setup, master mix plating, qPCR, library quantification, amplification.
 always_on: false
 ---
-## Canonical workflow: PCR setup (liquid-handling skeleton)
+## What the product is
 
-Dispense water, DNA template, and master mix into a 96-well PCR plate in
-preparation for thermocycling. Thermocycling is a hand-off to the operator —
-`offdeck_step(...)` from `fluentvibe.blocks` — unless the deck has an Inheco
-ODTC, which you drive with `wt.odtc_*` (see `device-odtc`). Never model a
-thermal program as `wt.wait` or a comment.
+A sealed-ready PCR plate: every reaction well holds master mix + primers + template (+ water) at the reaction
+volume, in the layout the document gives. The thermal program is the last step, off the deck unless the deck section
+lists a thermocycler.
 
-### Variables
+## Steps and what must be kept
 
-```
-WATER_VOLUME_UL        — water per well (e.g. 7)
-DNA_VOLUME_UL          — DNA template per well (e.g. 5-10)
-MASTERMIX_VOLUME_UL    — master mix per well (e.g. 38-40)
-TOTAL_REACTION_VOL_UL  = WATER + DNA + MASTERMIX   (derived, typically 50)
-NUM_SAMPLES            — number of wells to fill (max 96)
-LIQUID_CLASS_WATER     — liquid class for water, default "Water Free Single"
-LIQUID_CLASS_DNA       — liquid class for DNA template
-LIQUID_CLASS_MASTERMIX — liquid class for master mix
-```
+1. **Master mix** (and water, if separate) into every reaction well: `distribute_reagent` from a slim trough.
+   Master mix is a reagent: FCA, never the MCA.
+2. **Primers / indexes** that differ per well: from a plate, `stamp` (MCA) or `transfer_volumes` (FCA).
+3. **Template** last: `stamp` from the sample plate, or `transfer_volumes` for a partial plate; fresh tips per sample.
+4. **Mix** if the document says so (`mix_wells`, gently; bubbles matter for qPCR).
+5. **Thermal program**: `thermal_step` (an on-deck ODTC only if the deck section lists one; otherwise it becomes an
+   operator step with the program text). Seal and spin are operator steps.
 
-### Labware Placement
+Keep master mix first and template last (least carry-over). Keep the enzyme mix cold: an operator note before the
+run, not a wait.
 
-- PCR plate (`Plate96` — use `96_ABgene_SuperPlate_Thermo_AB2800` or nearest
-  approved catalog name; full-skirt PCR plates need whitelist addition)
-- Water reservoir (`Trough`, `25ml_short`)
-- DNA source plate (`Plate96`)
-- Master mix tubes — modelled as a trough or deep-well plate on deck
-- FCA tip box — must be **FCA**-class for the LiHa, not MCA. Use
-  `FCA, 200ul SBS` for water/DNA, `FCA, 1000ul SBS` for larger master-mix
-  volumes:
-  ```python
-  from fluentvibe import TipBox
-  fca_tips = wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
-  ```
+## Typical values and what to ask
 
-### Step sequence (LiHa, column-wise with loop)
+Reactions 10–50 µl (96) or 5–10 µl (384; 29 µl max). Template 1–5 µl. qPCR: standards in the first columns,
+replicates (2–3) in adjacent wells; no-template controls get water instead of template. Ask when open: reaction
+volume, template volume, the layout of standards/controls/replicates, the program.
 
-```python
-head = wt.liha
+## Pitfalls
 
-# 1. Dispense water into all sample wells
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_COLUMNS, name="Dispense water", loop_variable="col"):
-    head.aspirate(water_trough, "WATER_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_WATER")
-    head.dispense(pcr_plate, "WATER_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_WATER", well_offset="(col-1)*8")
-head.drop_tips()
-
-# 2. Dispense DNA template from source plate
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_COLUMNS, name="Dispense DNA", loop_variable="col"):
-    head.aspirate(dna_source, "DNA_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_DNA", well_offset="(col-1)*8")
-    head.dispense(pcr_plate, "DNA_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_DNA", well_offset="(col-1)*8")
-head.drop_tips()
-
-# 3. Dispense master mix (from cold tube or reservoir)
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_COLUMNS, name="Dispense master mix", loop_variable="col"):
-    head.aspirate(mastermix_trough, "MASTERMIX_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_MASTERMIX")
-    head.dispense(pcr_plate, "MASTERMIX_VOLUME_UL",
-                  liquid_class="LIQUID_CLASS_MASTERMIX", well_offset="(col-1)*8")
-head.drop_tips()
-
-# 4. Mix briefly (optional)
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_COLUMNS, name="Mix reaction", loop_variable="col"):
-    head.mix(pcr_plate, "TOTAL_REACTION_VOL_UL", cycles=3,
-             liquid_class="LIQUID_CLASS_MASTERMIX", well_offset="(col-1)*8")
-head.drop_tips()
-
-# Thermocycling: hand the plate to the operator (or use wt.odtc_* on an ODTC deck)
-offdeck_step(
-    wt,
-    "Seal the PCR plate and run the thermocycler program: "
-    "95C 3min; then 30x [95C 15s, 60C 30s]; final 72C 5min",
-    labware=pcr_plate, handoff=("Nest61mm_Pos", 10), name="Thermocycling",
-)
-```
-
-### Variant: library-quant qPCR (kapa-library-quant)
-
-Library quantification adds sample dilution, a standard curve, and 96/384
-format switching:
-
-- `PLATE_FORMAT` (`96`|`384`) — drive conditional well offsets and replicate
-  counts. `Plate384` (`"384 Well LowVol LoBase"`) is already on the whitelist.
-- **Stepwise dilution** (`DILUTION_VOL_1_UL`, `DILUTION_VOL_2_UL`, `BUFFER_VOL_UL`)
-  for serial 1:50 → 1:20 sample prep before reaction assembly — see
-  `family-serial-dilution` for the carry-down pattern.
-- **Standard curve**: `STANDARD_VOLUME_UL` dispensed by a column-wise `wt.loop`
-  into the leading wells from a standards source plate.
-- **Multi-replicate dispensing**: `wt.loop(times=NUM_REPLICATES)` to split the
-  reaction across replicate wells. If replicate/standard volumes vary per well,
-  use a worklist (`api-worklists`).
-
-### Thermocycler and cooling
-
-The source protocols (Opentrons) use a **thermocycler module** for
-amplification and a **temperature module** to keep master mix chilled. On the
-Fluent:
-
-- **Thermocycling**: `wt.odtc_*` when the deck has an ODTC; otherwise
-  `offdeck_step(...)` so the run pauses while the operator runs the program.
-- **Reagent cooling (4°C)**: prepare cold reagents before the run (a pre-run
-  note is fine); if the protocol needs a cold step mid-run, it is an
-  `offdeck_step`.
-
-See [capability-roadmap](../../docs/skill-authoring/capability-roadmap.md) P4
-(thermocycler) and P5 (temperature module) for planned extensions.
-
-### Whitelist additions needed
-
-- **PCR full-skirt 96 plate**: resolve exact catalog name via `fluentvibe.catalog`
-  (`find_components`) and add to `generation.yaml` `lab_scope.labware`.
-- **Cold tube rack** (e.g. NEST 2 mL snapcap on aluminum block): same process.
+- Never pipette below ~1 µl on the FCA: pre-dilute or raise the volume.
+- Do not add a clean-up or a second PCR the document does not describe.

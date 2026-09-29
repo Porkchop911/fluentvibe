@@ -233,8 +233,8 @@ _SKILLS_HEADER = (
     "name, a one-line summary, the planned variables and labware, and the "
     "ORDERED functional groups. The first two groups must be exactly "
     "`Variables` then `Labware Placement`; after them, name EVERY stage the "
-    "request describes as its own group (e.g. a bead/SPRI cleanup, ethanol "
-    "washes, elution, barcoding) — do not collapse or omit a stage. Then "
+    "request or document describes as its own group, in its order — do not "
+    "collapse or omit a stage, and do not add one it does not describe. Then "
     "write the COMPLETE protocol as a single `build_worktable()` in one "
     "pass — all variables, labware, and every declared group — and call "
     "`simulate_python_draft` with the full source. Fix a simulator error with "
@@ -249,6 +249,9 @@ _SKILLS_HEADER = (
     "labware not in this list, say so explicitly and stop rather than "
     "substituting.\n\n"
 )
+
+
+REQUIRED_LIQUID_CLASSES = frozenset({"Water Mix", "Empty Tip"})
 
 
 def context_header(enforces: bool, *, skills: bool = False) -> str:
@@ -307,6 +310,11 @@ def load_lab_scope(
     labware_classes = dict(profile.labware_classes) if profile is not None else {}
     if profile is not None and profile.liquid_classes:
         liquid_classes = profile.liquid_classes
+    # Always allowed: FluentControl rejects the transfer class for MCA mixing
+    # ("Liquid subclass section 'Mix' is missing") and emptying tips has its
+    # own class. The skills and blocks require them, so the allow-list must
+    # not refuse them (a profile usually lists only its transfer class).
+    liquid_classes = frozenset(liquid_classes) | REQUIRED_LIQUID_CLASSES
 
     # ``skills`` mode assembles context at runtime from a selected subset of
     # granular skill files instead of injecting the monolith. It reuses the

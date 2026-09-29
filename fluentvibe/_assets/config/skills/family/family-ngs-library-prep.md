@@ -1,135 +1,42 @@
 ---
 name: family-ngs-library-prep
 axis: family
-description: Next-generation sequencing library preparation — tagmentation, amplification, and bead-based size selection/cleanup of DNA libraries. Select for NGS library prep, Illumina Nextera XT, Illumina DNA Prep, tagmentation, amplicon library construction, or bead cleanup of sequencing libraries.
+description: Sequencing library preparation (Illumina DNA Prep / Nextera XT tagmentation, ligation kits, ONT barcoding, amplicon libraries) - fragmentation or tagmentation, end repair, adapter or barcode addition, PCR, bead clean-ups, pooling. Select for NGS library prep, tagmentation, barcoding, adapter ligation, sequencing libraries.
 always_on: false
 ---
-## USE THE BLOCKS FIRST
+## What the product is
 
-Build the library prep from `fluentvibe.blocks` (see the api-blocks skill):
-`stamp(...)` for barcode/index plates, `add_reagent(...)` for trough reagents,
-`spri_cleanup(...)` for every bead cleanup, `pool_columns(...)` for pooling, and
-`offdeck_step(...)` for every step that happens away from the deck (external
-thermal cycler, centrifuge, Qubit, flow-cell loading). Keep the document's order:
-if it pools before a cleanup, pool first.
+Indexed libraries (per sample, or one pool) ready for quantification and loading. The kit document is the protocol:
+follow its stages in its order, with its volumes.
 
-## Canonical workflow: NGS library prep (liquid-handling skeleton)
+## How to read the kit document
 
-Multi-step workflow covering tagmentation (fragmentation + adapter tagging),
-library amplification by PCR, and bead-based size selection/cleanup. Reuses
-patterns from `family-bead-cleanup-spri` for the cleanup phase and
-`family-pcr-setup` for amplification setup.
+List the stages exactly as the document groups them (e.g. "Tagment", "Post-tagmentation clean-up", "Amplify",
+"Clean up libraries", "Pool"). For every stage note: what goes in (reagent, volume, from where), mix, incubation
+(where: bench, magnet, thermocycler), and what comes out (supernatant discarded, eluate kept, beads kept). Then write
+one group per stage. Do not merge stages, drop one, or add one the document does not have.
 
-### Overview of steps
+## Map the stages onto the deck
 
-1. **Tagmentation**: mix DNA with tagment mix (transposase + adapters), incubate
-2. **Stop tagmentation**: add stop buffer, brief incubation/mix
-3. **Amplification setup**: add PCR master mix to tagmented DNA
-4. **PCR amplification** — off-deck thermocycler
-5. **Bead cleanup / size selection**: AMPure XP or equivalent beads, magnet,
-   washes, elution
+| Stage element | Use |
+|---|---|
+| Kit reagent or master mix into every sample | `distribute_reagent` (FCA, slim trough or tube) |
+| Per-sample reagent (barcodes, index adapters) from a plate | `stamp` (MCA, one tip box per stamp) |
+| Samples into the reaction plate | `stamp` / `transfer_volumes` |
+| Bead clean-up that ends in an eluate (AMPure, SPRI, "clean-up beads") | `spri_cleanup`, or the magnet primitives for a partial plate (see family-bead-cleanup-spri) |
+| Bead wash where the product stays on the beads (e.g. tagmentation on beads, then wash) | magnet primitives: `separate` / `remove_liquid` / `add_reagent` / `release`, no elution |
+| Thermal step (tagmentation 55 °C, end-prep 20/65 °C, PCR) | `thermal_step` (operator unless the deck lists an ODTC) |
+| Pool | `pool_wells` / `pool_columns` |
+| Quantification (Qubit, TapeStation), loading | `offdeck_step` |
 
-### Variables (tagmentation + amplification phase)
+## Typical values and what to ask
 
-```
-DNA_INPUT_VOLUME_UL    — input DNA volume per sample (e.g. 30)
-TAGMENT_MIX_VOL_UL     — tagment mix per well (e.g. 22-44 depending on format)
-STOP_BUFFER_VOL_UL     — tagmentation stop buffer per well (e.g. 10)
-MASTERMIX_VOL_UL       — PCR master mix per well (e.g. 5 for Nextera XT)
-NUM_SAMPLES            — number of samples (columns in the plate)
-```
+Take the volumes from the document. Ask for what the document leaves to the user: number of samples, input
+amount/volume, the number of PCR cycles, and whether the run should stop after a stage (many kits have safe
+stopping points).
 
-### Variables (bead cleanup phase — reuses bead-cleanup skill)
+## Pitfalls
 
-See `family-bead-cleanup-spri` for bead ratio, wash volumes, and elution.
-Typical NGS cleanup uses 0.8x-1.0x beads for clean-up or 0.5x/0.9x for
-double-size-selection.
-
-### Labware Placement
-
-- Sample/library plate (`Plate96`)
-- Reagent plate (`Plate96` — tagment mix, stop buffer, master mix in columns)
-- Reservoirs/troughs for beads, wash buffers (ethanol), elution buffer
-- Magnet rack (`MagnetRack`)
-- FCA tip box — must be **FCA**-class for the LiHa, not MCA:
-  ```python
-  from fluentvibe import TipBox
-  fca_tips = wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
-  ```
-
-### Step sequence outline
-
-```python
-# === PHASE 1: Tagmentation ===
-head = wt.liha
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_SAMPLES, name="Add tagment mix", loop_variable="col"):
-    head.aspirate(reagent_plate, "TAGMENT_MIX_VOL_UL",
-                  liquid_class="LIQUID_CLASS_TAGMENT", well_offset="(col-1)*8")
-    head.dispense(sample_plate, "TAGMENT_MIX_VOL_UL",
-                  liquid_class="LIQUID_CLASS_TAGMENT", well_offset="(col-1)*8")
-    head.mix(sample_plate, "TAGMENT_MIX_VOL_UL", cycles=10,
-             liquid_class="LIQUID_CLASS_TAGMENT", well_offset="(col-1)*8")
-head.drop_tips()
-
-# Incubate 5 min at 55C (off-deck or wt.wait approximation)
-wt.add_comment("Incubate 5 min at 55C (heater-shaker or off-deck)")
-wt.wait(duration_seconds=300)
-
-# === PHASE 2: Stop tagmentation ===
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_SAMPLES, name="Add stop buffer", loop_variable="col"):
-    head.aspirate(reagent_plate, "STOP_BUFFER_VOL_UL",
-                  liquid_class="LIQUID_CLASS_STOP", well_offset="(col-1)*8")
-    head.dispense(sample_plate, "STOP_BUFFER_VOL_UL",
-                  liquid_class="LIQUID_CLASS_STOP", well_offset="(col-1)*8")
-    head.mix(sample_plate, "STOP_BUFFER_VOL_UL", cycles=5,
-             liquid_class="LIQUID_CLASS_STOP", well_offset="(col-1)*8")
-head.drop_tips()
-
-wt.add_comment("Incubate 5 min at room temperature")
-wt.wait(duration_seconds=300)
-
-# === PHASE 3: Amplification setup ===
-head.get_tips(fca_tips)
-with wt.loop(times=NUM_SAMPLES, name="Add PCR master mix", loop_variable="col"):
-    head.aspirate(reagent_plate, "MASTERMIX_VOL_UL",
-                  liquid_class="LIQUID_CLASS_MASTERMIX", well_offset="(col-1)*8")
-    head.dispense(sample_plate, "MASTERMIX_VOL_UL",
-                  liquid_class="LIQUID_CLASS_MASTERMIX", well_offset="(col-1)*8")
-head.drop_tips()
-
-# PCR is off-deck
-wt.add_comment("Thermocycle: 72C 3min; 10-14x [95C 30s, 55C 30s, 72C 60s]; "
-               "final 72C 1min, hold at 4C")
-
-# === PHASE 4: Bead cleanup (reuses family-bead-cleanup-spri) ===
-# See api-magnetization-model for magnet engage/disengage via gripper
-# Typical: add beads, mix, incubate, move to magnet, aspirate supernatant,
-# wash x2 with ethanol, air-dry, elute in buffer
-```
-
-### Variant: mechanical shearing / SRE (pacbio-sre-shearing)
-
-Long-read prep (PacBio) shears DNA by **high-cycle pipette mixing** rather than
-enzymatic fragmentation, in deep-well plates:
-
-- `SHEARING_MIX_CYCLES` (int) → `head.mix(plate, "VOL_UL", cycles="SHEARING_MIX_CYCLES", ...)`;
-  the high cycle count *is* the fragmentation.
-- Deep-well plate role (`Plate96Deep`) for the large SRE volumes.
-- Optional SRE-buffer-addition step gated by a runtime flag — branch with
-  `wt.conditional` (see api-loops-and-conditionals) between "add SRE buffer then
-  shear" and "shear directly".
-
-### Limitations (needs-extension P3/P4)
-
-- **Heater-shaker incubation** (tagmentation at 55C): modelled as `wt.wait()` +
-  comment. See [capability-roadmap](../../docs/skill-authoring/capability-roadmap.md) P3.
-- **Thermocycler** (amplification cycles): off-deck, noted in comments. See roadmap P4.
-- **Bead cleanup**: fully authorable with current magnet + gripper model — see
-  `family-bead-cleanup-spri` and `api-magnetization-model`.
-
-### Whitelist additions needed
-
-- **PCR full-skirt 96 plate**: resolve catalog name via `fluentvibe.catalog` and
-  add to `generation.yaml` `lab_scope.labware`.
+- A clean-up returns the **eluate** in a new plate; the next reagent goes onto the eluate, not into the old bead wells.
+- Barcodes differ per sample: never from a trough.
+- Heat on the deck is not possible without a listed device; never model it as a wait.
