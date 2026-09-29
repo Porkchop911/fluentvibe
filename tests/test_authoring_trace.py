@@ -142,6 +142,22 @@ def test_reasoning_fields_round_trip_through_langchain_adapter() -> None:
     assert _lc_to_legacy_dict(message)["reasoning_content"] == "preserve across tool turn"
 
 
+def test_reasoning_is_replayed_only_after_the_last_user_message() -> None:
+    from fluentvibe.authoring.graph import _drop_stale_reasoning
+
+    sent = _drop_stale_reasoning([
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": "", "reasoning": "old plan", "tool_calls": [{"id": "1"}]},
+        {"role": "tool", "tool_call_id": "1", "content": "result"},
+        {"role": "user", "content": "simulation failed; fix it"},
+        {"role": "assistant", "content": "", "reasoning_content": "current chain", "tool_calls": [{"id": "2"}]},
+        {"role": "tool", "tool_call_id": "2", "content": "result"},
+    ])
+    assert "reasoning" not in sent[2] and sent[2]["tool_calls"] == [{"id": "1"}]
+    assert sent[5]["reasoning_content"] == "current chain"
+
+
 def test_lmstudio_reasoning_effort_is_opt_in(monkeypatch) -> None:
     seen = {}
 
