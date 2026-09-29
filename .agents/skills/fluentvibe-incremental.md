@@ -19,9 +19,9 @@ opens it in FluentControl. Run everything from the repo root.
   `python -m fluentvibe.cli api <object>` (e.g. `Worktable`, `wt.liha`,
   `wt.mca96`, `wt.gripper`, `blocks`, `Plate96`). It is generated from the
   code: if it is not listed there it does not exist, and if it is, it does.
-- Examples of the API shape: `examples/ampure_resolver.py`,
-  `examples/ont_rbk114_blocks.py`. Take deck positions from the deck file, not
-  from examples.
+- Do not look at other protocols (examples, earlier runs, tests): write this
+  one from the document, this skill, the deck file and `fluentvibe api`. The
+  core source under `fluentvibe/` may be read to understand the API.
 
 ## Words
 
@@ -82,8 +82,13 @@ magnet, by the gripper), `pool_columns`, `pool_wells`, `transfer_volumes` /
 ## Workflow: build it like code, a phase at a time
 
 Do not plan the whole protocol in your head and write it in one go. Write a
-small working file first and grow it, running the simulator after every
-phase, the way code is written and run bit by bit.
+small working file first and grow it a phase at a time, the way code is
+written bit by bit.
+
+The simulator is for checking work you believe is done: a finished phase or
+the finished protocol. Do not use it to explore or to try things out; work the
+API out from `fluentvibe api` and the source. Only your own file can be
+simulated.
 
 1. Read the document (PDF: `python -c "from fluentvibe.authoring.attachments import extract_file_text; print(extract_file_text('<file>')[0])"`).
    List its deck steps in order, with the sentence each comes from, and
@@ -92,12 +97,13 @@ phase, the way code is written and run bit by bit.
 2. **Phase 0, skeleton.** Write the file (the path you were given, or
    `build/eval/pi-<short-name>.py`; an existing folder, do not create folders)
    with only `build_worktable()`, the workspace, the Variables group and the
-   labware placement and fills. Run
-   `python -m fluentvibe.cli simulate <file> --strict`. Fix until it passes.
+   labware placement and fills. When you believe it is right, run
+   `python -m fluentvibe.cli simulate <file> --strict`. Fix what it reports.
 3. **One phase at a time.** Add the next phase with the `edit` tool (append
-   before `return wt`; do not rewrite the whole file). Simulate again. Fix
-   only what that phase broke, then move on. A protocol that stops after a
-   phase is a valid simulation: deck, tips and volumes so far are real.
+   before `return wt`; do not rewrite the whole file). When you believe the
+   phase is done, simulate once to check it. Fix only what that phase broke,
+   then move on. A protocol that stops after a phase is a valid simulation:
+   deck, tips and volumes so far are real.
 4. When all phases are in: `python -m fluentvibe.cli check <file>`, then
    `python -m fluentvibe.cli compile <file> -o <file without .py>.xscr`.
 5. If FluentControl is running and logged in:
