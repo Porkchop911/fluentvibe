@@ -360,6 +360,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_deploy.add_argument("--json", dest="as_json", action="store_true")
     p_deploy.set_defaults(func=_cmd_deploy)
 
+    p_api = sub.add_parser("api", help="the fluentvibe API from the code: objects, signatures, docs")
+    p_api.add_argument("object", nargs="?", default=None,
+                       help="Worktable, wt.liha, wt.mca96, wt.gripper, blocks, Plate96, ... (none: list them)")
+    p_api.add_argument("--json", dest="as_json", action="store_true")
+    p_api.set_defaults(func=_cmd_api)
+
     p_cat = sub.add_parser("catalog", help="catalog index management")
     cat_sub = p_cat.add_subparsers(dest="cat_cmd", required=True)
 
@@ -1551,6 +1557,14 @@ def _load_protocol(input_path: Path):
 
 
 # ── catalog subcommands ────────────────────────────────────────────
+
+
+def _cmd_api(args) -> int:
+    from .api_reference import format_text, reference
+
+    ref = reference(args.object)
+    print(json.dumps(ref, indent=2) if args.as_json else format_text(ref))
+    return 1 if "error" in ref else 0
 
 
 def _cmd_catalog_refresh(args) -> int:
