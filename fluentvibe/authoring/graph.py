@@ -2032,9 +2032,26 @@ class LegacyClientAdapter:
                 d for d in defs
                 if d.get("function", {}).get("name") in self._bound_names
             ]
-        raw_messages = [_lc_to_legacy_dict(m) for m in messages]
+        raw_messages = _drop_stale_reasoning([_lc_to_legacy_dict(m) for m in messages])
         response = self._legacy.complete(messages=raw_messages, tools=defs)
         return _legacy_dict_to_aimessage(response)
+
+
+def _drop_stale_reasoning(raw_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Replay reasoning only for the assistant turns after the last user message.
+
+    That is Qwen's own convention (thinking belongs to the tool chain in
+    progress). vLLM renders a replayed ``reasoning`` field on every turn, so
+    replaying all of it put up to 30k tokens per earlier turn back into the
+    prompt and filled a 64k context by the third or fourth turn (measured
+    2026-09-30: 24k chars of turn-1 reasoning re-sent on turn 2)."""
+    last_user = max((i for i, m in enumerate(raw_messages) if m.get("role") == "user"), default=-1)
+    out = []
+    for i, m in enumerate(raw_messages):
+        if m.get("role") == "assistant" and i < last_user:
+            m = {k: v for k, v in m.items() if "reasoning" not in k.lower()}
+        out.append(m)
+    return out
 
 
 def _lc_to_legacy_dict(message: BaseMessage) -> dict[str, Any]:
