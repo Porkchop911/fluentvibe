@@ -186,7 +186,7 @@ def test_lmstudio_sampling_controls_are_explicit_and_opt_in(monkeypatch) -> None
     seen.clear()
     LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])
     # Defaults: the model's recommended thinking-mode sampling.
-    assert (seen["temperature"], seen["top_p"], seen["top_k"]) == (1.0, 0.95, 20)
+    assert (seen["temperature"], seen["top_p"], seen["top_k"]) == (0.8, 0.95, 20)
     assert "min_p" not in seen
     assert "presence_penalty" not in seen
     assert "repetition_penalty" not in seen

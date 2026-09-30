@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -131,8 +131,8 @@
         },
         "fluentvibe.model.temperature": {
           "type": "number",
-          "default": 1.0,
-          "description": "Sampling temperature (1.0: the model's recommended value with thinking on)."
+          "default": 0.8,
+          "description": "Sampling temperature (0.8 by default)."
         },
         "fluentvibe.model.maxTokens": {
           "type": "number",

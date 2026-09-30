@@ -208,7 +208,7 @@ def test_temperature_comes_from_the_environment_when_not_given(monkeypatch):
     monkeypatch.delenv("FLUENTVIBE_LM_TOP_P")
     # Default: the model's recommended thinking-mode sampling (not 0.2).
     c = _client()
-    assert (c.temperature, c.top_p, c.top_k) == (1.0, 0.95, 20)
+    assert (c.temperature, c.top_p, c.top_k) == (0.8, 0.95, 20)
 
 
 def _stream(arguments_chunks):

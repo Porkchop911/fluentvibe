@@ -185,11 +185,10 @@ def _reasoning_only(message: dict[str, Any]) -> bool:
     return any(str(value).strip() for value in fields.values())
 
 
-# Qwen3's recommended sampling with thinking on (the model card: temperature
-# 1.0, top_p 0.95, top_k 20). Until 2026-09-28 the default was 0.2: low
-# temperature with long reasoning is a known cause of loops and replies cut
-# off inside the reasoning.
-DEFAULT_TEMPERATURE = 1.0
+# Shared default matching Qwen3.8's thinking-mode model-card recommendation.
+# Until 2026-09-28 it was 0.2. The incident's loops/cutoffs and chemistry drift
+# have not been causally isolated to temperature; see the controlled benchmark.
+DEFAULT_TEMPERATURE = 0.8   # user's choice (2026-09-29), between 0.2 and the card's 1.0
 DEFAULT_TOP_P = 0.95
 DEFAULT_TOP_K = 20
 
