@@ -85,11 +85,36 @@ def liha_distribute(wt, *, source, plate, volume, volume_ul: float, tips, liquid
     trips = max(1, math.ceil(float(volume_ul) / capacity))
     head = wt.liha
     head.get_tips(tips)
-    for column in columns:
-        for _ in range(trips):
-            head.aspirate(source, volume, liquid_class=liquid_class)
-            head.dispense(plate, volume, liquid_class=liquid_class, well_offset=(column - 1) * 8)
+    for run in _column_runs(columns):
+        if len(run) == 1:
+            for _ in range(trips):
+                head.aspirate(source, volume, liquid_class=liquid_class)
+                head.dispense(plate, volume, liquid_class=liquid_class, well_offset=(run[0] - 1) * 8)
+            continue
+        # Consecutive columns: one native loop (one aspirate/dispense pair in
+        # FluentControl), not a pair per column.
+        wt.declare_variable(FCA_COLUMN_VARIABLE, 1)
+        wt.set_sim_value(FCA_COLUMN_VARIABLE, 1)
+        offset = f"({FCA_COLUMN_VARIABLE}-1)*8" if run[0] == 1 else f"({FCA_COLUMN_VARIABLE}+{run[0] - 2})*8"
+        with wt.loop(times=len(run), name=f"Columns {run[0]}-{run[-1]}", loop_variable=FCA_COLUMN_VARIABLE):
+            for _ in range(trips):
+                head.aspirate(source, volume, liquid_class=liquid_class)
+                head.dispense(plate, volume, liquid_class=liquid_class, well_offset=offset)
     head.drop_tips()
+
+
+FCA_COLUMN_VARIABLE = "FCA_COLUMN"
+
+
+def _column_runs(columns) -> list[list[int]]:
+    """Columns split into runs of consecutive numbers, in the given order."""
+    runs: list[list[int]] = []
+    for column in columns:
+        if runs and column == runs[-1][-1] + 1:
+            runs[-1].append(column)
+        else:
+            runs.append([column])
+    return runs
 
 
 def distribute_reagent(

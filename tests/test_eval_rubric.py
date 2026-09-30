@@ -289,10 +289,11 @@ def test_spri_skill_keeps_heading_and_triggers():
     catalog = discover_skills(skills_dir)
     spri = next((s for s in catalog if s.name == "family-bead-cleanup-spri"), None)
     assert spri is not None
-    assert "AMPure XP" in spri.body
+    assert "in the eluate" in spri.body
     triggers = set(spri.select_when)
-    assert {"bead", "magnetic"} <= triggers
-    assert "ampure" not in triggers  # brand-neutral
+    assert {"spri", "bead cleanup"} <= triggers
+    # not bare "bead"/"magnetic": streptavidin immobilisation (product stays on the beads) must not get SPRI
+    assert not {"bead", "beads", "magnetic", "magnet"} & triggers
 
 
 # Derivations written through Python constants (the Flash Next attempt-4 shape):

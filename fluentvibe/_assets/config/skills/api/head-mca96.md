@@ -7,28 +7,23 @@ always_on: false
 ## `wt.mca96`
 
 True 96-channel head: one aspirate/dispense/mix touches all 96 wells at once —
-no per-column loop. For hand-written calls (blocks take numbers and declare
-their own variables), PASS DECLARED VARIABLES BY NAME (a string) for the volume
-and liquid_class (e.g. `'SUPERNATANT_ASPIRATE_UL'`, `'LIQUID_CLASS_SUPERNATANT'`);
-passing the Python value bakes a literal into the protocol and leaves the FC
-variable unused.
+no per-column loop. Prefer the blocks (`stamp`, `add_reagent`, `remove_liquid`,
+`mix_wells`); by hand, pass `wt.volume` values (see core-worktable-api).
 
 ```python
-head = wt.mca96
-head.mount_adapter()
-head.pick_up(tips)
-head.aspirate(source, 'SUPERNATANT_ASPIRATE_UL', liquid_class='LIQUID_CLASS_SUPERNATANT')
-head.dispense(dest, 'TRANSFER_VOLUME_UL', liquid_class='LIQUID_CLASS_ELUATE')
-head.mix(plate, 'MIX_VOLUME_UL', cycles=10, liquid_class='LIQUID_CLASS_BEADS')
-head.empty_tips(waste, 'SUPERNATANT_ASPIRATE_UL')
-head.return_tips(tips)
-head.drop_adapter()
+mca = wt.mca96
+mca.mount_adapter()
+mca.pick_up(tips)
+mca.aspirate(source, TRANSFER_UL, liquid_class="Water Free Single")
+mca.dispense(dest, TRANSFER_UL, liquid_class="Water Free Single")
+mca.mix(dest, MIX_UL, cycles=10, liquid_class="Water Mix")   # mixing needs Water Mix
+mca.return_tips(tips)
+mca.drop_adapter()
 ```
 **Never call:** `get_tips`, `drop_tips`
 
 ## Adapter lifecycle rules
 
-- Use the EVA[001] adapter for 96-well plate operations.
 - Once `get_head_adapter` / `mount_adapter` is called, the adapter stays
   mounted for ALL subsequent MCA operations until `drop_head_adapter`. Do NOT
   drop and re-pick the adapter between every operation.
@@ -47,8 +42,8 @@ just addresses the selected columns. This is one native command, NOT a loop.
 
 ```python
 # First 24 samples = columns 1-3
-head.aspirate(reservoir, 'REAGENT_UL', liquid_class='LIQUID_CLASS_REAGENT', columns=[1, 2, 3])
-head.dispense(plate,     'REAGENT_UL', liquid_class='LIQUID_CLASS_REAGENT', columns=[1, 2, 3])
+mca.aspirate(reservoir, REAGENT_UL, liquid_class="Water Free Single", columns=[1, 2, 3])
+mca.dispense(plate,     REAGENT_UL, liquid_class="Water Free Single", columns=[1, 2, 3])
 ```
 
 - **Contiguous or sparse both work:** `columns=[7, 8, 9, 10, 11, 12]` (right
@@ -86,10 +81,10 @@ sorted_tips = wt.place(MCA100Box("SortedTips", catalog="MCA96, 100ul, Box"), "Ne
 sorted_tips.is_full = False
 
 # Sort: peel source columns 1-4 off the moving left edge into 1,4,7,10.
-head.mount_adapter()
+mca.mount_adapter()
 for src_col, tgt_col in ((1, 1), (2, 4), (3, 7), (4, 10)):
-    head.pick_up(full_tips, columns=[src_col])       # offset derived (11,10,9,8)
-    head.return_tips(sorted_tips, columns=[tgt_col])  # offset derived (11,8,5,2)
+    mca.pick_up(full_tips, columns=[src_col])       # offset derived (11,10,9,8)
+    mca.return_tips(sorted_tips, columns=[tgt_col])  # offset derived (11,8,5,2)
 ```
 
 - **Using sorted tips:** pick up the **whole sorted box at once** — pass all the
@@ -99,9 +94,9 @@ for src_col, tgt_col in ((1, 1), (2, 4), (3, 7), (4, 10)):
 
 ```python
 sorted_cols = [1, 4, 7, 10]
-head.pick_up(sorted_tips, columns=sorted_cols)
-head.aspirate(source, 'TRANSFER_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', columns=sorted_cols)
-head.dispense(dest,   'TRANSFER_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', columns=sorted_cols)
-head.return_tips(sorted_tips, columns=sorted_cols)
-head.drop_adapter()
+mca.pick_up(sorted_tips, columns=sorted_cols)
+mca.aspirate(source, TRANSFER_UL, liquid_class="Water Free Single", columns=sorted_cols)
+mca.dispense(dest,   TRANSFER_UL, liquid_class="Water Free Single", columns=sorted_cols)
+mca.return_tips(sorted_tips, columns=sorted_cols)
+mca.drop_adapter()
 ```

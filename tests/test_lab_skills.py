@@ -119,6 +119,7 @@ def test_shipped_catalog_is_well_formed():
     assert always == {
         "api-blocks",
         "core-clarify-open-parameters",
+        "core-lab-rules",
         "core-worktable-api",
         "labware-and-liquid-classes",
     }
@@ -234,8 +235,6 @@ def test_select_pulls_cross_referenced_skill():
     )
     assert "family-ngs-library-prep" in names
     assert "family-bead-cleanup-spri" in names  # pulled via cross-reference
-    # it also references family-pcr-setup
-    assert "family-pcr-setup" in names
 
 
 def test_select_when_force_includes_bead_cleanup_despite_lm_omission():
@@ -290,8 +289,8 @@ def test_select_when_frontmatter_parses_on_shipped_skills():
     # Triggers are brand-neutral generic terms (not "ampure"): any SPRI / magnetic
     # bead cleanup selects the skill, regardless of bead brand.
     bead_triggers = set(by_name["family-bead-cleanup-spri"].select_when)
-    assert {"bead", "magnetic"} <= bead_triggers
-    assert "ampure" not in bead_triggers
+    assert {"spri", "bead cleanup"} <= bead_triggers
+    assert "bead" not in bead_triggers  # streptavidin work must not pull SPRI
     assert "pool" in by_name["family-pooling"].select_when
     # skills without the field default to an empty tuple (degrade cleanly)
     assert by_name["family-simple-transfer"].select_when == ()
@@ -392,8 +391,8 @@ def test_assemble_orders_api_deck_family_with_header():
     assert ctx is not None
     assert ctx.startswith("LAB SCOPE (authoritative — this IS the catalog")
     # axis ordering: every api skill appears before the family skill
-    fam_pos = ctx.index("AMPure XP PCR cleanup")
-    api_pos = ctx.index("## `Worktable`")
+    fam_pos = ctx.index("The purified DNA **in the eluate**")
+    api_pos = ctx.index("## Words")
     assert api_pos < fam_pos
 
 
@@ -437,8 +436,8 @@ def test_build_initial_scope_message_skills_path():
     msg = build_initial_scope_message(
         scope, "simple transfer", _FakeClient('["family-simple-transfer", "head-liha"]')
     )
-    assert msg and "simple transfer" in msg.lower()
-    assert "AMPure XP PCR cleanup" not in msg  # bead family not selected
+    assert msg and "Choose by the shape of the move" in msg
+    assert "The purified DNA **in the eluate**" not in msg  # bead family not selected
 
 
 def test_build_initial_scope_message_non_skills_is_static():

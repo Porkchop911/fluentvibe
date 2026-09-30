@@ -1,93 +1,34 @@
 ---
 name: family-bead-affinity-capture
 axis: family
-description: Magnetic-bead affinity capture of a target species — antibody immunoprecipitation (Dynabeads IP) and His-tag IMAC (Ni-NTA magnetic agarose) — plus on-bead protein sample prep (SP3). Bind a target to a ligand-coated bead, incubate, separate on a magnet, wash, then elute. Select for immunoprecipitation, IP, pull-down, Ni-NTA / IMAC / His-tag purification, affinity capture, antibody bead capture, or SP3 proteomic bead cleanup. Distinct from SPRI nucleic-acid cleanup.
+description: Affinity capture of a target from a sample on ligand-coated magnetic beads - immunoprecipitation (antibody / Protein A/G beads), His-tag purification (Ni-NTA magnetic beads), SP3 protein clean-up - bind, wash, and elute or process on the beads as the document says. Select for IP, immunoprecipitation, pull-down, Ni-NTA, IMAC, His-tag, SP3. Not for immobilising a biotinylated molecule on streptavidin beads.
 always_on: false
 ---
-## Canonical workflow: affinity capture on magnetic beads
+## What the product is
 
-A *ligand-coated* magnetic bead (antibody for IP, Ni-NTA for His-tagged protein)
-binds a specific target from the sample; everything else is washed away on the
-magnet, then the target is eluted. The bead/magnet mechanics are identical to
-SPRI — magnetization is implied by stacking onto the `MagnetRack`, beads are a
-solid-phase well attribute via reagent roles, binding happens on an off-magnet
-mix. **Reuse the mechanism from `api-magnetization-model`** and the bind/wash/
-elute structure from `family-bead-cleanup-spri`; this family adds the
-*affinity ligand* and a *binding incubation*.
+Depends on the document; decide before writing (core-lab-rules):
+- **IP / pull-down**: usually the target eluted off the beads (low-pH buffer, or boiling in SDS sample buffer for a
+  gel), sometimes the beads themselves (on-bead digestion, "keep beads").
+- **His-tag (Ni-NTA)**: the protein eluted with imidazole buffer.
+- **SP3**: the peptides after on-bead digestion, recovered from the supernatant.
 
-### Variables
+## Steps and what must be kept
 
-```
-BEAD_SLURRY_VOL_UL        — ligand bead suspension volume per well (Ni-NTA / Dynabeads)
-ANTIBODY_VOLUME_UL        — antibody / affinity ligand added per well (IP)
-BINDING_INCUBATION_SECONDS— off-magnet incubation while the target binds the beads
-MAGNET_WAIT_SEC           — pelleting time on the magnet before aspirating
-WASH_VOLUME_UL            — wash buffer per well
-NUM_WASHES                — number of wash cycles
-ELUTE_VOLUME_UL           — elution / denaturation buffer per well
-LIQUID_CLASS_ANTIBODY     — liquid class for the antibody/ligand
-LIQUID_CLASS_WASH, LIQUID_CLASS_ELUTE
-```
+1. **Bind**: beads (often pre-coupled with antibody) + sample, off the magnet, kept in suspension during the
+   incubation (30 min to overnight; cold incubations and rotation are operator steps).
+2. **Separate** and discard the unbound fraction (unless the document keeps the flow-through).
+3. **Wash** as the document says (number, buffer, stringency). Resuspend in each wash.
+4. **Elute or process** exactly as the document describes. Heat (e.g. 95 °C in SDS buffer) is an operator step;
+   then separate and move the eluate to a new plate with its own tips.
 
-### Reagent roles (see api-magnetization-model)
+## Typical values and what to ask
 
-- `Reagent("Affinity beads", role="bead_carrier")` — the ligand-coated bead
-  suspension; its µL is normal liquid, dispensing it establishes the bead phase.
-- `Reagent("Target", role="analyte")` — the captured species (protein/complex).
-- `Reagent("Elution buffer", role="eluent")` — releases the target on an
-  off-magnet mix.
+Beads 10–50 µl slurry per sample; washes 200–500 µl (large volumes need a deep-well plate: ask); elution
+20–50 µl. Ask when open: bead amount, wash volume and count, elution buffer and volume, whether the flow-through
+is kept.
 
-### Step sequence
+## On this deck
 
-1. **Variables + Labware Placement**: sample `Plate96` (or `Plate96Deep` for
-   large volumes — add to whitelist if needed), `MagnetRack`, antibody/bead and
-   wash/elution reservoirs (`Trough`; a 15 mL tube maps to `25ml_short`/`100ml`),
-   MCA + FCA tip boxes, `300ml SBS` waste.
-2. **Add beads (+ antibody for IP)** off the magnet; dispense `BEAD_SLURRY_VOL_UL`
-   and, for IP, `ANTIBODY_VOLUME_UL` from `LIQUID_CLASS_ANTIBODY`.
-3. **Bind**: mix off the magnet, then incubate —
-   `head.mix(plate, "MIX_VOLUME_UL", cycles=...)` then
-   `wt.wait(duration_seconds="BINDING_INCUBATION_SECONDS")`. The off-magnet mix
-   binds the target to the suspended beads.
-4. **Separate**: `wt.gripper.move(plate, onto=magnet)` (this *is* the
-   magnetization), then `wt.wait(duration_seconds="MAGNET_WAIT_SEC")`.
-5. **Wash loop** (plate on magnet): a native loop of `NUM_WASHES` —
-   aspirate supernatant to waste, move off magnet, dispense `WASH_VOLUME_UL`,
-   mix, move back `onto=magnet`, aspirate to waste. See api-loops-and-conditionals.
-6. **Elute**: move off the magnet, dispense `ELUTE_VOLUME_UL` eluent, mix
-   off-magnet to release; for heat-denaturation elution (IP → SDS-PAGE) model
-   the heat step as `wt.wait(...)` + `wt.add_comment("denature 95C 5 min")`.
-7. **Recover**: move back `onto=magnet`, transfer the eluate to a clean plate.
-
-### Elution-path branch (IP)
-
-Some IP protocols choose between SDS-PAGE prep (heat-denature in place) and cold
-storage. Drive it with a conditional (see api-loops-and-conditionals):
-
-```python
-wt.declare_variable("ELUTION_PATH", 0); wt.set_sim_value("ELUTION_PATH", 0)
-with wt.conditional(left="ELUTION_PATH", op="==", right=0, name="SDS-PAGE elute"):
-    wt.wait(duration_seconds="DENATURE_SECONDS")
-    wt.add_comment("Heat-denature eluate for SDS-PAGE")
-# else branch: transfer eluate to a cold plate (cond.else_steps, gap G4)
-```
-
-## Variant: SP3 on-bead protein sample prep
-
-SP3 (Single-Pot Solid-phase-enhanced Sample Prep) binds protein to a **dual**
-bead type, then runs reduction → alkylation → digestion → labeling *on the
-beads* without intermediate transfers:
-
-- `BEAD_TYPE_A_RATIO`, `BEAD_TYPE_B_RATIO` → derived
-  `BEAD_VOLUME_UL = round((BEAD_TYPE_A_RATIO + BEAD_TYPE_B_RATIO) * SAMPLE_VOLUME_UL, 1)`.
-- A native `wt.loop` over the sequential reagent steps, each: dispense reagent
-  from a trough, mix off-magnet, `wt.wait` incubation; no transfers between.
-- `LIQUID_CLASS_ENZYME` (protease) and `LIQUID_CLASS_TMT` (labeling) roles; note
-  in prose that viscous TMT buffer flow-rate/geometry tuning is not exposed.
-
-## Notes
-
-- The magnet never withholds liquid from a tip — on-magnet aspirate draws all
-  free liquid and leaves the bead-bound target; see api-magnetization-model.
-- Fill reservoirs for the whole run incl. dead volume:
-  `wells × per_well × reps × 1.1`.
+Beads and buffers by the FCA (`distribute_reagent`), samples with `stamp`, keep suspended with `mix_wells`,
+`separate` / `remove_liquid` / `release` for the magnet, washes in a native loop, the eluate moved with `stamp` into
+a clean plate. Heat and rotation: `offdeck_step`.

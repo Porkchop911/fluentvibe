@@ -22,7 +22,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from fluentvibe.authoring.lab_scope import load_lab_scope  # noqa: E402
+from fluentvibe.authoring.lab_scope import REQUIRED_LIQUID_CLASSES, load_lab_scope  # noqa: E402
 from fluentvibe.authoring.lab_skills import assemble_context  # noqa: E402
 from fluentvibe.authoring.profile import resolve_profile  # noqa: E402
 
@@ -92,7 +92,8 @@ def test_profile_drives_deck_and_whitelist(tmp_path: Path) -> None:
     assert deck_names == [f"deck-{WS_NAME.lower()}"]
     assert scope.labware == rp.labware
     assert scope.labware_classes == rp.labware_classes
-    assert scope.liquid_classes == rp.liquid_classes
+    # the mix and empty-tip classes the blocks use are always allowed
+    assert scope.liquid_classes == rp.liquid_classes | REQUIRED_LIQUID_CLASSES
 
 
 def test_assembled_context_binds_profile_workspace_only(tmp_path: Path) -> None:
