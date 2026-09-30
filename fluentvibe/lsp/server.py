@@ -179,6 +179,24 @@ def create_server() -> LanguageServer:
         return {"text": explain_region(doc.source, int(params["start_line"]), int(params["end_line"]),
                                        path=doc.path, diagnostics=diagnostics)}
 
+    @server.command("fluentvibe.lsp.chatContext")
+    def _chat_context(ls: LanguageServer, *args: Any) -> dict:
+        from ..copilot.chat import chat_context
+
+        params = _params(args)
+        doc = ls.workspace.get_text_document(params["uri"])
+        return chat_context(doc.source, doc.path, start_line=int(params["start_line"]),
+                            end_line=int(params["end_line"]), has_selection=bool(params.get("has_selection")))
+
+    @server.command("fluentvibe.lsp.checkProposal")
+    def _check_proposal(ls: LanguageServer, *args: Any) -> dict:
+        from ..copilot.edit import propose_region
+
+        params = _params(args)
+        doc = ls.workspace.get_text_document(params["uri"])
+        return propose_region(doc.source, int(params["start_line"]), int(params["end_line"]),
+                              str(params.get("new_text") or ""), path=doc.path).to_dict()
+
     return server
 
 

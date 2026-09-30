@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.5.7",
+  "version": "0.6.0",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -24,7 +24,8 @@
     "onCommand:fluentvibe.pullFluentControlEdits",
     "onCommand:fluentvibe.convertOpentrons",
     "onCommand:fluentvibe.setInstructions",
-    "onCommand:fluentvibe.showReplay"
+    "onCommand:fluentvibe.showReplay",
+    "onView:fluentvibe.chat"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -163,6 +164,17 @@
           ],
           "default": "low",
           "description": "Reasoning effort for Explain selection / Explain this problem (authoring and Ctrl+I use model.reasoningEffort)."
+        },
+        "fluentvibe.model.chatEffort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "default": "low",
+          "description": "Reasoning effort for the fluentvibe chat panel (low answers in seconds; xhigh can take minutes)."
         }
       }
     },
@@ -195,6 +207,24 @@
         {
           "command": "fluentvibe.explainProblem",
           "when": "false"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "fluentvibe",
+          "title": "fluentvibe",
+          "icon": "chat-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "fluentvibe": [
+        {
+          "type": "webview",
+          "id": "fluentvibe.chat",
+          "name": "Chat"
         }
       ]
     }

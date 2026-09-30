@@ -119,7 +119,17 @@ def edit_region(
         messages=_build_messages(source, selection, instruction), tools=[]
     )
     new_text = _strip_fences(message.get("content") or "")
+    return propose_region(source, start_line, end_line, new_text, path=path, revalidate=revalidate)
 
+
+def propose_region(source: str, start_line: int, end_line: int, new_text: str, *,
+                   path: str = "<protocol>", revalidate: bool = True) -> EditResult:
+    """Lines ``start_line``..``end_line`` replaced by ``new_text``: the whole proposed
+    file (with any block import it needs) and, with ``revalidate``, its problems.
+    Shared by Ctrl+I and the chat's "Apply to selection"."""
+    lines = source.splitlines()
+    start_line = max(1, start_line)
+    end_line = min(len(lines), max(start_line, end_line))
     imports = _missing_block_imports(source, new_text) if new_text else []
     import_line = _import_insert_line(lines) if imports else 0
     proposed = ""
