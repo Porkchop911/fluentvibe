@@ -1,0 +1,35 @@
+{
+  "id": "MAN0014017-B0-nucleic-acid-immobilization-v1",
+  "source": "MAN0014017 Rev. B.0, pages 1–2; independently transcribed from the PDF, not a generated Bench Spec",
+  "scope": "DNA immobilization; retain bead-bound DNA. Elution requires a separately sourced and explicitly approved protocol, not merely approval of the word elute.",
+  "allowed_reagents": [
+    "Biotinylated DNA in distilled water (one distinct sample per well)",
+    "Dynabeads M-280 Streptavidin (stock 10 mg/mL)",
+    "2X B&W: 10 mM Tris-HCl pH 7.5, 1 mM EDTA, 2 M NaCl",
+    "1X B&W: 2X diluted 1:1 with distilled water",
+    "Distilled water used for the specified dilution",
+    "Low-salt final resuspension buffer, identity and volume explicitly settled for the experiment"
+  ],
+  "forbidden_unless_separately_approved": [
+    "NaOH/Solution A or RNA-specific bead pretreatment",
+    "Acid/base elution, neutralization, or a post-binding elution incubation",
+    "Standalone 1 M Tris-HCl pH 8.0 neutralizer (not the Tris component of B&W)",
+    "Recovering bead-free supernatant as the DNA product",
+    "SPRI cleanup/ethanol washes substituted for streptavidin immobilization",
+    "Protein-specific PBS/BSA washes substituted for the nucleic-acid branch"
+  ],
+  "checks": [
+    {"id": "scope", "expected": "96 distinct DNA samples; the selected branch is nucleic-acid immobilization. Every protocol operation, including manual steps, is accounted for; no unsupported extras.", "source": "request + p2 Immobilize nucleic acids"},
+    {"id": "inputs", "expected": "DNA volume, length, biotinylation, amount/capacity, starting liquid state and final low-salt buffer/volume are explicitly provided or remain questions; no silently approved invented inputs.", "source": "p1 capacity guidelines; p2 DNA-specific steps 1–3,6"},
+    {"id": "prewash", "expected": "Before binding, resuspend stock (>30 s vortex or 5 min rotation), aliquot beads, add equal wash-buffer volume or at least 1 mL in the tube-scale procedure, mix (5 s vortex or >=5 min roller), magnet 1 min, discard supernatant retaining beads, remove magnet and restore the original stock-bead volume with washing buffer. Plate scaling and any manual precondition must be explicitly approved and executable, not omitted in a note.", "source": "p1 Wash Dynabeads, steps 1–5"},
+    {"id": "prepare_2x", "expected": "Resuspend washed beads in 2X B&W at 5 micrograms/microlitre (twice original stock-bead volume). Verify bead mass and the total suspension composition, including residual carry-over; not just a reagent label.", "source": "p2 nucleic-acid step 1"},
+    {"id": "equal_binding", "expected": "Combine equal volumes of the prepared 2X bead suspension and DNA in distilled water: final NaCl 1 M. Compare these named operands, not current total well volume. 5 microlitres suspension + 20 microlitres DNA fails. Residual liquid requires an explicit composition balance, not blind equal-volume correction.", "source": "p2 nucleic-acid step 2"},
+    {"id": "binding", "expected": "After combination and before separation: room-temperature gentle rotation; 15 min for DNA fragments up to 1 kb, <=10 min for <30-base oligos. Unspecified or outside-range lengths require clarification. Verify a real timed operation or executable operator instruction with duration, not a group label.", "source": "p2 nucleic-acid step 3"},
+    {"id": "separation", "expected": "Magnet engaged 2–3 min before removal of binding supernatant; retain bead-bound product. Track magnet state per vessel. Never send suspended product beads to waste.", "source": "p2 nucleic-acid step 4 + general immobilization step 3"},
+    {"id": "washes", "expected": "Two or three completed washes with 1X B&W, including resuspension and separation/removal. Expand loop counts; adding buffer alone is not a completed wash. Volumes and residuals must match the approved plate-scale plan.", "source": "p2 nucleic-acid step 5"},
+    {"id": "endpoint", "expected": "Resuspend retained DNA-coated beads in the approved low-salt buffer to the desired concentration, off the magnet. Product remains bead-bound. No invented elution, neutralization, extra wait, or bead-free product transfer.", "source": "p2 nucleic-acid step 6"},
+    {"id": "reagents", "expected": "Every loaded/added reagent matches identity, formulation, concentration, procedure branch and purpose in the allowed list or explicit reviewed amendment. Mention of a chemical elsewhere in the PDF is insufficient.", "source": "p1 Table 1, nucleic-acid column; p2 selected branch"},
+    {"id": "implementation", "expected": "Each required step maps to executed DSL/simulator operations or an explicit operator hand-off, with parameters and sample state preserved. Every additional operation has a mechanical necessity (tips, magnet release, mixing, labware moves) or a separately approved requirement; unexplained additions fail.", "source": "independent implementation coverage rule"}
+  ],
+  "review_policy": "Inspect raw spec and final executable operations separately. A reviewed finding needs concrete artifact/line evidence. Unknown or missing reviews block acceptance. Compile, simulation and InfoPad are separate necessary gates, not chemistry evidence. This oracle is not supplied to the authoring model."
+}
