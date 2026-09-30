@@ -1,63 +1,35 @@
 ---
 name: head-liha
 axis: api
-description: The wt.liha fixed-channel pipetting head — trough-to-plate dispenses, per-column and single-channel work, and the FCA-to-LiHa mapping. Select for any protocol that dispenses reagents from a trough or does column-wise/single-channel pipetting.
+description: The FCA (wt.liha, 8 channels) by hand - column-wise work with a native loop and well_offset, FCA tip boxes. Select when writing FCA pipetting that no block covers.
 always_on: false
 ---
-## `wt.liha`
+## `wt.liha` — the FCA
 
-`wt.liha` is the only fixed-channel pipetting head exposed by fluentvibe. Use it
-for FCA-style operations (trough-to-plate dispenses, single-channel or
-per-column transfers, individual well aspirate/dispense). Use `wt.mca96` only
-for true 96-channel plate-to-plate moves. For hand-written calls (blocks take
-numbers and declare their own variables), PASS DECLARED VARIABLES BY NAME (a
-string) for volume and liquid_class — `'BEAD_VOLUME_UL'`, not the Python value
-— or the rendered protocol bakes in a literal and the FC variable is dead. To
-cover all 12 columns, wrap a single aspirate/dispense in
-`with wt.loop(times=12, loop_variable='col')` and address columns with
-`well_offset='(col-1)*8'`; NEVER unroll with a Python `for` loop.
+The 8-channel arm. Prefer the blocks (`distribute_reagent`, `pool_columns`, `pool_wells`, `transfer_volumes`,
+`distribute_volumes`); write `wt.liha` calls only for what no block does. Its tip box is an FCA box
+(`FCA200Box` / `FCA1000Box`), never an MCA box ("No DiTi-Labware ... found").
+
+A reagent from a trough into every column: aspirate **inside** the loop, once per column, and dispense from above
+(the tips never touch the wells, so one set of tips serves all columns):
 
 ```python
-head = wt.liha
-head.get_tips(tips)
-head.aspirate(source, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER')
-with wt.loop(times=12, loop_variable='col'):
-    head.dispense(dest, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', well_offset='(col-1)*8')
-head.mix(plate, 'MIX_VOLUME_UL', cycles=10, liquid_class='LIQUID_CLASS_MIX')
-head.empty_tips(waste, 'SUPERNATANT_VOLUME_UL')
-head.drop_tips()
-head.drop_tips(tips)
-```
-**Never call:** `pick_up`, `return_tips`, `mount_adapter`, `drop_adapter`
-
-## LiHa tip box — must be an FCA DiTi (not MCA)
-
-`get_tips(tips)` on `wt.liha` looks for an **FCA**-class DiTi box on the worktable.
-Placing an `MCA96, *, Box` and binding it to `tips` makes FC report `No DiTi-Labware
-"MCA96, …" found` and `Tip(s) are not mounted on channels 1–8`. The deck-valid FCA
-tip boxes (per the whitelist) are `FCA, 200ul SBS` and `FCA, 1000ul SBS`.
-
-Place it like this and bind it to `fca_tips`:
-
-```python
-from fluentvibe import TipBox
-fca_tips = wt.place(TipBox("FCA_Tips", catalog="FCA, 1000ul SBS"), "Nest61mm_Pos", 6)
-# (use "FCA, 200ul SBS" for low-volume work)
+fca = wt.liha
+fca_tips = wt.place(FCA200Box("FcaTips", catalog="FCA, 200ul SBS"), "Nest61mm_Pos", 4)
+wt.declare_variable("col", 1)
+wt.set_sim_value("col", 1)
+fca.get_tips(fca_tips)
+with wt.loop(times=12, name="Buffer to every column", loop_variable="col"):
+    fca.aspirate(buffer_trough, BUFFER_UL, liquid_class="Water Free Single")
+    fca.dispense(plate, BUFFER_UL, liquid_class="Water Free Single", well_offset="(col-1)*8")
+fca.drop_tips()
 ```
 
-Then use it as the `get_tips(fca_tips)` / `drop_tips(fca_tips)` argument throughout
-the protocol. Never use an MCA96 tip box with the LiHa.
+Anything that touches samples (aspirating from a sample plate, mixing in sample wells) takes **fresh tips for every
+column**: put `get_tips` / `drop_tips` inside the loop, or use `transfer_volumes` / `pool_columns`, which do.
 
-## `wt.fca` does not exist
+`well_offset` counts wells from A1 (8 per column), so `(col-1)*8` is the column the loop is at; declare the loop
+variable before the loop. `fca.mix(plate, VOL, cycles=10, liquid_class="Water Mix", well_offset=...)` mixes;
+`fca.empty_tips(waste, VOL)` empties (class `Empty Tip` by default).
 
-fluentvibe does NOT expose `wt.fca` as a runtime head. FCA-style fixed-channel
-pipetting (single-channel, per-column, trough-to-plate dispenses) is authored
-through `wt.liha`. Use `wt.mca96` only for true 96-channel plate-to-plate
-operations.
-
-**Never call:** `wt.fca.aspirate`, `wt.fca.dispense`, `wt.fca.pick_up`
-
-## Rule
-
-- `liha_mix` requires `labware_name` (string) and `volume` (float or variable
-  name). Optional `cycles` (int, default 10).
+**Never call on `wt.liha`:** `pick_up`, `return_tips`, `mount_adapter`, `drop_adapter` (those are MCA calls).

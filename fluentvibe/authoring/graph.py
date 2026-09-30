@@ -2032,9 +2032,39 @@ class LegacyClientAdapter:
                 d for d in defs
                 if d.get("function", {}).get("name") in self._bound_names
             ]
-        raw_messages = [_lc_to_legacy_dict(m) for m in messages]
+        raw_messages = _drop_stale_reasoning([_lc_to_legacy_dict(m) for m in messages])
         response = self._legacy.complete(messages=raw_messages, tools=defs)
         return _legacy_dict_to_aimessage(response)
+
+
+REPLAYED_REASONING_CHARS = 8000
+
+
+def _drop_stale_reasoning(raw_messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Replay only the latest assistant turn's reasoning, and only its tail.
+
+    vLLM renders a replayed ``reasoning`` field on every turn, so replaying all
+    of it put up to 30k tokens per earlier turn back into the prompt and filled
+    a 64k context by the third or fourth turn (measured 2026-09-30: 24k chars of
+    turn-1 reasoning re-sent on turn 2, prompt 45k tokens by turn 3). Dropping
+    it only before the last user message was not enough: lookups chain without
+    a user message, so turns 1 and 2 still went back whole. The latest turn's
+    last ~2k tokens keep the thread of the tool chain in progress."""
+    last_ai = max((i for i, m in enumerate(raw_messages) if m.get("role") == "assistant"), default=-1)
+    last_user = max((i for i, m in enumerate(raw_messages) if m.get("role") == "user"), default=-1)
+    out = []
+    for i, m in enumerate(raw_messages):
+        if m.get("role") == "assistant":
+            keep = i == last_ai and i > last_user
+            trimmed: dict[str, Any] = {}
+            for key, value in m.items():
+                if "reasoning" not in key.lower():
+                    trimmed[key] = value
+                elif keep:
+                    trimmed[key] = value[-REPLAYED_REASONING_CHARS:] if isinstance(value, str) else value
+            m = trimmed
+        out.append(m)
+    return out
 
 
 def _lc_to_legacy_dict(message: BaseMessage) -> dict[str, Any]:

@@ -113,7 +113,9 @@ class PromptAuthoringSession:
         self._registry.lab_scope = self._lab_scope
         self._validator = self._registry.validator
         self._helpers = PromptAuthoringService.__new__(PromptAuthoringService)
-        self._messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        from .service import SKILLS_SYSTEM_PROMPT
+        base_prompt = SKILLS_SYSTEM_PROMPT if self._lab_scope.mode == "skills" else SYSTEM_PROMPT
+        self._messages: list[BaseMessage] = [SystemMessage(content=base_prompt)]
         # skills mode selects its context from the prompt, which isn't known
         # until the first send(); defer injection (see _inject_skill_context).
         # off/cheatsheet/enforce have static context, so inject it now.

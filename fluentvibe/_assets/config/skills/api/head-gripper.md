@@ -18,6 +18,7 @@ wt.gripper.move(plate, onto=magnet)
   `wt.gripper.move(plate, onto=magnet_rack)` *is* the magnetization; there is
   no engage/disengage command. Moving the plate back off the magnet
   (`to=(...)`) releases it.
-- **Plate movements between locations MUST use the gripper**
-  (`rga_transfer_labware` with `cga_get_fingers`/`cga_drop_fingers`). NEVER
-  emit a `user_prompt` asking the user to move plates by hand.
+- **Plate movements on the deck use the gripper**, never a prompt asking the
+  operator to move a plate between deck positions. A step that needs a device
+  the deck lacks is the exception: `offdeck_step(...)` hands the plate to the
+  operator and brings it back.

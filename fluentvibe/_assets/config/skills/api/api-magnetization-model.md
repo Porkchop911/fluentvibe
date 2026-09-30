@@ -55,5 +55,9 @@ eb    = Reagent("Elution buffer", role="eluent")
 # move off magnet → add eb, mix → DNA released; move on → transfer eluate
 ```
 
-For the full bind→wash→elute workflow and the derived supernatant/eluate
-volumes, see the bead-cleanup family skill.
+## Binding that is not released: streptavidin–biotin
+
+The release rule above is SPRI chemistry (DNA comes off the beads in a low-salt buffer). Streptavidin binds
+biotin practically irreversibly: in an immobilisation the product is the beads with the bound material, and the
+final "low-salt buffer" only resuspends them. Give that buffer the default role (`plain`), **not** `eluent`, so
+the simulator keeps the analyte on the beads, and add no elution or eluate transfer.

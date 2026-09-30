@@ -1,129 +1,67 @@
 ---
 name: labware-and-liquid-classes
 axis: api
-description: The approved labware catalog names, the approved liquid classes, fill_all semantics, and the labware/volume-as-variable rules. Always loaded — every protocol places labware.
+description: Which labware to use for what (catalog names and Python classes), which head takes liquid from where, capacities and fill limits, liquid classes, and how to fill sources and samples. Always loaded.
 always_on: true
 ---
-## Approved labware (use these exact `catalog=` names)
+## Labware (the deck section's class contract is binding)
 
-| Role | Python class | `catalog=` name | Notes |
+| Role | Class | `catalog=` | Head / notes |
 |---|---|---|---|
-| 96-well sample/elution plate | `Plate96` | `96_ABgene_SuperPlate_Thermo_AB2800` | Default 96-well plate for all sample/elution work |
-| 384-well plate | `Plate96` (384 layout) | `384 Well LowVol LoBase` | Only when a 384 request is explicit |
-| 96-well magnet rack | `MagnetRack` | `LV_Alpaqua_A000350` | Bead separation. Magnetization is implied by gripper-moving a plate **onto** this — never an explicit step |
-| Liquid-waste sink | `Trough25mL` | `300ml SBS` | High-capacity waste on a 7 mm nest (`Nest7mm_Pos`). Never use a shallow 96-well plate as waste |
-| Reagent trough (FCA) | `Trough25mL` | `25ml_short` | **Default for reagents** (beads, elution buffer, master mix, buffers) dispensed by the FCA; total < ~20 mL |
-| Large reagent trough (FCA) | `Trough100mL` | `100ml` | FCA reagents whose total exceeds ~20 mL |
-| Bulk reservoir for the MCA96 | `Trough100mL` | `60ml SBS MCA96` | Cheap bulk liquids the MCA96 adds to a whole plate (ethanol, water, wash buffer), on a 61 mm nest; up to ~55 mL |
-| Large bulk reservoir for the MCA96 | `Trough25mL` | `300ml SBS` | Ethanol/wash beyond ~55 mL, on a `Nest7mm_Pos` the MCA reaches (the deck's reach data; not positions 1-3 on the 1080 deck) |
-| MCA96 tips, small | `MCA100Box` | `MCA96, 100ul, Box` | Only when every MCA aspirate is ≤100 µL |
-| MCA96 tips, medium | `MCA200Box` | `MCA96, 200ul, Box` | **Default** — ≤200 µL MCA work, covers ethanol-wash aspirates |
-| MCA96 tips, large | `MCA500Box` | `MCA96, 500ul, Box` | Large-volume MCA |
-| FCA tips, small | (FCA/LiHa) | `FCA, 200ul SBS` | FCA/LiHa fixed-channel ≤200 µL |
-| FCA tips, large | (FCA/LiHa) | `FCA, 1000ul SBS` | FCA/LiHa fixed-channel large volume |
+| 96-well plate (samples, products, reactions) | `Plate96` | `96_ABgene_SuperPlate_Thermo_AB2800` | the default plate |
+| 384-well plate | `Plate384` | `384 Well LowVol LoBase` | only when 384 is asked for; 29 µl per well |
+| Magnet | `MagnetRack` | `LV_Alpaqua_A000350` | on a `Nest61mm_Pos`; the gripper moves the plate onto it |
+| Reagent trough, small | `Trough25mL` | `25ml_short` | FCA only; on `WS_100ml_1`; fill ≤ 22 ml |
+| Reagent trough, large | `Trough100mL` | `100ml` | FCA only; on `WS_100ml_1`; for totals over 22 ml |
+| Bulk reservoir | `Trough100mL` | `60ml SBS MCA96` | MCA (or FCA); on a `Nest61mm_Pos`; fill ≤ 55 ml |
+| Large bulk reservoir / waste | `Trough25mL` | `300ml SBS` | MCA (or FCA); on a `Nest7mm_Pos` the MCA reaches (not 1-3 on the 1080 deck); fill ≤ 250 ml. Also the waste |
+| MCA tips | `MCA100Box` / `MCA200Box` / `MCA500Box` | `MCA96, 100ul, Box` / `MCA96, 200ul, Box` / `MCA96, 500ul, Box` | 200 µl is the default |
+| FCA tips | `FCA200Box` / `FCA1000Box` | `FCA, 200ul SBS` / `FCA, 1000ul SBS` | never an MCA box with the FCA |
 
-**Naming rules:**
-- Copy labware type names EXACTLY from this table. Never add parenthetical
-  suffixes like `(96-well)` or `(SBS)` (use `LV_Alpaqua_A000350`, not
-  `LV_Alpaqua_A000350 (96-well)`).
-- Labware types may be declared as String variables and referenced by name,
-  the same way volumes are — this keeps protocols easy to re-target.
+The class name is the contract, not the volume: `300ml SBS` is a `Trough25mL`. Copy catalog names exactly.
 
-**Which head adds reagents (lab practice):**
-- **Reagents come from the FCA (LiHa)**: kit reagents, beads, buffers, master
-  mixes, enzymes — anything costly — are dispensed column by column with FCA
-  tips from tubes or a slim trough (`25ml_short`, or `100ml` for larger
-  totals). Slim troughs and tubes have little dead volume; use
-  `distribute_reagent` (or `spri_cleanup(..., fca_tips=...)` for beads and
-  elution buffer).
-- **The MCA96 takes only cheap bulk liquids** (80% ethanol, water, wash buffer)
-  from an SBS reservoir (`60ml SBS MCA96` on a 61 mm nest, `300ml SBS` on a
-  reachable 7 mm nest), plus plate-to-plate work (`stamp`, supernatant removal,
-  eluate transfer). The MCA96 can never pipette in a slim trough (FC: "out of
-  range"); compile refuses it.
-- Choose by volume and number of wells: a few wells or small volumes → FCA
-  from tubes; a full plate of an expensive reagent → FCA from a slim trough; a
-  full plate of ethanol/water → MCA96 from an SBS reservoir.
-- Do not invent a pre-filled 96-well "reagent plate" to stamp a common reagent
-  from: someone would have to aliquot 96 wells by hand first. Put the reagent
-  in a trough or tubes and let the FCA distribute it. Stamp from a plate only
-  when the reagent really differs per well (barcodes, indexes, samples) or the
-  kit ships it plated.
+## Which head takes what
 
-**Deck placement — trough rules (avoid FC "out of range" / "cannot reach
-Z-Max" / "No connector for this rotation" errors):**
-- Place labware on the locations/sites the **deck skill** lists (its "Valid
-  deck positions" table and role→slot layout are authoritative for this deck).
-  Troughs go on the deck's trough site (a `WS_*ml_*` location); plates, magnet
-  racks, and tip boxes go on the deck's plate nest (e.g. `Nest61mm_Pos`).
-- For the trough catalog, **prefer `25ml_short`** over `100ml` whenever possible
-  — the `100ml` trough is taller than standard tips can reach (FC throws
-  `Tip N cannot reach Z-Max of labware …`). Use `25ml_short` for anything under
-  ~20 mL fill; only use `100ml` when ethanol washes need the capacity (96 ×
-  200 µL × 2 ≈ 42 mL).
-- `300ml SBS` is the waste sink, or a bulk ethanol/wash reservoir for the MCA96
-  — never for costly reagents. It has a plate (SBS) footprint and sits on a
-  7 mm nest (`Nest7mm_Pos`), not on the trough carrier sites that slim troughs
-  need. `MCA96 200ml` does not fit a 61 mm nest ("No connector").
-- Different trough catalogs on the same trough site need different rotation
-  connectors. If a slot/catalog combo fails with `No connector for this
-  rotation at this site available`, swap to `25ml_short` on the deck's trough
-  site — the most broadly reachable combo.
+- **Reagents** (kit reagents, beads, buffers, master mixes, enzymes): the **FCA** from a slim trough or tubes
+  (`distribute_reagent`). Little dead volume, and reagents are costly.
+- **Cheap bulk liquids** (water, ethanol, wash buffer): the **MCA** from an SBS reservoir (`add_reagent`).
+- **The MCA never pipettes in a slim trough** (`25ml_short`, `100ml`): FluentControl reports "out of range".
+- Plate-to-plate work (samples, supernatant removal, products): the MCA (`stamp`, `remove_liquid`, `mix_wells`).
+- A reagent that differs per well (barcodes, indexes, samples) comes from a plate and is stamped; a common reagent
+  is never put into a plate first ("someone would have to fill 96 wells by hand").
 
-## Liquid classes (approved)
+## Capacities: let the simulator count
 
-The list is intentionally short: one transfer class for every liquid is the
-lab's convention, not a mistake to fix. The fixed exceptions are mixing
-(`Water Mix`) and emptying tips (`Empty Tip`).
+| | Limit |
+|---|---|
+| 96-well well | 350 µl; keep ≤ 330, and ≤ 180 while beads are in the well |
+| 384-well well | 29 µl |
+| Tips | MCA 100 / 200 / 500 µl, FCA 200 / 1000 µl per trip; blocks split larger volumes into trips |
+| Mixing | a mix volume ≤ the liquid in the well and ≤ 90 % of the tip |
+| Fills | the fill limits in the labware table |
 
-- `Water Free Single` — general default for aspirate/dispense (aqueous). When
-  the user asks for liquid classes as variables, declare one variable per role
-  with default **and** sim value `"Water Free Single"`.
-- `Water Mix` — **use this for `head.mix(...)` calls**, not `Water Free Single`.
-  `Water Free Single` has no Mix subclass section for MCA tip combinations, so FC
-  rejects the protocol with `Liquid subclass section "Mix" is missing in
-  "MCA384 1" with "MCA96 DiTi 200µl"`. Declare a `LIQUID_CLASS_MIX` variable
-  defaulted to `"Water Mix"` and pass it to every `head.mix(...)`.
-- `Empty Tip` — use as the `empty_tips_liquid_class` for `head.empty_tips(...)`
-  and worklist `EmptyTips` parameters (not `Water Free Single`).
-- For ethanol/volatile dispensing, keep the liquid handled by the FCA/LiHa
-  from the `100ml` reservoir; do not invent new liquid-class names —
-  resolve with `lookup_liquid_class` only if a non-water class is explicitly
-  requested.
+Fill sources generously and run the simulator: it reports a short source, an overflowing well or a tip that is too
+small, exactly, with the line. Do not add these up by hand.
 
-## `Labware` API
+## Liquid classes
+
+- `Water Free Single`: every aspirate and dispense (the lab's convention: one transfer class for all liquids).
+- `Water Mix`: every mix. FluentControl rejects `Water Free Single` for MCA mixing ("Liquid subclass section 'Mix'
+  is missing"). The blocks use it by default.
+- `Empty Tip`: emptying tips. The blocks use it by default.
+
+Do not invent other class names. If the request asks for liquid classes as variables, declare one string variable
+per role (`wt.declare_variable("LC_BEADS", "Water Free Single")` + `wt.set_sim_value(...)`) and pass its name.
+
+## Filling sources and samples
 
 ```python
-plate.well('A1').add_layer(sample, 20.0)
-for well in plate.all_wells(): ...
-plate.column(1)
-plate.row('A')
-source.fill_all(water, 80.0)
+beads_trough.fill_all(Reagent("Beads", role="bead_carrier"), 6000)          # a source
+samples.fill_all(Reagent("Sample matrix"), 18)                               # sample liquid ...
+samples.layer_all(Reagent("Sample DNA", role="analyte"), 2)                  # ... with a small analyte marker on top
+part.fill_wells(part.first_wells(24), Reagent("Sample"), 20)                 # only the first 24 wells
 ```
-**Attributes:** label, wells, catalog_name, slot, is_magnetized
-**Never call:** `fill`, `plate['A1']`
 
-**`labware.fill_all(reagent, volume_ul)` *replaces* the well's layer list —
-it is not additive.** A second `fill_all(...)` on the same labware clobbers
-the first; `fill_all(buffer, 20)` then `fill_all(dna, 2)` leaves every well
-holding only `[dna 2]`, not `[buffer 20, dna 2]`. To seed a well with
-multiple reagents, call `fill_all` **once** for the bulk and append further
-layers per well:
-```python
-plate.fill_all(sample_buffer, 20.0)
-for w in plate.wells.values():
-    w.layers.append(Layer(reagent=sample_dna, volume_ul=2.0))
-```
-Bead suspension is normally *dispensed* (a `bead_carrier` reagent from a
-source plate/trough) rather than seeded — that route is additive and also
-establishes the well's bead phase.
-
-## Volume / type variable rules
-
-- All pipetting volumes MUST be declared as Floating Point variables. Declare
-  the name in the top-level variables list, `set_variable` an initial float
-  value (`90.0`, not `90`), and reference the name as a string in volume
-  fields.
-- Fill troughs for the WHOLE run, with dead volume: required fill ≥
-  `wells × per_well_µL × repeats × 1.1` (the ×1.1 covers tip/dead volume).
-  Under-filling is the #1 simulator failure (`Aspirate: ... short by N uL`).
+`fill_all` replaces what is in the wells; `layer_all` / `layer_wells` add on top. Roles: `analyte` (the thing you
+carry through the protocol), `bead_carrier` (bead suspension), `eluent` (a buffer that releases the analyte from
+beads), `plain` (everything else, the default).

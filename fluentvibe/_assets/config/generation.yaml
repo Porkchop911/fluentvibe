@@ -152,6 +152,8 @@ lab_scope:
     - "FCA, 1000ul SBS"
   liquid_classes:
     - "Water Free Single"
+    - "Water Mix"      # mixing (FC rejects Water Free Single for MCA mixing)
+    - "Empty Tip"      # emptying tips
   # `skills` mode (--lab-scope skills): assemble context from a relevant subset
   # of granular skill files instead of the lab_scope.md/_reference.md monolith.
   # The labware/liquid_classes whitelist above is shared with this mode.
