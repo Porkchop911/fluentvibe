@@ -103,3 +103,12 @@ def test_fca_distribute_is_one_loop_per_run_of_columns():
     wt.simulate(strict=True)
     well = wt.snapshots[-1].labware("P").well
     assert [round(well(f"H{c}").volume_ul) for c in range(1, 13)] == [20, 20, 20, 20, 0, 0, 20, 0, 20, 20, 20, 20]
+
+
+def test_tidied_protocol_keeps_the_authored_step_objects():
+    # The replay (and anything else) matches simulator snapshots to authored steps by identity.
+    wt = _wash_protocol()
+    authored = {id(s) for g in wt._groups for s in _walk(g.steps)}
+    leaves = [s for g in wt.to_protocol().groups for s in _walk(g.steps)
+              if not isinstance(s, (LoopStep, ScriptGroupStep))]
+    assert leaves and all(id(s) in authored for s in leaves)

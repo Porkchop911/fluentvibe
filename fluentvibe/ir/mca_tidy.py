@@ -183,12 +183,27 @@ def _hoist_all(seq: list) -> None:
                 container[i:i + 1] = before + [step] + after
 
 
+def _copy_lists(seq: list) -> list:
+    out = []
+    for step in seq:
+        if isinstance(step, (LoopStep, ScriptGroupStep)):
+            step = step.model_copy(update={"steps": _copy_lists(step.steps)})
+        elif isinstance(step, ConditionalStep):
+            step = step.model_copy(update={"then_steps": _copy_lists(step.then_steps),
+                                           "else_steps": _copy_lists(step.else_steps)})
+        out.append(step)
+    return out
+
+
 def tidy_mca_groups(groups: list[Group]) -> list[Group]:
     """The same groups with needless MCA adapter/tip round trips removed.
 
     The top-level groups are one run of steps (a round trip often spans two
     groups: one block ends a group, the next block starts one)."""
-    copies = [g.model_copy(deep=True) for g in groups]
+    # Copy only what the pass rearranges (the step lists and their containers);
+    # the steps themselves stay the authored objects, which the replay and
+    # other readers match simulator snapshots against by identity.
+    copies = [g.model_copy(update={"steps": _copy_lists(g.steps)}) for g in groups]
     run = [ScriptGroupStep(name=g.name, steps=g.steps) for g in copies]
     for s in run:
         _tidy_bodies(s)
