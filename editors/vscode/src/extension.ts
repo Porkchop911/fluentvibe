@@ -18,24 +18,10 @@ import {
   openInFluentControl,
   pullFluentControlEdits,
 } from "./workflow";
+import { ChatViewProvider } from "./chat";
+import { Proposal, previewAndApply, registerProposalProvider } from "./preview";
 
 let client: LanguageClient | undefined;
-
-interface InlineEditResult {
-  new_text: string;
-  start_line: number;
-  end_line: number;
-  introduces_errors?: boolean;
-  diagnostics?: { line: number; severity: string; message: string }[];
-  import_line?: number;
-  import_text?: string;
-  proposed_source?: string;
-}
-
-// The proposed file for the Ctrl+I preview (a read-only virtual document).
-const proposals = new Map<string, string>();
-const proposalScheme = "fluentvibe-proposal";
-const proposalChanged = new vscode.EventEmitter<vscode.Uri>();
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -51,9 +37,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("fluentvibe.explainSelection", explainSelection),
     // InfoPad findings describe the file as it was checked; an edit invalidates them.
     vscode.workspace.onDidChangeTextDocument((e) => clearFluentControlDiagnostics(e.document)),
-    vscode.workspace.registerTextDocumentContentProvider(proposalScheme, {
-      onDidChange: proposalChanged.event,
-      provideTextDocumentContent: (uri) => proposals.get(uri.toString()) ?? "",
+    registerProposalProvider(),
+    vscode.window.registerWebviewViewProvider(ChatViewProvider.viewId, new ChatViewProvider(() => client), {
+      webviewOptions: { retainContextWhenHidden: true },
     })
   );
   const config = vscode.workspace.getConfiguration("fluentvibe");
@@ -143,7 +129,7 @@ async function inlineEdit(): Promise<void> {
         }),
         new Promise<null>((resolve) => cancel.onCancellationRequested(() => resolve(null))),
       ])
-  )) as InlineEditResult | null;
+  )) as Proposal | null;
 
   if (!result || !result.new_text) {
     if (result) {
@@ -152,37 +138,7 @@ async function inlineEdit(): Promise<void> {
     return;
   }
 
-  // Preview: the whole file with the edit, side by side with the current one.
-  const proposalUri = vscode.Uri.parse(`${proposalScheme}:${doc.uri.path}.proposed.py?${Date.now()}`);
-  proposals.set(proposalUri.toString(), result.proposed_source ?? "");
-  proposalChanged.fire(proposalUri);
-  await vscode.commands.executeCommand("vscode.diff", doc.uri, proposalUri, `fluentvibe edit: ${instruction}`, {
-    preview: true,
-  });
-  const problems = (result.diagnostics ?? []).filter((d) => d.severity === "error");
-  const verdict = problems.length
-    ? `The edited file has ${problems.length} problem(s), e.g. line ${problems[0].line}: ${problems[0].message.slice(0, 160)}`
-    : "The edited file builds and simulates without problems.";
-  const choice = await vscode.window.showInformationMessage(`fluentvibe: ${verdict} Apply the edit?`, "Apply", "Discard");
-  proposals.delete(proposalUri.toString());
-  await closeTabsFor(proposalUri);
-  if (choice !== "Apply") {
-    return;
-  }
-  if (doc.version !== version) {
-    vscode.window.showWarningMessage("fluentvibe: the file changed while the edit was prepared; nothing applied.");
-    return;
-  }
-  const edit = new vscode.WorkspaceEdit();
-  edit.replace(
-    doc.uri,
-    new vscode.Range(new vscode.Position(result.start_line - 1, 0), doc.lineAt(result.end_line - 1).range.end),
-    result.new_text
-  );
-  if (result.import_text && result.import_line) {
-    edit.insert(doc.uri, new vscode.Position(result.import_line - 1, 0), result.import_text + "\n");
-  }
-  await vscode.workspace.applyEdit(edit);
+  await previewAndApply(doc, version, result, `edit: ${instruction}`);
 }
 
 // Explanations run at the explain effort (setting fluentvibe.model.explainEffort, default low).
@@ -227,17 +183,6 @@ async function explainSelection(): Promise<void> {
     start_line: sel.start.line + 1,
     end_line: endLine,
   });
-}
-
-async function closeTabsFor(uri: vscode.Uri): Promise<void> {
-  for (const group of vscode.window.tabGroups.all) {
-    for (const tab of group.tabs) {
-      const input = tab.input as { modified?: vscode.Uri } | undefined;
-      if (input?.modified?.toString() === uri.toString()) {
-        await vscode.window.tabGroups.close(tab);
-      }
-    }
-  }
 }
 
 export function deactivate(): Thenable<void> | undefined {

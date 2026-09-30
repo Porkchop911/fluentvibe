@@ -105,3 +105,28 @@ def test_explain_selection_gets_the_simulated_state():
     assert explain_region(PROTOCOL, line, line, path="assist.py", client=Client()) == "It adds buffer."
     state = seen["user"].split("Simulated deck state after these lines:")[1]
     assert "Work at Nest61mm_Pos 1: 96 well(s) with liquid, 20.0 µl each" in state
+
+
+def test_chat_context_is_grounded_and_short():
+    from fluentvibe.copilot.chat import chat_context
+
+    lines = PROTOCOL.splitlines()
+    line = next(i for i, l in enumerate(lines, 1) if "distribute_reagent(wt, source" in l)
+    ctx = chat_context(PROTOCOL, "assist.py", start_line=line, end_line=line, has_selection=True)
+    assert "wt.add(" in ctx["system"] and "Never use wt.add" in ctx["system"]
+    assert "- distribute_reagent(wt, source" in ctx["system"]          # used: full signature
+    assert "Also available:" in ctx["system"] and "spri_cleanup" in ctx["system"]   # unused: name only
+    assert "never goes back into a shared" in ctx["system"]
+    assert f"Selected lines {line}-{line}" in ctx["context"]
+    assert "Work at Nest61mm_Pos 1: 96 well(s) with liquid, 20.0 µl each" in ctx["context"]
+    assert len(ctx["system"]) < 4500
+
+
+def test_chat_proposal_is_checked_like_ctrl_i():
+    from fluentvibe.copilot.edit import propose_region
+
+    lines = PROTOCOL.splitlines()
+    target = next(i for i, l in enumerate(lines, 1) if l.strip().startswith("mix_wells("))
+    result = propose_region(PROTOCOL, target, target, "    mix_wells(wt, plate=work, tips=work_tips, volume_ul=15, cycles=3)",
+                            path="assist.py")
+    assert not result.introduces_errors and "cycles=3" in result.proposed_source
