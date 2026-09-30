@@ -70,7 +70,7 @@ def signature_at(source: str, line: int, character: int) -> Optional[ApiSignatur
     m = _OPEN_CALL_RE.search(prefix)
     if m is None:
         return None
-    cls = _class_for_receiver(m.group(1))
+    cls = _class_for_receiver(m.group(1), source)
     if cls is None:
         return None
     sig = _signature_for(cls, m.group(2))
@@ -89,7 +89,7 @@ def hover_at(source: str, line: int, character: int) -> Optional[ApiSignature]:
     line_text = lines[line]
     for m in _MEMBER_RE.finditer(line_text):
         if m.start(2) <= character <= m.end(2):
-            cls = _class_for_receiver(m.group(1))
+            cls = _class_for_receiver(m.group(1), source)
             if cls is not None:
                 return _signature_for(cls, m.group(2))
     return None

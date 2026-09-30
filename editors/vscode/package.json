@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -56,6 +56,10 @@
       {
         "command": "fluentvibe.showReplay",
         "title": "fluentvibe: Show protocol replay"
+      },
+      {
+        "command": "fluentvibe.explainSelection",
+        "title": "fluentvibe: Explain selection"
       }
     ],
     "keybindings": [
@@ -68,6 +72,11 @@
         "command": "fluentvibe.openInFluentControl",
         "key": "ctrl+alt+f",
         "when": "editorLangId == python"
+      },
+      {
+        "command": "fluentvibe.explainSelection",
+        "key": "ctrl+alt+e",
+        "when": "editorTextFocus && editorLangId == python"
       }
     ],
     "configuration": {
@@ -143,6 +152,17 @@
           "type": "boolean",
           "default": true,
           "description": "Extract the instructions in your request (separate model call) and check each one on the generated protocol."
+        },
+        "fluentvibe.model.explainEffort": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "default": "low",
+          "description": "Reasoning effort for Explain selection / Explain this problem (authoring and Ctrl+I use model.reasoningEffort)."
         }
       }
     },
@@ -157,6 +177,24 @@
           "command": "fluentvibe.showReplay",
           "when": "editorLangId == python",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "fluentvibe.explainSelection",
+          "when": "editorLangId == python",
+          "group": "fluentvibe@1"
+        },
+        {
+          "command": "fluentvibe.inlineEdit",
+          "when": "editorLangId == python",
+          "group": "fluentvibe@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "fluentvibe.explainProblem",
+          "when": "false"
         }
       ]
     }

@@ -51,6 +51,7 @@ export function cliEnv(): NodeJS.ProcessEnv {
   // 0 (the default): no limit. A limit as large as the model's context leaves no room for the prompt.
   const maxTokens = s.get<number>("model.maxTokens");
   set("FLUENTVIBE_LM_MAX_TOKENS", maxTokens && maxTokens > 0 ? maxTokens : undefined);
+  set("FLUENTVIBE_EXPLAIN_EFFORT", s.get<string>("model.explainEffort"));
   return env;
 }
 

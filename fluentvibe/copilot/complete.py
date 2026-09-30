@@ -36,6 +36,7 @@ class Completion:
     detail: str = ""
     documentation: str = ""
     insert_format: str = "plain"  # "plain" | "snippet"
+    sort_text: str = ""  # keeps our ranking in the editor ("" = alphabetical)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -46,6 +47,7 @@ class Completion:
             "detail": self.detail,
             "documentation": self.documentation,
             "insert_format": self.insert_format,
+            "sort_text": self.sort_text,
         }
 
 
@@ -62,9 +64,13 @@ def complete_at(source: str, line: int, character: int) -> list[Completion]:
 
     m = _DOT_RE.search(prefix)
     if m is not None:
-        return _method_completions(m.group(1), m.group(2), m.start(2))
+        return _method_completions(m.group(1), m.group(2), m.start(2), source)
 
-    return []
+    # Inside a call: what this protocol and deck allow for the argument
+    # (placed labware of the right kind, positions, liquid classes, roles, wells).
+    from .values import value_completions
+
+    return value_completions(source, line, character)
 
 
 # Constructor-name token -> the catalog category its `catalog=` argument expects.
@@ -124,14 +130,21 @@ def _catalog_completions(
     return out
 
 
-def _class_for_receiver(receiver: str) -> Optional[type]:
+def _class_for_receiver(receiver: str, source: str = "") -> Optional[type]:
+    if source:
+        # By assignment first: `fca = wt.liha`, `head = wt.liha` (not the MCA).
+        from .values import head_aliases
+
+        head = head_aliases(source).get(receiver.rsplit(".", 1)[-1])
+        if head is not None:
+            receiver = f"wt.{head}"
     r = receiver.lower()
     last = r.rsplit(".", 1)[-1]
-    if "gripper" in r:
+    if "gripper" in r or last == "rga":
         from ..gripper import Gripper
 
         return Gripper
-    if "liha" in r:
+    if "liha" in r or last == "fca":
         from ..heads.liha import LiHa
 
         return LiHa
@@ -154,8 +167,8 @@ def _first_doc_line(doc: str) -> str:
     return ""
 
 
-def _method_completions(receiver: str, partial: str, replace_start: int) -> list[Completion]:
-    cls = _class_for_receiver(receiver)
+def _method_completions(receiver: str, partial: str, replace_start: int, source: str = "") -> list[Completion]:
+    cls = _class_for_receiver(receiver, source)
     if cls is None:
         return []
     # Lazy import to avoid a cycle (api_info imports _class_for_receiver from here).

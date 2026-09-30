@@ -111,7 +111,7 @@ def test_code_actions_builds_insert_edit() -> None:
     uri = "file:///x.py"
     diag = to_lsp_diagnostic(_diag_dict(code="adapter_state", fixes=[_MOUNT_FIX]))
     actions = code_actions_for(uri, [diag])
-    assert len(actions) == 1
+    assert len(actions) == 2 and actions[1].command.command == "fluentvibe.explainProblem"
     action = actions[0]
     assert action.kind == lsp.CodeActionKind.QuickFix
     assert action.title == _MOUNT_FIX["title"]
@@ -125,7 +125,8 @@ def test_code_actions_builds_insert_edit() -> None:
 
 def test_code_actions_empty_when_no_fixes() -> None:
     diag = to_lsp_diagnostic(_diag_dict(code="source_volume_short", fixes=[]))
-    assert code_actions_for("file:///x.py", [diag]) == []
+    # No quick fix; only "Explain this problem".
+    assert [a.command.command for a in code_actions_for("file:///x.py", [diag])] == ["fluentvibe.explainProblem"]
 
 
 def test_to_completion_items_builds_precise_edit() -> None:
