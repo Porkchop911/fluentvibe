@@ -112,3 +112,11 @@ def test_tidied_protocol_keeps_the_authored_step_objects():
     leaves = [s for g in wt.to_protocol().groups for s in _walk(g.steps)
               if not isinstance(s, (LoopStep, ScriptGroupStep))]
     assert leaves and all(id(s) in authored for s in leaves)
+
+
+def test_mca_emptying_into_a_trough_counts_every_channel():
+    # Before: only channel 1's liquid reached the one well of the waste trough (96x too little).
+    wt = _wash_protocol()
+    wt.simulate(strict=True)
+    waste = wt.snapshots[-1].labware("Waste").wells["A1"]
+    assert round(waste.volume_ul) == 96 * (38 + 3 * 100)

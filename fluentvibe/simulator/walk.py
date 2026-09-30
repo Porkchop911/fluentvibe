@@ -701,6 +701,11 @@ class Simulator:
             )
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
         wells = self._iter_aspirate_wells(target)
+        if len(wells) == 1 and target.category == "trough":
+            # Every channel dispenses into the one well of a trough (as aspirate draws from it).
+            for tip in self._mca_tips:
+                self._dispense_one(target, wells[0], volume, tip)
+            return
         wells = self._select_mca_columns(wells, getattr(step, "columns", None))
         for tip, well in zip(self._mca_tips, wells):
             self._dispense_one(target, well, volume, tip)
@@ -736,8 +741,10 @@ class Simulator:
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
         target = self._twin.get(step.labware_name)
         wells = self._iter_aspirate_wells(target) if target is not None else []
+        trough = len(wells) == 1 and getattr(target, "category", None) == "trough"
         for i, tip in enumerate(self._mca_tips):
-            well = wells[i] if i < len(wells) else None
+            # A trough (waste) takes every channel's liquid, not only channel 1's.
+            well = wells[0] if trough else (wells[i] if i < len(wells) else None)
             self._empty_tip_one(tip, volume, well)
 
     def _on_liha_get_tips(self, step: LihaGetTipsStep) -> None:

@@ -30,4 +30,4 @@ def test_blocks_in_a_loop_nest_their_groups_and_repeat():
     wt.simulate()
     well = wt.snapshots[-1].labware("P").well("A1")
     assert abs(sum(layer.volume_ul for layer in well.layers) - 20) < 1e-6
-    assert abs(sum(l.volume_ul for l in wt.snapshots[-1].labware("Waste").well("A1").layers) - 3 * 100) < 1e-6  # ran 3 times
+    assert abs(sum(l.volume_ul for l in wt.snapshots[-1].labware("Waste").well("A1").layers) - 96 * 3 * 100) < 1e-6  # ran 3 times

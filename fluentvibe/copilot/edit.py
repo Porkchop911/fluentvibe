@@ -18,16 +18,18 @@ from typing import Any, Optional
 from .analyzer import analyze_source
 
 _SYSTEM_PROMPT = (
-    "You edit Tecan FluentControl liquid-handling protocols written in the "
-    "fluentvibe Python API. You are given the whole file for context, a selected "
-    "region, and an instruction. Rewrite ONLY the selected region to satisfy the "
-    "instruction. Preserve the surrounding indentation. Use only fluentvibe API "
-    "that already appears in the file or is clearly analogous. To add a reagent to "
-    "every well you may use wt.add(reagent, to=plate, volume_ul=..., head='fca'|'mca', "
-    "liquid_class_var='LC_NAME', columns=[...]): it places and fills the source trough "
-    "and the tips itself, and honours head / liquid_class_var as requirements. Return "
-    "ONLY the replacement Python for the selected region — no explanations, no "
-    "markdown code fences."
+    "You edit Tecan FluentControl liquid-handling protocols written in the fluentvibe Python API. You are given "
+    "the whole file for context, a selected region, and an instruction. Rewrite ONLY the selected region to "
+    "satisfy the instruction; change nothing the instruction does not ask for, and add no steps, reagents or "
+    "chemistry of your own. Preserve the surrounding indentation.\n"
+    "Heads: FCA = wt.liha (8 channels, FCA tip boxes), MCA = wt.mca96 (96 channels, MCA tip boxes), RGA = "
+    "wt.gripper. Prefer the blocks from fluentvibe.blocks over hand-written head calls: distribute_reagent "
+    "(FCA, reagent into every well), add_reagent (MCA, bulk liquid from an SBS reservoir), stamp (MCA, plate to "
+    "plate), transfer_volumes / distribute_volumes (FCA, a volume per well), pool_wells / pool_columns, "
+    "mix_wells, remove_liquid, separate / release (magnet on / off), offdeck_step (operator step), "
+    "spri_cleanup. Use the labware variables, variables and liquid classes the file already has. A block the "
+    "file does not import yet may be used; its import is added for you.\n"
+    "Return ONLY the replacement Python for the selected region: no explanations, no markdown code fences."
 )
 
 _FENCE_RE = re.compile(r"^```[\w-]*\n(.*)\n```$", re.DOTALL)
@@ -39,6 +41,9 @@ class EditResult:
     start_line: int  # 1-based, inclusive
     end_line: int  # 1-based, inclusive
     diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)   # blocks the edit uses that the file does not import
+    import_line: int = 0                               # 1-based line to insert the import before
+    proposed_source: str = ""                          # the whole file with the edit (for a preview)
 
     @property
     def introduces_errors(self) -> bool:
@@ -51,6 +56,10 @@ class EditResult:
             "end_line": self.end_line,
             "diagnostics": self.diagnostics,
             "introduces_errors": self.introduces_errors,
+            "imports": self.imports,
+            "import_line": self.import_line,
+            "import_text": _import_text(self.imports),
+            "proposed_source": self.proposed_source,
         }
 
 
@@ -111,14 +120,61 @@ def edit_region(
     )
     new_text = _strip_fences(message.get("content") or "")
 
+    imports = _missing_block_imports(source, new_text) if new_text else []
+    import_line = _import_insert_line(lines) if imports else 0
+    proposed = ""
     diagnostics: list[dict[str, Any]] = []
-    if revalidate and new_text:
-        edited = _replace_lines(lines, start_line, end_line, new_text)
-        diagnostics = [d.to_dict() for d in analyze_source(edited, path)]
+    if new_text:
+        edited_lines = _replace_lines(lines, start_line, end_line, new_text).splitlines()
+        if imports:
+            edited_lines.insert(import_line - 1, _import_text(imports))
+        proposed = "\n".join(edited_lines) + ("\n" if source.endswith("\n") else "")
+        if revalidate:
+            diagnostics = [d.to_dict() for d in analyze_source(proposed, path)]
 
     return EditResult(
         new_text=new_text,
         start_line=start_line,
         end_line=end_line,
         diagnostics=diagnostics,
+        imports=imports,
+        import_line=import_line,
+        proposed_source=proposed,
     )
+
+
+def _import_text(names: list[str]) -> str:
+    return f"from fluentvibe.blocks import {', '.join(names)}" if names else ""
+
+
+def _missing_block_imports(source: str, new_text: str) -> list[str]:
+    """Blocks called in ``new_text`` that ``source`` neither imports nor defines."""
+    try:
+        from .. import blocks
+
+        names = set(getattr(blocks, "__all__", ()))
+    except Exception:  # noqa: BLE001
+        return []
+    used = {n for n in re.findall(r"(?<![\w.])([a-z_]\w*)\s*\(", new_text) if n in names}
+    have = set(re.findall(r"\b(\w+)\b", " ".join(re.findall(
+        r"from\s+fluentvibe\.blocks\s+import\s+(\([^)]*\)|[^\n]+)", source))))
+    return sorted(n for n in used if n not in have and not re.search(rf"^\s*def\s+{n}\b", source, re.M))
+
+
+def _import_insert_line(lines: list[str]) -> int:
+    """1-based line after the last top-level import (the new import goes there)."""
+    last = 0
+    depth = 0
+    for i, line in enumerate(lines, 1):
+        if depth:
+            depth += line.count("(") - line.count(")")
+            if depth <= 0:
+                depth, last = 0, i
+            continue
+        if re.match(r"(from\s+\S+\s+import|import)\s", line):
+            depth = line.count("(") - line.count(")")
+            if depth <= 0:
+                depth, last = 0, i
+        elif line.strip() and not line.startswith("#") and last:
+            break
+    return last + 1

@@ -152,6 +152,33 @@ def create_server() -> LanguageServer:
         )
         return result.to_dict()
 
+    def _params(args) -> dict:
+        params = args[0] if args else {}
+        return (params[0] if params else {}) if isinstance(params, list) else params
+
+    @server.command("fluentvibe.explainDiagnostic")
+    def _explain_diagnostic(ls: LanguageServer, *args: Any) -> dict:
+        from ..copilot.explain import explain_diagnostic
+
+        params = _params(args)
+        doc = ls.workspace.get_text_document(params["uri"])
+        wanted = params.get("diagnostic") or {}
+        # The full diagnostic (with the analyzer's repair hint) for that line and message.
+        full = next((d.to_dict() for d in analyze_source(doc.source, doc.path)
+                     if d.line == wanted.get("line")
+                     and str(wanted.get("message") or "").startswith(d.message)), wanted)
+        return {"text": explain_diagnostic(full, doc.source)}
+
+    @server.command("fluentvibe.explainSelection")
+    def _explain_selection(ls: LanguageServer, *args: Any) -> dict:
+        from ..copilot.explain import explain_region
+
+        params = _params(args)
+        doc = ls.workspace.get_text_document(params["uri"])
+        diagnostics = [d.to_dict() for d in analyze_source(doc.source, doc.path)]
+        return {"text": explain_region(doc.source, int(params["start_line"]), int(params["end_line"]),
+                                       path=doc.path, diagnostics=diagnostics)}
+
     return server
 
 

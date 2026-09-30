@@ -73,6 +73,7 @@ def _text_edit_for_fix(fix: dict[str, Any]) -> lsp.TextEdit | None:
 _COMPLETION_KIND = {
     "catalog": lsp.CompletionItemKind.Value,
     "method": lsp.CompletionItemKind.Method,
+    "value": lsp.CompletionItemKind.Variable,
 }
 
 
@@ -100,6 +101,7 @@ def to_completion_items(
                     lsp.InsertTextFormat.Snippet if is_snippet else lsp.InsertTextFormat.PlainText
                 ),
                 text_edit=lsp.TextEdit(range=rng, new_text=c.get("insert_text") or c["label"]),
+                sort_text=c.get("sort_text") or None,
             )
         )
     return items
@@ -150,6 +152,21 @@ def code_actions_for(uri: str, diagnostics: list[lsp.Diagnostic]) -> list[lsp.Co
                     kind=lsp.CodeActionKind.QuickFix,
                     diagnostics=[diag],
                     edit=lsp.WorkspaceEdit(changes={uri: [edit]}),
+                )
+            )
+        if getattr(diag, "source", None) == "fluentvibe":
+            actions.append(
+                lsp.CodeAction(
+                    title="Explain this problem (fluentvibe)",
+                    kind=lsp.CodeActionKind.QuickFix,
+                    diagnostics=[diag],
+                    command=lsp.Command(
+                        title="Explain this problem",
+                        command="fluentvibe.explainProblem",
+                        arguments=[{"uri": uri, "diagnostic": {
+                            "line": diag.range.start.line + 1, "message": diag.message,
+                            "code": diag.code, "severity": "error"}}],
+                    ),
                 )
             )
     return actions
