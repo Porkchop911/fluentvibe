@@ -236,3 +236,18 @@ def test_inline_edit_receives_the_argument_dict_through_pygls(monkeypatch):
     monkeypatch.setattr(edit_mod, "edit_region", fake_edit)
     result = handler(*args, **kwargs)
     assert seen == {"start": 2, "end": 3, "instruction": "use 200 ul tips"} and result["new_text"] == "x\n"
+
+
+def test_server_commands_do_not_clash_with_extension_commands() -> None:
+    # The language client registers every server command itself; a name the extension also
+    # registers makes "command already exists" and the whole server fails to start.
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    server = set(re.findall(r'@server\.command\("([^"]+)"\)', (root / "fluentvibe/lsp/server.py").read_text(encoding="utf-8")))
+    package = json.loads((root / "editors/vscode/package.json").read_text(encoding="utf-8"))
+    extension = {c["command"] for c in package["contributes"]["commands"]}
+    extension |= set(re.findall(r'registerCommand\("([^"]+)"', (root / "editors/vscode/src/extension.ts").read_text(encoding="utf-8")))
+    assert server and not server & extension, server & extension

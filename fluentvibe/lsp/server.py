@@ -156,7 +156,7 @@ def create_server() -> LanguageServer:
         params = args[0] if args else {}
         return (params[0] if params else {}) if isinstance(params, list) else params
 
-    @server.command("fluentvibe.explainDiagnostic")
+    @server.command("fluentvibe.lsp.explainDiagnostic")
     def _explain_diagnostic(ls: LanguageServer, *args: Any) -> dict:
         from ..copilot.explain import explain_diagnostic
 
@@ -169,7 +169,7 @@ def create_server() -> LanguageServer:
                      and str(wanted.get("message") or "").startswith(d.message)), wanted)
         return {"text": explain_diagnostic(full, doc.source)}
 
-    @server.command("fluentvibe.explainSelection")
+    @server.command("fluentvibe.lsp.explainSelection")
     def _explain_selection(ls: LanguageServer, *args: Any) -> dict:
         from ..copilot.explain import explain_region
 
