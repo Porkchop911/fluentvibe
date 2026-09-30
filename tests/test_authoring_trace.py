@@ -194,6 +194,37 @@ def test_lmstudio_reasoning_effort_is_opt_in(monkeypatch) -> None:
     assert seen["reasoning_effort"] == "medium"
 
 
+def test_an_output_limit_that_fills_the_context_is_dropped(monkeypatch) -> None:
+    # VS Code's model.maxTokens default (65536) on a 64k server: vLLM answers 400.
+    import io
+    import urllib.error
+
+    sent: list[dict] = []
+
+    class Response:
+        headers = {"Content-Type": "application/json"}
+        def read(self):
+            return b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+
+    def fake(req, timeout=None):
+        body = json.loads(req.data.decode("utf-8"))
+        sent.append(body)
+        if "max_tokens" in body:
+            raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, io.BytesIO(
+                b'{"error":{"message":"This model\'s maximum context length is 65536 tokens. However, you '
+                b'requested 65536 output tokens and your prompt contains 9209 characters"}}'))
+        return Response()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    client = LMStudioChatClient(max_tokens=65536)
+    assert client.complete(messages=[{"role": "user", "content": "hi"}], tools=[])["content"] == "ok"
+    assert [("max_tokens" in b) for b in sent] == [True, False] and client.max_tokens is None
+    client.complete(messages=[{"role": "user", "content": "again"}], tools=[])
+    assert len(sent) == 3   # no second failed request
+
+
 def test_lmstudio_sampling_controls_are_explicit_and_opt_in(monkeypatch) -> None:
     seen: dict = {}
     body = b'{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}'
