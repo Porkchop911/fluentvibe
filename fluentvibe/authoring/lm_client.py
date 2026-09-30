@@ -277,9 +277,13 @@ class LMStudioChatClient:
         min_p: float | None = None,
         presence_penalty: float | None = None,
         repetition_penalty: float | None = None,
+        capture_token_ids: bool = False,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
+        # Explicit vLLM diagnostic opt-in; omit this provider extension for
+        # other OpenAI-compatible endpoints. It does not alter sampling.
+        self.capture_token_ids = capture_token_ids
         self.api_key = api_key if api_key is not None else os.environ.get("FLUENTVIBE_LM_API_KEY")
         self.reasoning_effort = (
             reasoning_effort
@@ -503,6 +507,12 @@ class LMStudioChatClient:
         if room <= 0:
             raise LMOutputLimitError("the context is full; the reply cannot be continued")
         payload["max_tokens"] = min(self.max_tokens, room) if self.max_tokens is not None else room
+        if self.capture_token_ids:
+            payload["return_token_ids"] = True
+            payload["stream_options"] = {"include_usage": True}
+        if self.trace_recorder is not None:
+            self.trace_recorder.record("request_payload", model=self.model,
+                                       endpoint=root + "/v1/completions", payload=payload)
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -532,7 +542,7 @@ class LMStudioChatClient:
         if self.trace_recorder is not None:
             self.trace_recorder.record("response_final", model=self.model, endpoint=root + "/v1/completions",
                                        finish_reason=message["finish_reason"], assistant_content=message["content"],
-                                       tool_calls=calls, reasoning_fields=message["reasoning_fields"])
+                                       tool_calls=calls, reasoning_fields=message["reasoning_fields"], stop_reason=stop)
         return message
 
     def _read_text_stream(self, response, *, deadline: float, budget: int | None) -> tuple[str, Any, Any]:
@@ -555,6 +565,8 @@ class LMStudioChatClient:
             data_text = line[5:].strip()
             if data_text == "[DONE]":
                 break
+            if self.trace_recorder is not None and self.trace_recorder.raw_stream_enabled:
+                self.trace_recorder.record("raw_stream_line", raw_line=data_text)
             chunk = json.loads(data_text)
             choice = (chunk.get("choices") or [{}])[0]
             finish = choice.get("finish_reason") or finish
@@ -613,6 +625,9 @@ class LMStudioChatClient:
             payload["reasoning_effort"] = effort or self.reasoning_effort
         if self.max_tokens is not None:
             payload["max_tokens"] = self.max_tokens
+        if self.capture_token_ids:
+            payload["return_token_ids"] = True
+            payload["stream_options"] = {"include_usage": True}
         if self.trace_recorder is not None:
             self.trace_recorder.record(
                 "request_payload",
@@ -706,6 +721,7 @@ class LMStudioChatClient:
                 model=self.model,
                 endpoint=self.endpoint,
                 finish_reason=message.get("finish_reason"),
+                stop_reason=message.get("stop_reason"),
                 assistant_content=message.get("content"),
                 tool_calls=message.get("tool_calls") or [],
                 reasoning_fields=_reasoning_fields(message),
@@ -851,6 +867,7 @@ class LMStudioChatClient:
                 model=self.model,
                 endpoint=self.endpoint,
                 finish_reason=finish_reason,
+                stop_reason=stop_reason,
                 assistant_content=message.get("content"),
                 tool_calls=message.get("tool_calls") or [],
                 reasoning_fields=message.get("reasoning_fields") or {},
@@ -863,6 +880,7 @@ class LMStudioChatClient:
             raise LMStudioError("LM Studio response did not include choices.")
         message = dict(choices[0].get("message") or {})
         message["finish_reason"] = choices[0].get("finish_reason")
+        message["stop_reason"] = choices[0].get("stop_reason")
         _recover_textual_tool_calls(message)
         return message
 
