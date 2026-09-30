@@ -505,7 +505,12 @@ def test_cleanup_adds_beads_and_elution_buffer_with_the_fca_from_slim_troughs(tm
     deck.wt.simulate(strict=True)
     statuses = {inv.key: inv.status for inv in score_semantic(deck.wt)}
     assert statuses["eluate_recovered"] == "pass" and statuses["no_cross_contamination"] == "pass"
-    steps = [s for g in deck.wt.to_protocol().groups for s in g.steps]
+    def walk(seq):
+        for s in seq:
+            yield s
+            yield from walk(getattr(s, "steps", None) or [])
+
+    steps = [s for g in deck.wt.to_protocol().groups for s in walk(g.steps)]   # FCA columns run in a loop
     mca_sources = {s.labware_name for s in steps if type(s).__name__ == "AspirateStep"}
     liha_sources = {s.labware_name for s in steps if type(s).__name__ == "LihaAspirateStep"}
     assert liha_sources == {"SlimBeads", "SlimEB"} and "Ethanol" in mca_sources
