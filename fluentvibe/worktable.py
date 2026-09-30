@@ -887,13 +887,20 @@ class Worktable:
 
     def to_protocol(self) -> Protocol:
         """Build a Protocol IR from the collected steps."""
+        from .ir.mca_tidy import tidy_mca_groups
+
         self._finalize_resolution()
+        groups = [Group(name=g.name, steps=list(g.steps)) for g in self._groups]
+        if getattr(self, "keep_mca_round_trips", False) is not True:
+            # The MCA keeps its adapter and tips between consecutive MCA stages
+            # (see fluentvibe/ir/mca_tidy.py); simulator and compiler both read this.
+            groups = tidy_mca_groups(groups)
         protocol = Protocol(
             name=self.name,
             comment=self.comment,
             variables=list(self.protocol_variables.keys()),
             variable_defaults=dict(self.protocol_variables),
-            groups=[Group(name=g.name, steps=list(g.steps)) for g in self._groups],
+            groups=groups,
             worktable_guid=self.workspace_guid,
             worktable_name=self.workspace_name,
             file_references=list(self.file_references),

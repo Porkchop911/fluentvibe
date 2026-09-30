@@ -45,6 +45,9 @@ mix_wells(wt, plate=work, tips=work_tips, volume_ul=16, cycles=5, name="Wash 1: 
 (`remove_liquid`, `mix_wells`): channel *i* only ever meets well *i*. `release`
 moves the plate back to its home position (where it was placed).
 
+Chain MCA blocks freely: between consecutive MCA stages the adapter and tips stay on the head in the compiled
+script (the same box's tips are not returned and picked up again). Do not hand-write MCA steps to save moves.
+
 **Reagents go through the FCA, bulk liquids through the MCA96.** Beads,
 buffers, master mixes and kit reagents come from slim troughs (`25ml_short` /
 `100ml`) or tubes via the FCA (`distribute_reagent`, `spri_cleanup(...,
