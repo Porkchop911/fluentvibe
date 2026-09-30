@@ -23,9 +23,11 @@ then the released strand: only when the document says so).
 
 ## Steps and what must be kept
 
-1. **Bead preparation** (skip what the user says is done, e.g. "beads come pre-washed"): resuspend the stock
-   (settles within minutes), wash once in buffer on the magnet, resuspend in 2X binding buffer (e.g. 2X B&W,
-   2 M NaCl) at twice the original bead volume.
+1. **Bead preparation**: resuspend the stock (settles within minutes), wash once in buffer on the magnet, then
+   **replace** the liquid with 2X binding buffer (e.g. 2X B&W, 2 M NaCl) at twice the original bead volume: on
+   the magnet, remove the bead liquid, add the 2X buffer, resuspend off the magnet. "Beads come pre-washed" skips
+   the wash, not the exchange: adding 2X buffer on top of the bead liquid dilutes it, and the binding step then
+   runs at about half the salt.
 2. **Bind**: add an **equal volume** of the biotinylated material (in water or low-salt buffer) to the beads in 2X
    buffer, which brings the salt to 1X (1 M NaCl) for binding. The equal volume is the point: keep it.
 3. **Incubate** 15 min at room temperature (nucleic acids ≤ 1 kb; ≤ 10 min for short oligos) **with the beads kept in
