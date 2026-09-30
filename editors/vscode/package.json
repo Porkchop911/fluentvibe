@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
@@ -136,8 +136,8 @@
         },
         "fluentvibe.model.maxTokens": {
           "type": "number",
-          "default": 65536,
-          "description": "Output token limit per request."
+          "default": 0,
+          "description": "Output token limit per request; 0: no limit (the server uses the room the prompt leaves)."
         },
         "fluentvibe.checkInstructions": {
           "type": "boolean",

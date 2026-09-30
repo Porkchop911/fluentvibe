@@ -672,6 +672,14 @@ class LMStudioChatClient:
                 raw_body = exc.read(8192).decode("utf-8", errors="replace")
             except Exception:
                 raw_body = ""
+            if exc.code == 400 and "max_tokens" in payload and "maximum context length" in raw_body.lower():
+                # The output limit alone fills the context (VS Code's maxTokens default
+                # 65536 on a 64k server): drop it, so the server uses the room that is
+                # left, and keep it dropped for this client.
+                print(f"[lm] output limit {self.max_tokens} does not fit the model's context; "
+                      "sending without it", flush=True)
+                self.max_tokens = None
+                return self._complete_once(messages=messages, tools=tools, effort=effort, budget=budget)
             detail = _safe_http_error_detail(raw_body)
             error = f"HTTP {exc.code} {exc.reason}"
             if detail:

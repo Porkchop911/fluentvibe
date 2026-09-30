@@ -48,7 +48,9 @@ export function cliEnv(): NodeJS.ProcessEnv {
   set("FLUENTVIBE_LM_API_KEY", s.get<string>("model.apiKey"));
   set("FLUENTVIBE_LM_REASONING_EFFORT", s.get<string>("model.reasoningEffort"));
   set("FLUENTVIBE_LM_TEMPERATURE", s.get<number>("model.temperature"));
-  set("FLUENTVIBE_LM_MAX_TOKENS", s.get<number>("model.maxTokens"));
+  // 0 (the default): no limit. A limit as large as the model's context leaves no room for the prompt.
+  const maxTokens = s.get<number>("model.maxTokens");
+  set("FLUENTVIBE_LM_MAX_TOKENS", maxTokens && maxTokens > 0 ? maxTokens : undefined);
   return env;
 }
 
