@@ -211,7 +211,7 @@ async function explainWith(title: string, command: string, args: object): Promis
 }
 
 async function explainProblem(args: { uri: string; diagnostic: object }): Promise<void> {
-  await explainWith("explaining the problem", "fluentvibe.explainDiagnostic", args);
+  await explainWith("explaining the problem", "fluentvibe.lsp.explainDiagnostic", args);
 }
 
 async function explainSelection(): Promise<void> {
@@ -222,7 +222,7 @@ async function explainSelection(): Promise<void> {
   const sel = editor.selection;
   const endLine = sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line : sel.end.line + 1;
   await editor.document.save();
-  await explainWith("explaining the selection", "fluentvibe.explainSelection", {
+  await explainWith("explaining the selection", "fluentvibe.lsp.explainSelection", {
     uri: editor.document.uri.toString(),
     start_line: sel.start.line + 1,
     end_line: endLine,
