@@ -70,6 +70,26 @@ class WorkspaceAppHandler(BaseHTTPRequestHandler):
                 self._json(service.catalog_info())
             elif parsed.path == "/api/capabilities":
                 self._json(service.capabilities())
+            elif parsed.path == "/api/protocols":
+                qs = parse_qs(parsed.query)
+                self._json(service.list_protocols(query=_first(qs, "query") or ""))
+            elif parsed.path == "/api/protocol":
+                qs = parse_qs(parsed.query)
+                self._json(service.protocol_detail(_first(qs, "id") or ""))
+            elif parsed.path == "/api/protocol-chat-config":
+                qs = parse_qs(parsed.query)
+                self._json(service.protocol_chat_config(_first(qs, "model_server") or "configured"))
+            elif parsed.path == "/api/objects":
+                qs = parse_qs(parsed.query)
+                self._json(service.search_objects(
+                    query=_first(qs, "query") or "",
+                    kind=_first(qs, "kind") or "all",
+                ))
+            elif parsed.path == "/api/object":
+                qs = parse_qs(parsed.query)
+                self._json(service.object_detail(
+                    _first(qs, "guid") or "", _first(qs, "kind") or "",
+                ))
             elif parsed.path == "/api/profiles":
                 self._json(service.list_profiles())
             elif parsed.path == "/api/profile":

@@ -2,11 +2,10 @@
 
 `fluentvibe/workspace_app/`
 
-The workspace app is a local, single-page web UI that bundles the operational
-fluentvibe workflows behind one browser tab: pick a FluentControl workspace and
-instrument configuration, lay out common labware, **save a reusable profile**,
-and then drive the LM authoring loop, the simulator/compiler, the decompiler,
-catalog search, and FluentControl deployment — all against that profile.
+The workspace app is a local, single-page web UI for workspace setup, browsing
+existing FluentControl protocols, discussing a selected protocol with a local
+model, and exploring catalog objects. It also exposes authoring, simulation,
+compilation, decompilation, and FluentControl actions.
 
 It is a thin front-end. Every tab calls the same Python entry points the
 [CLI](cli.md) uses (`fluentvibe.authoring`, the simulator, the compiler, the
@@ -51,11 +50,12 @@ file and exposes the JSON API; the logic lives in `service.py`.
 
 | Tab | Purpose |
 |---|---|
-| **Setup** | Choose a workspace + instrument configuration, see the deck map, assign common labware to valid slots, pick a liquid class, and **save a profile**. |
-| **Author** | A chat UI over the LM authoring loop (`PromptAuthoringSession`), scoped to the selected profile. |
+| **Workspace setup** | Choose a workspace + instrument configuration, see the deck map, assign common labware to valid slots, pick a liquid class, and **save a profile**. The initial worktable is previewed on load. |
+| **Protocol library** | Browse `.xscr` scripts in the local FluentControl `UserSpecific` directory, inspect a step outline, decompile the selected script to Python, and discuss it through an explicitly configured loopback model endpoint. |
+| **Author new** | A chat UI over the LM authoring loop (`PromptAuthoringSession`), scoped to the selected profile. |
 | **Code Lab** | Paste/edit fluentvibe Python and run **simulate** or **compile** against it. |
-| **Decompile** | Turn a `.xscr` on disk back into a fluentvibe Python module. |
-| **Catalog** | Search the catalog index for labware/components by name and category. |
+| **Decompile file** | Turn a `.xscr` on disk back into a fluentvibe Python module. |
+| **Object explorer** | Search indexed labware, carriers, workspaces, and liquid classes. Object details show recorded properties and a clearly labeled purpose hint inferred from classification. |
 | **FluentControl** | Validate / deploy a compiled `.xscr` against a running FluentControl (shell-patch path). |
 
 ### Setup → a saved profile
@@ -97,7 +97,12 @@ spri_cleanup`.
 The Author tab is a single-window chat over `PromptAuthoringSession`:
 
 - Pick a **profile**, **lab scope** (`skills` default / `enforce` / `cheatsheet`
-  / `off`), **retry budget**, and **model**, then **Start session**.
+  / `off`), **retry budget**, and **model server**, then **Start session**. The
+  default uses the existing LM Studio endpoint; **Strata · local test instance**
+  uses `http://127.0.0.1:8080/v1/chat/completions` and its advertised
+  `qwen3.8-flash-next-q2_0` model ID. The Model ID field can override the
+  selected server's default. Starting a session shows the effective endpoint
+  and model. Changing servers requires a new session.
 - Selecting a profile binds the session to that workspace (name + GUID) and its
   deck skill, so authoring is grounded in the deck you set up.
 - Type a request and press **Enter** to send (Shift+Enter for a newline). The
@@ -108,8 +113,27 @@ The Author tab is a single-window chat over `PromptAuthoringSession`:
   collapsible **Generated code & raw result** pane; on success the compiled
   `.xscr` path is handed to the FluentControl tab.
 
-This is the same loop as `fluentvibe chat`, so it needs the LM endpoint and the
-same `--lab-scope` semantics described in [cli.md](cli.md).
+This is the same loop as `fluentvibe chat`, with the same `--lab-scope` semantics
+described in [cli.md](cli.md). The selected server must be running before a
+message is sent.
+
+### Protocol library → inspect and discuss
+
+The library reads `C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific\*.xscr`
+without changing those files. Its selection API accepts only a script basename
+from that directory. The step outline comes from the existing decompiler; any
+generic/unsupported command types are marked. **Decompile to Python** writes a
+draft under `build/workbench/decompiled/` and makes it available in Code lab.
+The draft requires review before compilation or use.
+
+Protocol discussion sends the selected protocol's decompiled Python context to
+the selected local model server. **Configured local model** requires
+`FLUENTVIBE_LM_ENDPOINT` to explicitly point to a loopback `http(s)://localhost`,
+`127.0.0.1`, or `[::1]` chat-completions URL; a nonlocal or missing endpoint
+leaves that choice disabled. **Strata · local test instance** targets the fixed
+loopback endpoint above. The UI shows the destination and model. Replies explain
+source, not physical or chemical validity. Large sources are excerpted and the
+UI flags this limit.
 
 ## Under the hood — the JSON API
 
@@ -120,7 +144,9 @@ instrument runs as a **background job**.
 **Synchronous reads (`GET`)** — `/api/workspaces`, `/api/configurations`,
 `/api/configuration?guid=`, `/api/workspace?name=|guid=`,
 `/api/labware?query=&category=&limit=`, `/api/liquid-classes`,
-`/api/catalog-info`, `/api/profiles`, `/api/profile?name=`,
+`/api/catalog-info`, `/api/protocols`, `/api/protocol?id=`,
+`/api/protocol-chat-config`, `/api/objects`, `/api/object?guid=&kind=`,
+`/api/profiles`, `/api/profile?name=`,
 `/api/suggest-roles`, and `/api/job?id=`.
 
 **Writes (`POST`)** — `/api/save-profile` (the Setup save), and
@@ -137,6 +163,7 @@ Job kinds (`service._job_handlers`):
 | `simulate-source` | simulate a Python draft | Code Lab |
 | `compile-source` | compile a Python draft to `.xscr` | Code Lab |
 | `decompile-xscr` | `.xscr` → fluentvibe Python | Decompile |
+| `protocol-chat` | Read-only question about the selected datastore script through a loopback model | Protocol library |
 | `catalog-refresh` | rebuild the catalog index | Catalog |
 | `fc-validate` | shell-patch validation against a running FC | FluentControl |
 | `deploy-xscr` | deploy a compiled `.xscr` | FluentControl |
