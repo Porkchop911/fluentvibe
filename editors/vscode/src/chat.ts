@@ -29,9 +29,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private lastEditor?: vscode.TextEditor;
 
   constructor(private readonly client: () => LanguageClient | undefined) {
-    this.lastEditor = vscode.window.activeTextEditor;
+    this.lastEditor = isProtocolEditor(vscode.window.activeTextEditor) ? vscode.window.activeTextEditor : undefined;
     vscode.window.onDidChangeActiveTextEditor((e) => {
-      if (e && e.document.languageId === "python") {
+      if (isProtocolEditor(e)) {
         this.lastEditor = e;
       }
     });
@@ -60,8 +60,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private editor(): vscode.TextEditor | undefined {
+    // Only real .py files: a diff/preview tab (virtual document) is never what the chat is about.
     const active = vscode.window.activeTextEditor;
-    return active && active.document.languageId === "python" ? active : this.lastEditor;
+    return isProtocolEditor(active) ? active : this.lastEditor;
   }
 
   private async send(question: string): Promise<void> {
@@ -209,10 +210,67 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
     }
     const where = result.placed.map((p) => (p.start === p.end ? `line ${p.start}` : `lines ${p.start}-${p.end}`)).join(", ");
-    if (await previewAndApply(t.doc, t.version, { ...result, whole_file: true }, `chat edit, ${where}`)) {
+    if (await applyInPlace(t.doc, t.version, result, where)) {
       this.post({ type: "applied", where });
+      // Later edits in this conversation refer to the file as it is now.
+      this.target = { ...t, version: t.doc.version };
     }
   }
+}
+
+function isProtocolEditor(e: vscode.TextEditor | undefined): e is vscode.TextEditor {
+  return !!e && e.document.uri.scheme === "file" && e.document.languageId === "python";
+}
+
+// Apply in the open document: only the changed span is replaced (one undo step),
+// the result is selected and checked; "Undo" reverts it.
+async function applyInPlace(doc: vscode.TextDocument, version: number, result: FilePatch, where: string): Promise<boolean> {
+  if (doc.version !== version) {
+    vscode.window.showWarningMessage("fluentvibe: the file changed since the answer was written; ask again.");
+    return false;
+  }
+  const oldLines = doc.getText().split(/\r?\n/);
+  const newLines = (result.proposed_source ?? "").replace(/\n$/, "").split("\n");
+  let top = 0;
+  while (top < oldLines.length && top < newLines.length && oldLines[top] === newLines[top]) {
+    top++;
+  }
+  let tail = 0;
+  while (tail < oldLines.length - top && tail < newLines.length - top &&
+         oldLines[oldLines.length - 1 - tail] === newLines[newLines.length - 1 - tail]) {
+    tail++;
+  }
+  if (top === oldLines.length && top === newLines.length) {
+    vscode.window.showInformationMessage("fluentvibe: nothing to change; the file already has this code.");
+    return false;
+  }
+  const oldEnd = oldLines.length - tail; // exclusive
+  const replacement = newLines.slice(top, newLines.length - tail);
+  const editor = await vscode.window.showTextDocument(doc, { preserveFocus: false, preview: false });
+  const range = top < oldEnd
+    ? new vscode.Range(top, 0, oldEnd - 1, oldLines[oldEnd - 1].length)
+    : new vscode.Range(top, 0, top, 0);
+  const text = replacement.join(doc.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n") + (top < oldEnd ? "" : doc.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n");
+  const ok = await editor.edit((b) => b.replace(range, text));
+  if (!ok) {
+    return false;
+  }
+  const lastLine = Math.max(top, top + replacement.length - 1);
+  editor.selection = new vscode.Selection(top, 0, lastLine, doc.lineAt(Math.min(lastLine, doc.lineCount - 1)).text.length);
+  editor.revealRange(editor.selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  const problems = (result.diagnostics ?? []).filter((d) => d.severity === "error");
+  const verdict = problems.length
+    ? `${problems.length} problem(s) now, e.g. line ${problems[0].line}: ${problems[0].message.slice(0, 140)}`
+    : "the file builds and simulates without problems";
+  const choice = await (problems.length ? vscode.window.showWarningMessage : vscode.window.showInformationMessage)(
+    `fluentvibe: applied to ${where}; ${verdict}.`,
+    "Undo"
+  );
+  if (choice === "Undo") {
+    await vscode.window.showTextDocument(doc);
+    await vscode.commands.executeCommand("undo");
+  }
+  return true;
 }
 
 interface FilePatch extends Proposal {
@@ -278,13 +336,15 @@ function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
 function inline(s) { return esc(s).replace(/\\x60([^\\x60]+)\\x60/g, "<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g, "<b>$1</b>"); }
 function render(text, final) {
   const parts = text.split(/\\x60\\x60\\x60/);
+  const blocks = [];
   let html = "";
   parts.forEach((part, i) => {
     if (i % 2 === 1) {
       const nl = part.indexOf("\\n"); const lang = nl >= 0 ? part.slice(0, nl).trim() : ""; const code = nl >= 0 ? part.slice(nl + 1) : part;
       html += "<pre><code>" + esc(code) + "</code></pre>";
       if (final && (lang === "python" || lang === "py" || lang === "") && i < parts.length - 1) {
-        html += '<button class="apply" data-code="' + encodeURIComponent(code) + '">Apply to selection…</button>';
+        html += '<button class="apply" data-code="' + encodeURIComponent(code) + '">Apply</button>';
+        blocks.push(code);
       }
     } else {
       const lines = part.split("\\n"); let inList = false;
@@ -297,6 +357,11 @@ function render(text, final) {
       if (inList) html += "</ul>";
     }
   });
+  if (blocks.length > 1) {
+    // Every block of the answer in one go (each carries its own "# lines" marker, or is
+    // placed by its statement; "..." keeps unmarked blocks apart).
+    html += '<button class="apply" data-code="' + encodeURIComponent(blocks.join("\\n...\\n")) + '">Apply all ' + blocks.length + ' changes</button>';
+  }
   return html;
 }
 function setBusy(b) { busy = b; send.disabled = b; stop.disabled = !b; }
