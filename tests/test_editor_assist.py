@@ -130,3 +130,17 @@ def test_chat_proposal_is_checked_like_ctrl_i():
     result = propose_region(PROTOCOL, target, target, "    mix_wells(wt, plate=work, tips=work_tips, volume_ul=15, cycles=3)",
                             path="assist.py")
     assert not result.introduces_errors and "cycles=3" in result.proposed_source
+
+
+def test_chat_code_is_placed_without_a_selection():
+    from fluentvibe.copilot.patch import apply_chat_code
+
+    code = ('    mix_wells(wt, plate=work, tips=work_tips, volume_ul=10)\n'
+            '    ...\n'
+            '    buffer.fill_all(Reagent("Buffer"), 15000)')
+    patch = apply_chat_code(PROTOCOL, code, path="assist.py")
+    assert [p["how"].split(" ")[0] for p in patch.placed] == ["matched", "matched"] and not patch.unplaced
+    assert "volume_ul=10)" in patch.proposed_source and "15000" in patch.proposed_source
+    marked = apply_chat_code(PROTOCOL, "# line 1\nfrom fluentvibe import Worktable", path="assist.py", revalidate=False)
+    assert marked.placed == [{"start": 1, "end": 1, "how": "lines 1-1 (marked)"}]
+    assert apply_chat_code(PROTOCOL, "    NOTHING_LIKE_IT = 1", path="assist.py").unplaced == ["NOTHING_LIKE_IT = 1"]

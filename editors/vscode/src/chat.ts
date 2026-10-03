@@ -179,24 +179,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     return answer;
   }
 
+  // Apply a code block: the server places it (line markers, matching statements, or the
+  // selection), checks the result, and the diff preview writes the whole proposed file.
   private async apply(code: string): Promise<void> {
     const client = this.client();
     const t = this.target;
     if (!client || !t) {
       return;
     }
-    if (!t.hasSelection) {
-      vscode.window.showWarningMessage("fluentvibe: select the lines the code should replace, then ask again.");
-      return;
-    }
     const result = (await client.sendRequest(ExecuteCommandRequest.type, {
       command: "fluentvibe.lsp.checkProposal",
-      arguments: [{ uri: t.doc.uri.toString(), start_line: t.start, end_line: t.end, new_text: code.replace(/\n$/, "") }],
-    })) as Proposal;
-    if (await previewAndApply(t.doc, t.version, result, `chat edit, lines ${t.start}-${t.end}`)) {
-      this.post({ type: "applied" });
+      arguments: [{ uri: t.doc.uri.toString(), start_line: t.start, end_line: t.end, has_selection: t.hasSelection,
+                    new_text: code.replace(/\n$/, "") }],
+    })) as FilePatch;
+    if (!result.placed?.length) {
+      vscode.window.showWarningMessage(
+        "fluentvibe: could not tell where this code goes in the file. Select the lines it should replace and press Apply again."
+      );
+      return;
+    }
+    if (result.unplaced?.length) {
+      const go = await vscode.window.showWarningMessage(
+        `fluentvibe: ${result.unplaced.length} part(s) could not be placed and are left out: ${result.unplaced.join(" | ").slice(0, 200)}`,
+        "Preview the rest",
+        "Cancel"
+      );
+      if (go !== "Preview the rest") {
+        return;
+      }
+    }
+    const where = result.placed.map((p) => (p.start === p.end ? `line ${p.start}` : `lines ${p.start}-${p.end}`)).join(", ");
+    if (await previewAndApply(t.doc, t.version, { ...result, whole_file: true }, `chat edit, ${where}`)) {
+      this.post({ type: "applied", where });
     }
   }
+}
+
+interface FilePatch extends Proposal {
+  placed?: { start: number; end: number; how: string }[];
+  unplaced?: string[];
 }
 
 // A base URL ("http://host:8080/v1" or "http://host:8080") gets the chat path; a full URL stays.
@@ -312,7 +333,7 @@ window.addEventListener("message", (ev) => {
     const e = document.createElement("div"); e.className = m.type === "error" ? "err" : "where"; e.textContent = m.text; log.appendChild(e);
     setBusy(false);
   } else if (m.type === "applied") {
-    const w = document.createElement("div"); w.className = "where"; w.textContent = "applied."; log.appendChild(w);
+    const w = document.createElement("div"); w.className = "where"; w.textContent = "applied to " + (m.where || "the file") + "."; log.appendChild(w);
   }
   window.scrollTo(0, document.body.scrollHeight);
 });

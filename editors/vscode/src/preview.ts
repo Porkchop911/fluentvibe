@@ -11,6 +11,7 @@ export interface Proposal {
   import_line?: number;
   import_text?: string;
   proposed_source?: string;
+  whole_file?: boolean; // apply by replacing the whole document with proposed_source
 }
 
 // The proposed file, shown read-only next to the current one.
@@ -52,6 +53,11 @@ export async function previewAndApply(
     return false;
   }
   const edit = new vscode.WorkspaceEdit();
+  if (result.whole_file) {
+    const all = new vscode.Range(new vscode.Position(0, 0), doc.lineAt(doc.lineCount - 1).range.end);
+    edit.replace(doc.uri, all, (result.proposed_source ?? "").replace(/\n$/, ""));
+    return vscode.workspace.applyEdit(edit);
+  }
   edit.replace(
     doc.uri,
     new vscode.Range(new vscode.Position(result.start_line - 1, 0), doc.lineAt(result.end_line - 1).range.end),

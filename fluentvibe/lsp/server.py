@@ -190,12 +190,15 @@ def create_server() -> LanguageServer:
 
     @server.command("fluentvibe.lsp.checkProposal")
     def _check_proposal(ls: LanguageServer, *args: Any) -> dict:
-        from ..copilot.edit import propose_region
+        # A chat code block, placed by line markers / matching statements / the selection.
+        from ..copilot.patch import apply_chat_code
 
         params = _params(args)
         doc = ls.workspace.get_text_document(params["uri"])
-        return propose_region(doc.source, int(params["start_line"]), int(params["end_line"]),
-                              str(params.get("new_text") or ""), path=doc.path).to_dict()
+        return apply_chat_code(doc.source, str(params.get("new_text") or ""), path=doc.path,
+                               start_line=int(params.get("start_line") or 0),
+                               end_line=int(params.get("end_line") or 0),
+                               has_selection=bool(params.get("has_selection"))).to_dict()
 
     return server
 

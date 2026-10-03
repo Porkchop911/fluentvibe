@@ -29,9 +29,10 @@ SYSTEM_PROMPT = (
     "unless they come from another box. A tip that has touched sample wells never goes back into a shared "
     "source (trough, reservoir): a block that draws from a reservoir (add_reagent, distribute_reagent) needs "
     "its own tips, not the plate's box. Reusing tips within a plate's own wells is fine.\n"
-    "Only when asked to change or write code: give ONE ```python block that replaces the selected lines "
-    "exactly (same indentation), say that it replaces the selection, and add no steps, reagents or "
-    "chemistry the scientist did not ask for. Never use wt.add(...)."
+    "Only when asked to change or write code: give ONE ```python block. Before each changed part put a "
+    "line '# lines N-M' with the numbers of the file lines it replaces (from the numbered file), then the "
+    "new code for exactly those lines, with the file's indentation. Add no steps, reagents or chemistry "
+    "the scientist did not ask for. Never use wt.add(...)."
 )
 
 

@@ -2,7 +2,7 @@
   "name": "fluentvibe",
   "displayName": "fluentvibe",
   "description": "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "fluentvibe",
   "license": "UNLICENSED",
   "repository": {
