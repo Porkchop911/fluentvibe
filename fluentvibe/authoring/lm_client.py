@@ -23,6 +23,20 @@ DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get(
     "FLUENTVIBE_LM_ENDPOINT", "http://localhost:18020/v1/chat/completions"
 )
 DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.8-27b")
+
+
+def chat_completions_url(endpoint: str) -> str:
+    """The chat-completions URL for ``endpoint``: a base URL (``http://host:8080/v1``
+    or ``http://host:8080``) gets its path completed, a full URL stays as it is.
+    (A base URL in the VS Code setting answered HTTP 404 "not found".)"""
+    url = (endpoint or "").strip().rstrip("/")
+    if not url or url.endswith("/chat/completions"):
+        return url
+    if url.endswith("/v1"):
+        return url + "/chat/completions"
+    if url.count("/") <= 2:          # scheme://host[:port], no path
+        return url + "/v1/chat/completions"
+    return url
 DEFAULT_REQUEST_TIMEOUT_S = 240.0
 _ALLOWED_REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 
@@ -279,7 +293,7 @@ class LMStudioChatClient:
         repetition_penalty: float | None = None,
         capture_token_ids: bool = False,
     ) -> None:
-        self.endpoint = endpoint
+        self.endpoint = chat_completions_url(endpoint)
         self.model = model
         # Explicit vLLM diagnostic opt-in; omit this provider extension for
         # other OpenAI-compatible endpoints. It does not alter sampling.

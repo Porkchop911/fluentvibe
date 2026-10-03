@@ -113,7 +113,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async stream(messages: object[], signal: AbortSignal, started: number): Promise<string> {
     const s = vscode.workspace.getConfiguration("fluentvibe");
-    const endpoint = s.get<string>("model.endpoint") || process.env.FLUENTVIBE_LM_ENDPOINT || "http://localhost:18020/v1/chat/completions";
+    const endpoint = chatCompletionsUrl(
+      s.get<string>("model.endpoint") || process.env.FLUENTVIBE_LM_ENDPOINT || "http://localhost:18020/v1/chat/completions"
+    );
     const model = s.get<string>("model.name") || process.env.FLUENTVIBE_LM_MODEL || "qwen3.8-27b";
     const key = s.get<string>("model.apiKey") || process.env.FLUENTVIBE_LM_API_KEY || "";
     const body = {
@@ -195,6 +197,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       this.post({ type: "applied" });
     }
   }
+}
+
+// A base URL ("http://host:8080/v1" or "http://host:8080") gets the chat path; a full URL stays.
+// (Same rule as fluentvibe/authoring/lm_client.py: chat_completions_url.)
+export function chatCompletionsUrl(endpoint: string): string {
+  const url = endpoint.trim().replace(/\/+$/, "");
+  if (!url || url.endsWith("/chat/completions")) {
+    return url;
+  }
+  if (url.endsWith("/v1")) {
+    return url + "/chat/completions";
+  }
+  return (url.match(/\//g) || []).length <= 2 ? url + "/v1/chat/completions" : url;
 }
 
 function nonce(): string {

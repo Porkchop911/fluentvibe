@@ -553,3 +553,15 @@ def test_lmstudio_reports_output_limit_instead_of_an_empty_turn(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", _json_response(body, {}))
     with pytest.raises(LMStudioError, match="output-token limit"):
         LMStudioChatClient().complete(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+
+def test_a_base_url_endpoint_gets_the_chat_path() -> None:
+    # The VS Code setting held "http://127.0.0.1:8080/v1"; Strata answered 404 "not found".
+    from fluentvibe.authoring.lm_client import chat_completions_url
+
+    assert chat_completions_url("http://127.0.0.1:8080/v1") == "http://127.0.0.1:8080/v1/chat/completions"
+    assert chat_completions_url("http://127.0.0.1:8080/v1/") == "http://127.0.0.1:8080/v1/chat/completions"
+    assert chat_completions_url("http://127.0.0.1:8080") == "http://127.0.0.1:8080/v1/chat/completions"
+    full = "http://127.0.0.1:18020/v1/chat/completions"
+    assert chat_completions_url(full) == full
+    assert LMStudioChatClient(endpoint="http://127.0.0.1:8080/v1").endpoint == "http://127.0.0.1:8080/v1/chat/completions"
