@@ -144,3 +144,24 @@ def test_chat_code_is_placed_without_a_selection():
     marked = apply_chat_code(PROTOCOL, "# line 1\nfrom fluentvibe import Worktable", path="assist.py", revalidate=False)
     assert marked.placed == [{"start": 1, "end": 1, "how": "lines 1-1 (marked)"}]
     assert apply_chat_code(PROTOCOL, "    NOTHING_LIKE_IT = 1", path="assist.py").unplaced == ["NOTHING_LIKE_IT = 1"]
+
+
+def test_chat_knows_how_fluentcontrol_variables_combine():
+    # The chat proposed wt.get("BEAD_RATIO") and called declare_variable "dead" (2026-10-03).
+    from fluentvibe.copilot.chat import SYSTEM_PROMPT
+
+    assert "There is no wt.get" in SYSTEM_PROMPT and "SAMPLE_UL * BEAD_RATIO" in SYSTEM_PROMPT
+
+
+def test_a_ratio_variable_becomes_a_runtime_expression():
+    from fluentvibe import Worktable
+    from fluentvibe.ir.schema import SetVariableStep
+
+    wt = Worktable.from_workspace("SAT_Fluent_780_Rev3", workspace_guid="291ba293-6361-4f8f-aa8d-7c2643d3f096",
+                                  auto_place=False, protocol_name="Ratio")
+    sample = wt.volume("SAMPLE_UL", 20)
+    ratio = wt.volume("BEAD_RATIO", 1.8)
+    beads = wt.volume("BEADS_UL", sample * ratio)
+    assert float(beads) == 36.0 and wt.protocol_variables["BEAD_RATIO"] == 1.8
+    sets = [s for g in wt._groups for s in g.steps if isinstance(s, SetVariableStep)]
+    assert [(s.variable_name, s.value) for s in sets] == [("BEADS_UL", "SAMPLE_UL * BEAD_RATIO")]
