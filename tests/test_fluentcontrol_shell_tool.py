@@ -13,6 +13,8 @@ from fluentvibe.authoring.fluentcontrol_shell import (
     replace_comment_to_payload_region,
 )
 from fluentvibe.authoring.tools import AuthoringToolRegistry
+from fluentvibe.authoring import fluentcontrol_shell as shell_tools
+from fluentvibe import deployer
 
 
 def test_shell_region_replace_preserves_backslashes() -> None:
@@ -53,6 +55,91 @@ def test_shell_dialog_classifier() -> None:
     )
     assert checksum is False
     assert load_failure is True
+
+
+def _patch_files(tmp_path):
+    generated = tmp_path / "generated.xscr"
+    shell = tmp_path / "shell.xscr"
+    generated.write_text('<Root><Payload><ObjectName>new</ObjectName><Comment>new</Comment><Objects /></Payload><Checksum>new</Checksum></Root>', encoding="utf-8")
+    shell.write_bytes(b'\xef\xbb\xbf<Root><Payload><ObjectName>shell</ObjectName><Comment>old</Comment><Objects /></Payload><Checksum>old</Checksum></Root>\r\n')
+    return generated, shell
+
+
+def test_patch_preserves_identity_and_backs_up_exact_original(tmp_path, monkeypatch):
+    generated, shell = _patch_files(tmp_path)
+    original = shell.read_bytes()
+    monkeypatch.setenv("TECAN_SHELL_BACKUP_DIR", str(tmp_path / "backups"))
+    def checksum(path):
+        assert path != shell
+        assert '<ObjectName>shell</ObjectName>' in path.read_text(encoding="utf-8")
+        return {"is_valid": True}
+    monkeypatch.setattr(deployer, "_checksum_rewrite_and_verify", checksum)
+    backup = shell_tools.patch_shell_xscr_from_generated(generated, shell_xscr=shell)
+    assert backup.read_bytes() == original
+    assert '<Comment>new</Comment>' in shell.read_text(encoding="utf-8")
+
+
+def test_checksum_failure_does_not_overwrite_shell(tmp_path, monkeypatch):
+    generated, shell = _patch_files(tmp_path)
+    original = shell.read_bytes()
+    monkeypatch.setattr(deployer, "_checksum_rewrite_and_verify", lambda path: {"is_valid": False})
+    with pytest.raises(shell_tools.FluentControlShellError, match="checksum verification"):
+        shell_tools.patch_shell_xscr_from_generated(generated, shell_xscr=shell, backup=False)
+    assert shell.read_bytes() == original
+
+
+def test_malformed_patch_does_not_overwrite_shell(tmp_path):
+    generated, shell = _patch_files(tmp_path)
+    original = shell.read_bytes()
+    generated.write_text('<Comment>bad</Comment><Payload><Objects></Payload>', encoding="utf-8")
+    with pytest.raises(shell_tools.FluentControlShellError, match="Invalid patched shell"):
+        shell_tools.patch_shell_xscr_from_generated(generated, shell_xscr=shell, backup=False)
+    assert shell.read_bytes() == original
+
+
+def test_validation_closes_before_patch_and_restores_bytes(tmp_path, monkeypatch):
+    generated, shell = _patch_files(tmp_path)
+    original = shell.read_bytes()
+    events = []
+    monkeypatch.setattr(shell_tools, "_connect_fluent_window", lambda pid: object())
+    def close(window, **kwargs):
+        events.append("close")
+        if len(events) == 1:
+            assert shell.read_bytes() == original
+    monkeypatch.setattr(shell_tools, "_close_shell_tab_if_open", close)
+    monkeypatch.setattr(deployer, "_checksum_rewrite_and_verify", lambda path: {"is_valid": True})
+    def opened(**kwargs):
+        events.append("open")
+        assert kwargs["close_before_open"] is False
+        assert kwargs["script_name"] == "shell"
+        assert '<Comment>new</Comment>' in shell.read_text(encoding="utf-8")
+        return shell_tools.UiResult(True, [], [])
+    monkeypatch.setattr(shell_tools, "open_shell_and_read_infopad", opened)
+    result = shell_tools.validate_generated_xscr_via_shell(generated, shell_xscr=shell, restore_shell=True)
+    assert result.ok
+    assert events == ["close", "open", "close"]
+    assert shell.read_bytes() == original
+
+
+def test_combined_checksum_and_load_failure_is_not_accepted():
+    checksum, failed = classify_dialog_text("Invalid checksum. The load operation failed with exception.")
+    assert checksum and failed
+
+
+def test_shell_not_opened_is_reported_as_failure(monkeypatch):
+    class Window:
+        def exists(self, **kwargs):
+            return True
+    monkeypatch.setattr(shell_tools, "_connect_fluent_window", lambda pid: Window())
+    monkeypatch.setattr(shell_tools, "_bring_to_foreground", lambda win: None)
+    monkeypatch.setattr(shell_tools, "_pick_leftmost_shell_element", lambda win, name: object())
+    monkeypatch.setattr(shell_tools, "_safe_double_click", lambda el: None)
+    monkeypatch.setattr(shell_tools, "_dismiss_modal_dialogs", lambda *a, **k: shell_tools.DialogScanResult([], False, []))
+    monkeypatch.setattr(shell_tools, "_wait_for_script_tab", lambda *a: False)
+    result = shell_tools.open_shell_and_read_infopad(close_before_open=False, settle_seconds=0)
+    assert not result.ok
+    assert not result.opened
+    assert "did not open" in result.load_error_text
 
 
 def test_validate_fluentcontrol_shell_requires_input() -> None:

@@ -31,6 +31,10 @@
     "contributes":  {
                         "commands":  [
                                          {
+                                             "command": "fluentvibe.explainProblem",
+                                             "title": "fluentvibe: Explain this problem"
+                                         },
+                                         {
                                              "command":  "fluentvibe.inlineEdit",
                                              "title":  "fluentvibe: Edit selection with AI"
                                          },

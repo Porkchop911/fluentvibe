@@ -574,8 +574,7 @@ def _job_decompile_xscr(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"XSCR file not found: {xscr}")
     proto = parse_xscr(xscr)
     source = emit_python(proto, source_xscr=str(xscr))
-    out_dir = WORKBENCH_BASE_DIR / "decompiled"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _workbench_path(payload.get("output_dir"), "decompiled")
     output = out_dir / f"{xscr.stem}_decompiled.py"
     output.write_text(source, encoding="utf-8")
 

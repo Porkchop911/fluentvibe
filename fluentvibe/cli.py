@@ -49,6 +49,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_compile.add_argument("--output", "-o", type=Path, default=None)
     p_compile.set_defaults(func=_cmd_compile)
 
+    p_fc = sub.add_parser("fc-open", help="compile and check a protocol in FluentControl")
+    p_fc.add_argument("input", type=Path)
+    p_fc.add_argument("--json", dest="as_json", action="store_true")
+    p_fc.add_argument("--profile", type=Path, default=None)
+    p_fc.add_argument("--workspace", default=None)
+    p_fc.add_argument("--workspace-guid", default=None)
+    p_fc.set_defaults(func=_cmd_fc_open)
+
     p_simulate = sub.add_parser("simulate", help="run the simulator and print snapshot summary")
     p_simulate.add_argument("input", type=Path)
     p_simulate.add_argument("--json", dest="as_json", action="store_true",
@@ -241,6 +249,36 @@ def _cmd_compile(args) -> int:
     wt.compile(output)
     print(f"Compiled {wt.name} -> {output}")
     return 0
+
+
+def _cmd_fc_open(args) -> int:
+    from .authoring.fluentcontrol_shell import validate_generated_xscr_via_shell
+
+    result = {"opened": False, "load_error": "", "findings": []}
+    try:
+        _activate_profile(args)
+        wt = _load_protocol(args.input)
+        wt.simulate(strict=True)
+        output = args.input.with_suffix(".xscr")
+        wt.compile(output)
+        ui = validate_generated_xscr_via_shell(output, restore_shell=True, backup=True)
+        result.update(ui.to_dict(xscr_path=output))
+        result["load_error"] = ui.load_error_text
+        if ui.load_failed:
+            result["opened"] = False
+        result["findings"] = [
+            {"kind": "infopad", "message": message, "count": 1,
+             "python_lines": [], "hint": "Review the FluentControl InfoPad; no Python line mapping is available."}
+            for message in ui.error_lines
+        ]
+    except Exception as exc:
+        result["load_error"] = str(exc)
+    if args.as_json:
+        print(json.dumps(result))
+    else:
+        print(result["load_error"] or ("FluentControl checked the protocol." if result["opened"] else "FluentControl could not open the protocol."))
+    # A handled validation failure is a structured result, not a CLI failure.
+    return 0 if args.as_json or result["opened"] else 1
 
 
 def _cmd_simulate(args) -> int:
