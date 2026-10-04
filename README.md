@@ -1,7 +1,8 @@
 # fluentvibe
 
-fluentvibe is a Python object model for authoring, simulating, compiling, and
-inspecting Tecan FluentControl protocols.
+fluentvibe brings Python authoring, simulation, and inspectable protocol output
+to Tecan FluentControl. Build protocols in code, explore an existing method,
+or use a local model to help draft a protocol grounded in your workspace.
 
 The public API is built around `Worktable`, labware, reagents, and pipetting
 heads. Method calls emit protocol IR steps; the simulator walks that IR to
@@ -16,10 +17,12 @@ Python authoring code
   -> .xscr XML for FluentControl
 ```
 
-## Review Status
+## Project Status
 
-This repository is being prepared for technical feedback from the lab
-automation community. It is not a production release.
+This is an active development preview with working authoring, simulation,
+compilation, and inspection workflows. We welcome technical feedback from the
+lab automation community, especially on real workflow fit and command coverage.
+Production use requires further qualification.
 
 - Source is visible for review, but no open-source license has been granted
   yet. See [NOTICE.md](NOTICE.md).
@@ -44,8 +47,19 @@ automation community. It is not a production release.
 - A local workspace setup web app (`fluentvibe workspace-app`) for choosing a
   workspace, laying out labware, saving a profile, and driving the authoring,
   simulate/compile, decompile, catalog, and deploy flows from one browser tab.
+- Reusable protocol blocks and runtime volume expressions for composing
+  transfers and bead-cleanup workflows.
+- Partial MCA column transfers with explicit source/destination mapping and
+  simulator checks; see [partial MCA authoring](docs/partial-mca-authoring.md).
+- VS Code integration for diagnostics, protocol discussion, and assisted edits;
+  see the [extension guide](editors/vscode/README.md).
 
-## What Needs Review
+Simulation checks the modeled liquid and deck state. It does not establish
+chemical validity, collision-free motion, or instrument readiness. Local-model
+drafts remain reviewable suggestions; FluentControl acceptance and site-specific
+method validation are separate steps.
+
+## Help Shape the Next Release
 
 The most useful feedback is on the domain model and workflow fit:
 
@@ -128,6 +142,9 @@ fluentvibe catalog refresh
 - [Architecture](docs/architecture.md)
 - [Authoring API](docs/authoring.md)
 - [Workspace app](docs/workspace-app.md)
+- [VS Code extension](editors/vscode/README.md)
+- [Partial MCA authoring](docs/partial-mca-authoring.md)
+- [Local model tool evaluation](docs/strata-evaluation.md)
 - [Catalog system](docs/catalog.md)
 - [Simulator](docs/simulator.md)
 - [Compile path](docs/compile-path.md)

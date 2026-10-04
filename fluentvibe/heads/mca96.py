@@ -8,7 +8,7 @@ contents) from scratch — head methods themselves don't mutate twin state.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, Sequence, Union
 
 from ..ir.schema import (
     GetHeadAdapterStep, DropHeadAdapterStep,
@@ -67,12 +67,58 @@ class MCA96Head:
     def _label(self, labware: Union[Labware, str]) -> str:
         return labware.label if isinstance(labware, Labware) else labware
 
-    def pick_up(self, tip_box: Union[Labware, str]) -> None:
-        self._wt._emit(PickUpTipsStep(labware_name=self._label(tip_box)))
+    @staticmethod
+    def _columns(columns: Optional[Sequence[int]]) -> Optional[list[int]]:
+        if columns is None:
+            return None
+        selected = list(columns)
+        if (not selected or any(type(c) is not int or not 1 <= c <= 12 for c in selected)
+                or selected != sorted(set(selected))):
+            raise ValueError("MCA96 columns must be a nonempty, ascending list of unique integers from 1 to 12")
+        return selected
 
-    def return_tips(self, tip_box: Optional[Union[Labware, str]] = None) -> None:
+    def pick_up(
+        self,
+        tip_box: Union[Labware, str],
+        *,
+        columns: Optional[Sequence[int]] = None,
+    ) -> None:
+        """Pick up tips, optionally on only a partial block of the head.
+
+        `columns` is the list of 1-based **box columns** to address, e.g. ``[1]``
+        for a single column, ``[7,8,9,10,11,12]`` for the right half, or
+        ``[1,4,7,10]`` to grab a whole sorted box in one go. Omit `columns` for
+        a full pickup.
+
+        The physical offset is **derived** from the columns, never passed in:
+        FluentControl stores ``PartialColumnOffset = head_width - max(columns)``
+        (box col 1 -> 11, col 12 -> 0). A single column can only be peeled from
+        the box's current **left-most or right-most filled** column, so its idle
+        channels overhang empty space; the simulator enforces this.
+        """
+        step = PickUpTipsStep(labware_name=self._label(tip_box))
+        if columns is not None:
+            step.columns = self._columns(columns)
+        self._wt._emit(step)
+
+    def return_tips(
+        self,
+        tip_box: Optional[Union[Labware, str]] = None,
+        *,
+        columns: Optional[Sequence[int]] = None,
+    ) -> None:
+        """Set tips back, optionally as a partial block.
+
+        `columns` are the 1-based **box columns** the tips land in. Setting tips
+        back into an empty box has no edge constraint (no neighbouring tips to
+        collide with), so any target column is allowed; the
+        ``PartialColumnOffset`` is derived from it the same way as `pick_up`.
+        """
         labware_name = self._label(tip_box) if tip_box is not None else None
-        self._wt._emit(SetTipsBackStep(labware_name=labware_name))
+        step = SetTipsBackStep(labware_name=labware_name)
+        if columns is not None:
+            step.columns = self._columns(columns)
+        self._wt._emit(step)
 
     # ── Pipetting ───────────────────────────────────────────────────
 
@@ -82,16 +128,22 @@ class MCA96Head:
         volume_ul: Union[float, int, str],
         *,
         liquid_class: str,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
         """Aspirate from `target` (auto-parallel over the labware's wells).
 
         `liquid_class` is required and must be the exact FluentControl
         liquid-class name. No defaults are pulled from elsewhere.
+
+        `columns` selects 1-based plate columns for partial-column pipetting
+        (e.g. `[1, 2, 3]` or sparse `[1, 3, 5]`); omit it to address the full
+        plate.
         """
         self._wt._emit(AspirateStep(
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
+            columns=self._columns(columns),
         ))
 
     def dispense(
@@ -100,11 +152,13 @@ class MCA96Head:
         volume_ul: Union[float, int, str],
         *,
         liquid_class: str,
+        columns: Optional[Sequence[int]] = None,
     ) -> None:
         self._wt._emit(DispenseStep(
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
+            columns=self._columns(columns),
         ))
 
     def mix(

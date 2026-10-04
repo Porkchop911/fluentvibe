@@ -3,27 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>fluentvibe Workbench</title>
+  <title>FluentVibe · Workbench</title>
   <style>
     :root {
-      color-scheme: light;
-      --bg: #fafafa;
-      --panel: #ffffff;
-      --line: #e4e4e7;
-      --line-strong: #d4d4d8;
-      --text: #18181b;
-      --muted: #71717a;
-      --accent: #5b5bd6;
-      --accent-soft: #eeeefb;
-      --accent-border: #c7c7f1;
-      --bad: #dc2626;
-      --good: #16a34a;
-      --deck: #f4f4f5;
-      --code: #18181b;
-      --radius: 6px;
-      --radius-sm: 4px;
-      --shadow: 0 1px 2px rgba(24,24,27,.06);
-      --ring: 0 0 0 3px rgba(91,91,214,.14);
+      color-scheme: dark;
+      --bg: #111419;
+      --panel: #1d2229;
+      --surface: #252b34;
+      --line: #353c46;
+      --line-strong: #59616c;
+      --text: #f4f5f7;
+      --muted: #b1bac5;
+      --accent: #ffac4d;
+      --orange: #ff8a00;
+      --accent-soft: #343039;
+      --accent-border: #d6781c;
+      --bad: #ff8585;
+      --good: #78d4a5;
+      --deck: #181e26;
+      --code: #f4f5f7;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --shadow: 0 8px 24px rgba(0, 0, 0, .2);
+      --ring: 0 0 0 4px rgba(255, 138, 0, .25);
     }
     * { box-sizing: border-box; }
     body {
@@ -78,26 +80,26 @@
     }
     button {
       min-height: 30px;
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
+      background: var(--orange);
+      color: #1e2024;
+      border-color: var(--orange);
       cursor: pointer;
       font-weight: 600;
     }
-    button:hover { filter: brightness(1.06); }
+    button:hover { filter: brightness(.96); }
     button:focus-visible { outline: none; box-shadow: var(--ring); }
     button.secondary {
       background: var(--panel);
       color: var(--text);
       border-color: var(--line-strong);
     }
-    button.secondary:hover { background: #f4f4f5; filter: none; }
+    button.secondary:hover { background: var(--accent-soft); filter: none; }
     button.danger {
-      background: #fef2f2;
+      background: #38262a;
       color: var(--bad);
-      border-color: #fecaca;
+      border-color: #854c51;
     }
-    button.danger:hover { background: #fee2e2; filter: none; }
+    button.danger:hover { background: #4c292e; filter: none; }
     button:disabled { opacity: .5; cursor: not-allowed; filter: none; }
     main { padding: 12px; }
     .tabs {
@@ -115,7 +117,7 @@
       background: var(--panel);
       border-color: var(--line);
     }
-    .tab:hover { color: var(--text); background: #f4f4f5; }
+    .tab:hover { color: var(--text); background: var(--surface); }
     .tab.active {
       color: var(--accent);
       background: var(--accent-soft);
@@ -156,7 +158,7 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 10px;
-      background: #fafafa;
+      background: var(--surface);
       color: var(--text);
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -172,7 +174,7 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 12px;
-      background: #fafafa;
+      background: var(--surface);
     }
     .msg {
       max-width: 86%;
@@ -195,15 +197,15 @@
       justify-self: stretch;
       max-width: 100%;
       color: var(--muted);
-      background: #f4f4f5;
+      background: var(--surface);
       box-shadow: none;
     }
     .msg.error {
       justify-self: stretch;
       max-width: 100%;
       color: var(--bad);
-      background: #fef2f2;
-      border-color: #fecaca;
+      background: #38262a;
+      border-color: #854c51;
       box-shadow: none;
     }
     .msg-title {
@@ -225,7 +227,7 @@
       padding: 1px 7px;
       border-radius: var(--radius-sm);
       border: 1px solid var(--line);
-      background: #f4f4f5;
+      background: var(--surface);
       color: var(--muted);
       font-size: 11px;
     }
@@ -234,7 +236,7 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 10px;
-      background: #fafafa;
+      background: var(--surface);
       display: grid;
       gap: 8px;
     }
@@ -276,7 +278,7 @@
       top: 8px;
       color: var(--muted);
       font-size: 12px;
-      background: rgba(255,255,255,.9);
+      background: rgba(29,34,41,.94);
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 3px 8px;
@@ -285,15 +287,15 @@
     .deck-frame {
       position: absolute;
       border: 2px solid var(--line-strong);
-      background: rgba(255,255,255,.3);
-      box-shadow: inset 0 -18px 0 rgba(255,255,255,.5);
+      background: rgba(255,138,0,.025);
+      box-shadow: inset 0 -18px 0 rgba(255,138,0,.04);
     }
     .grid-line {
       position: absolute;
       top: 0;
       bottom: 0;
       width: 1px;
-      background: rgba(113, 113, 122, .18);
+      background: rgba(239, 122, 19, .18);
       z-index: 1;
     }
     .grid-label {
@@ -306,8 +308,8 @@
     }
     .segment-band {
       position: absolute;
-      border: 1px dashed rgba(113, 113, 122, .3);
-      background: rgba(255,255,255,.2);
+      border: 1px dashed rgba(239, 122, 19, .3);
+      background: rgba(255,138,0,.035);
       z-index: 1;
     }
     .segment-label {
@@ -320,35 +322,41 @@
     }
     .slot {
       position: absolute;
-      min-width: 46px;
-      min-height: 34px;
+      min-width: 0;
+      min-height: 0;
       border: 1px solid var(--line-strong);
       border-radius: var(--radius-sm);
-      padding: 4px 5px;
+      padding: 2px 3px;
       background: var(--panel);
       box-shadow: var(--shadow);
-      font-size: 10px;
       overflow: hidden;
       z-index: 3;
     }
+    .slot:hover, .slot:focus-visible { overflow: visible; z-index: 30; outline: 2px solid var(--accent); outline-offset: 1px; }
     .slot.selected {
       border-color: var(--accent);
       background: var(--accent-soft);
-      box-shadow: 0 0 0 2px rgba(91,91,214,.18);
+      box-shadow: 0 0 0 2px rgba(255,138,0,.24);
     }
-    .slot .pos { font-weight: 700; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .slot .tiny { color: var(--muted); overflow-wrap: anywhere; }
-    .slot.compact .coords { display: none; }
-    .badge {
-      display: inline-block;
-      margin-top: 5px;
-      padding: 2px 6px;
-      border-radius: var(--radius-sm);
-      background: var(--accent-soft);
-      color: var(--accent);
-      font-size: 10px;
-      font-weight: 600;
+    .slot .pos { display: block; width: 100%; font-weight: 700; font-size: 10px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .slot.compact { padding: 1px 2px; }
+    .slot.compact .pos { font-size: 9px; line-height: 1.1; }
+    .slot-tooltip {
+      display: none; position: absolute; left: 0; top: calc(100% + 7px);
+      width: 270px; max-width: min(270px, 75vw); max-height: 300px; overflow: auto; padding: 11px 12px;
+      border: 1px solid var(--accent-border); border-radius: 9px; background: var(--surface); color: var(--text);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, .4); font-size: 12px;
+      line-height: 1.45; text-align: left; white-space: normal;
     }
+    .slot-tooltip strong, .slot-tooltip span { display: block; overflow-wrap: anywhere; }
+    .slot-tooltip strong { font-size: 13px; margin-bottom: 6px; }
+    .slot-tooltip span + span { margin-top: 3px; }
+    .slot-tooltip-entry { padding: 6px 0; border-top: 1px solid var(--line); }
+    .slot-tooltip-entry strong { margin-bottom: 3px; }
+    .slot:hover .slot-tooltip, .slot:focus-visible .slot-tooltip { display: block; }
+    .slot.tooltip-left .slot-tooltip { left: auto; right: 0; }
+    .slot.tooltip-above .slot-tooltip { top: auto; bottom: calc(100% + 7px); }
+    .segment-label { display: none; }
     /* --- Author chat (Author tab only; new class names) --- */
     .author-shell {
       display: grid;
@@ -368,10 +376,11 @@
     }
     .author-sb-fields {
       display: grid;
-      grid-template-columns: 1.5fr 1fr .8fr 1fr auto;
+      grid-template-columns: 1.3fr .9fr .7fr 1fr 1.35fr auto;
       gap: 10px;
       align-items: end;
     }
+    .author-sb-fields > div { min-width: 0; }
     .author-sb-fields label { margin-top: 0; }
     .author-sb-action button { white-space: nowrap; }
     .author-chat {
@@ -382,7 +391,7 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       padding: 16px;
-      background: #fafafa;
+      background: var(--surface);
     }
     .author-composer {
       display: grid;
@@ -448,48 +457,178 @@
       header { align-items: flex-start; flex-direction: column; }
       .deck-map { min-height: 460px; }
     }
+    /* Workbench visual system */
+    body { font: 15px/1.5 Inter, Segoe UI, system-ui, sans-serif; background: var(--bg); }
+    .app-header {
+      position: relative; padding: 17px clamp(20px, 3vw, 48px);
+      color: var(--text); background: #1a1e24; border: 0; border-bottom: 2px solid var(--orange);
+      box-shadow: 0 3px 18px rgba(0, 0, 0, .24);
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 43px; height: 43px;
+      border-radius: 12px; background: var(--orange); color: #1e2024;
+      font-size: 18px; font-weight: 800; letter-spacing: -.08em;
+    }
+    .eyebrow { display: block; font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    .brand .eyebrow, .header-context .eyebrow { color: var(--accent); }
+    h1 { color: var(--text); font-size: 23px; line-height: 1.15; letter-spacing: -.04em; }
+    .header-context { display: grid; gap: 3px; text-align: right; font-size: 13px; }
+    .header-context strong { font-weight: 600; color: var(--text); }
+    main { max-width: 1720px; margin: auto; padding: 22px clamp(16px, 3vw, 48px) 52px; }
+    .tabs { gap: 7px; margin-bottom: 27px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+    .tab { border: 0; background: transparent; min-height: 39px; padding: 8px 14px; border-radius: 9px; font-size: 13px; }
+    .tab:hover { background: var(--surface); }
+    .tab.active { background: var(--orange); border: 0; color: #1e2024; box-shadow: none; }
+    .page-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin: 2px 0 24px; }
+    .page-heading .eyebrow { color: var(--accent); }
+    .page-heading h2 { font-size: clamp(25px, 3vw, 34px); letter-spacing: -.045em; line-height: 1.18; margin: 5px 0 5px; }
+    .page-heading p, .section-title p { color: var(--muted); margin: 0; }
+    .heading-note { color: var(--muted); white-space: nowrap; font-size: 12px; font-weight: 600; }
+    .grid { grid-template-columns: minmax(370px, 430px) minmax(0, 1fr); gap: 20px; }
+    .stack { gap: 18px; }
+    .grid > .stack { align-content: start; }
+    section { border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+    .section-title { display: flex; align-items: start; gap: 12px; margin-bottom: 18px; }
+    .section-title h2 { font-size: 17px; line-height: 1.25; margin: 0 0 4px; letter-spacing: -.025em; }
+    .section-title p { font-size: 12px; }
+    .step-number { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 9px; background: var(--orange); color: #1e2024; font-size: 13px; font-weight: 800; }
+    .save-row { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+    label { margin-top: 13px; font-size: 12px; font-weight: 700; color: var(--text); letter-spacing: 0; }
+    input, select, textarea { min-height: 38px; padding: 8px 11px; border-color: var(--line-strong); }
+    button { min-height: 38px; padding: 8px 12px; }
+    button.secondary { color: var(--accent); border-color: var(--accent-border); }
+    button.secondary:hover { background: var(--accent-soft); }
+    .mini { min-height: 32px; }
+    .deck-map { border-color: var(--accent-border); border-radius: 12px; }
+    .common-list { max-height: 580px; overflow: auto; padding-right: 3px; }
+    .deck-positions { margin-top: 17px; border-top: 1px solid var(--line); padding-top: 15px; }
+    .deck-positions > summary { cursor: pointer; color: var(--accent); font-size: 14px; font-weight: 700; }
+    .deck-position-count { margin-left: 8px; color: var(--muted); font-size: 12px; font-weight: 500; }
+    .position-toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin: 15px 0 7px; }
+    .position-toolbar > div { flex: 1 1 230px; min-width: 0; }
+    .position-toolbar label { margin: 0 0 5px; }
+    .position-toolbar input[type="search"] { width: 100%; }
+    .position-filter { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; min-height: 38px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .position-filter input { width: auto; min-height: 0; margin: 0; }
+    .position-match-count { color: var(--muted); font-size: 12px; margin: 4px 0 12px; }
+    .position-groups { display: grid; gap: 15px; max-height: 520px; overflow: auto; padding-right: 4px; }
+    .position-group { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+    .position-group-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 10px 13px; background: #303640; border-left: 3px solid var(--orange); }
+    .position-group-head strong { color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+    .position-group-head span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .position-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 10px 13px; border-top: 1px solid var(--line); font-size: 13px; }
+    .position-number { display: inline-grid; place-items: center; min-width: 34px; min-height: 28px; border-radius: 7px; background: var(--orange); color: #1e2024; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .position-content { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+    .position-entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+    .position-entry strong { font-weight: 600; }
+    .position-badge { border-radius: 5px; padding: 1px 6px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .position-badge.occupied { background: var(--orange); color: #1e2024; }
+    .position-badge.preferred { background: #615022; color: #ffe6a0; }
+    .position-empty { color: var(--muted); }
+    .position-path { color: var(--muted); font: 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; }
+    @media (max-width: 620px) {
+      .position-filter { white-space: normal; }
+      .position-row { grid-template-columns: 38px minmax(0, 1fr); gap: 9px; }
+      .position-path { grid-column: 2; margin-top: -4px; }
+    }
+    .deck-label { font-size: 11px; font-weight: 600; }
+    .library-grid { display: grid; grid-template-columns: minmax(270px, 340px) minmax(0, 1fr); gap: 18px; align-items: start; }
+    .library-sidebar { position: sticky; top: 20px; }
+    .library-sidebar > .mini { margin-top: 9px; }
+    .result-list { display: grid; gap: 7px; margin-top: 18px; max-height: min(68vh, 760px); overflow: auto; }
+    .result-item { display: block; text-align: left; width: 100%; padding: 11px 12px; min-height: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-weight: 500; }
+    .result-item:hover { background: var(--accent-soft); border-color: var(--accent-border); filter: none; }
+    .result-item.selected { background: var(--accent-soft); border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,138,0,.16); }
+    .result-item strong, .result-item span { display: block; overflow-wrap: anywhere; }
+    .result-item strong { font-size: 13px; font-weight: 700; }
+    .result-item span { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .detail-panel { min-height: 290px; }
+    .detail-panel h2 { font-size: 23px; line-height: 1.2; letter-spacing: -.035em; overflow-wrap: anywhere; }
+    .empty-state { display: grid; place-content: center; text-align: center; min-height: 210px; color: var(--muted); }
+    .empty-state strong { color: var(--text); font-size: 16px; }
+    .empty-state p { margin: 5px 0 0; font-size: 13px; }
+    .detail-kicker { color: var(--accent); text-transform: uppercase; letter-spacing: .12em; font-size: 10px; font-weight: 800; }
+    .detail-meta { color: var(--muted); font-size: 12px; margin: 7px 0 14px; overflow-wrap: anywhere; }
+    .detail-stats { display: flex; flex-wrap: wrap; gap: 7px; margin: 15px 0; }
+    .detail-stats span { padding: 5px 9px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
+    .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .detail-actions button { width: auto; }
+    .outline { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 15px; }
+    .outline summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 700; }
+    .outline h3 { font-size: 13px; margin: 9px 0; }
+    .outline-row { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .outline-row .kind { color: var(--accent); font-weight: 700; min-width: 115px; }
+    .detail-note { border-left: 3px solid var(--orange); padding: 10px 12px; background: var(--surface); color: var(--text); font-size: 12px; border-radius: 0 8px 8px 0; }
+    .detail-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 18px; }
+    .detail-fields div { padding: 10px; background: var(--surface); border-radius: 8px; }
+    .detail-fields dt { color: var(--muted); font-size: 11px; }
+    .detail-fields dd { margin: 3px 0 0; font-weight: 700; font-size: 13px; overflow-wrap: anywhere; }
+    .discussion-log { display: grid; align-content: start; gap: 9px; min-height: 120px; max-height: 420px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    .discussion-log .empty-state { min-height: 90px; }
+    .discussion-message { max-width: 85%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+    .discussion-message.user { justify-self: end; background: var(--accent-soft); border-color: var(--accent-border); }
+    .protocol-discussion .author-composer { margin-top: 10px; }
+    .protocol-discussion textarea { min-height: 54px; }
+    .model-server-picker { max-width: 340px; margin-bottom: 13px; }
+    .model-target { margin-top: 7px; }
+    .maintenance { margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+    .maintenance summary { padding: 13px 17px; cursor: pointer; font-weight: 700; color: var(--muted); }
+    .maintenance-body { padding: 0 17px 18px; max-width: 600px; }
+    .maintenance .pre { margin-top: 10px; }
+    @media (max-width: 980px) {
+      .grid, .wide-grid, .library-grid { grid-template-columns: minmax(0, 1fr); }
+      .grid > *, .wide-grid > *, .library-grid > * { min-width: 0; }
+      .deck-map { max-width: 100%; }
+      .library-sidebar { position: static; }
+      .result-list { max-height: 300px; }
+      .page-heading { align-items: start; flex-direction: column; }
+      .header-context { text-align: left; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>fluentvibe Workbench</h1>
-    <div class="muted" id="workspaceSummary">Select a workspace or profile.</div>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">fv</span><div><div class="eyebrow">LAB AUTOMATION WORKBENCH</div><h1>FluentVibe</h1></div></div>
+    <div class="header-context"><span class="eyebrow">ACTIVE WORKSPACE</span><strong id="workspaceSummary">Select a workspace or profile</strong></div>
   </header>
   <main>
-    <nav class="tabs">
-      <button class="tab active" data-tab="setup">Setup</button>
-      <button class="tab" data-tab="author">Author</button>
-      <button class="tab" data-tab="code">Code Lab</button>
-      <button class="tab" data-tab="decompile">Decompile</button>
-      <button class="tab" data-tab="catalog">Catalog</button>
+    <nav class="tabs" aria-label="Workbench sections">
+      <button class="tab active" data-tab="setup" aria-current="page">Workspace setup</button>
+      <button class="tab" data-tab="library">Protocol library</button>
+      <button class="tab" data-tab="author">Author new</button>
+      <button class="tab" data-tab="catalog">Object explorer</button>
+      <button class="tab" data-tab="code">Code lab</button>
+      <button class="tab" data-tab="decompile">Decompile file</button>
       <button class="tab" data-tab="fc">FluentControl</button>
     </nav>
 
     <div class="panel active" id="tab-setup">
+      <div class="page-heading"><div><span class="eyebrow">01 / PREPARE</span><h2>Set up your workspace</h2><p>Choose an instrument and deck, add the labware you use, then save the setup as a reusable profile.</p></div><span class="heading-note">Local FluentControl catalog</span></div>
       <div class="grid">
         <div class="stack">
           <section>
-            <h2>Workspace Profile</h2>
+            <div class="section-title"><span class="step-number">1</span><div><h2>Choose a worktable</h2><p>Start from a saved profile or select an instrument and deck.</p></div></div>
             <label for="existingProfile">Load existing profile</label>
             <div class="actions">
               <select id="existingProfile"></select>
               <button id="loadProfile" class="secondary">Load profile</button>
             </div>
             <label for="profileName">Profile name</label>
-            <input id="profileName" value="sat_780_default">
+            <input id="profileName" placeholder="e.g. 1080_dev_default">
             <label for="configurationSelect">Instrument configuration</label>
             <select id="configurationSelect"></select>
             <div class="small" id="configurationSummary"></div>
             <label for="workspaceSelect">Workspace deck layout</label>
             <select id="workspaceSelect"></select>
             <div class="actions">
-              <button id="loadWorkspace">Load</button>
+              <button id="loadWorkspace">Preview worktable</button>
               <button id="suggestCommon" class="secondary" disabled>Use defaults</button>
             </div>
           </section>
 
           <section>
-            <h2>Common Labware</h2>
+            <div class="section-title"><span class="step-number">2</span><div><h2>Build your common set</h2><p>Add frequently used labware and set its preferred location.</p></div></div>
             <div class="actions">
               <div>
                 <label for="categorySelect">Category</label>
@@ -506,18 +645,44 @@
             <div class="common-list" id="commonList"></div>
             <label for="liquidClass">Default liquid class</label>
             <select id="liquidClass"></select>
-            <button id="saveProfile" style="margin-top:12px" disabled>Save profile</button>
+            <div class="save-row"><span class="step-number">3</span><button id="saveProfile" disabled>Save workspace profile</button></div>
             <div class="status" id="status"></div>
           </section>
         </div>
 
         <section>
-          <h2>Worktable Layout</h2>
+          <div class="section-title"><div><h2>Deck preview</h2><p>Positions and geometry come from the selected FluentControl workspace.</p></div></div>
           <div class="deck-map" id="deckMap">
             <div class="deck-label">Workspace XY coordinates from FluentControl data</div>
           </div>
-          <div id="slotGroups" class="small"></div>
+          <details class="deck-positions"><summary>All deck positions <span class="deck-position-count" id="deckPositionSummary"></span></summary>
+            <div class="position-toolbar"><div><label for="deckPositionSearch">Find a position or labware</label><input id="deckPositionSearch" type="search" placeholder="Search location, labware, or site path"></div><label class="position-filter"><input id="deckOccupiedOnly" type="checkbox"> Occupied or preferred only</label></div>
+            <div class="position-match-count" id="positionMatchCount" aria-live="polite"></div>
+            <div id="slotGroups" class="position-groups"></div>
+          </details>
         </section>
+      </div>
+    </div>
+
+    <div class="panel" id="tab-library">
+      <div class="page-heading"><div><span class="eyebrow">02 / BROWSE</span><h2>Protocol library</h2><p>Explore scripts in FluentControl’s UserSpecific datastore. Open one to inspect its steps or decompile a Python draft.</p></div><span class="heading-note" id="protocolCount">Loading protocols…</span></div>
+      <div class="library-grid">
+        <section class="library-sidebar">
+          <label for="protocolSearch">Find a protocol</label>
+          <input id="protocolSearch" type="search" placeholder="Search names or IDs">
+          <button id="refreshProtocols" class="secondary mini">Refresh library</button>
+          <div id="protocolList" class="result-list" aria-live="polite"></div>
+        </section>
+        <div class="stack">
+          <section id="protocolDetail" class="detail-panel"><div class="empty-state"><strong>Select a protocol</strong><p>Its groups, step types, source path, and decompilation options will appear here.</p></div></section>
+          <section class="protocol-discussion">
+            <div class="section-title"><div><h2>Discuss this protocol</h2><p>Ask about its steps and intent using the selected XSCR as context.</p></div></div>
+            <div class="model-server-picker"><label for="protocolModelServer">Model server</label><select id="protocolModelServer"><option value="configured">Configured local model</option><option value="strata">Strata · local test instance</option></select></div>
+            <div id="protocolChatLog" class="discussion-log" role="log" aria-live="polite"><div class="empty-state">Select a protocol to start a focused discussion.</div></div>
+            <div class="author-composer"><textarea id="protocolQuestion" rows="2" placeholder="What does this protocol do?" disabled></textarea><button id="askProtocol" disabled>Ask</button></div>
+            <div class="status" id="protocolChatStatus" aria-live="polite"></div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -543,7 +708,11 @@
               <input id="authorRetry" type="number" min="1" value="8">
             </div>
             <div>
-              <label for="authorModel">Model</label>
+              <label for="authorModelServer">Model server</label>
+              <select id="authorModelServer"><option value="default">Default LM Studio</option><option value="strata">Strata · local test instance</option></select>
+            </div>
+            <div>
+              <label for="authorModel">Model ID override</label>
               <input id="authorModel" placeholder="default">
             </div>
             <div class="author-sb-action">
@@ -551,6 +720,7 @@
               <button id="startAuthor">Start session</button>
             </div>
           </div>
+          <div class="small model-target" id="authorModelTarget">Default LM Studio server. A model ID override is optional.</div>
           <div class="status" id="authorStatus" aria-live="polite"></div>
         </div>
 
@@ -613,23 +783,18 @@
     </div>
 
     <div class="panel" id="tab-catalog">
-      <div class="wide-grid">
-        <section>
-          <h2>Catalog</h2>
-          <button id="loadCatalogInfo" class="secondary">Refresh info</button>
-          <label for="catalogQuery">Search labware</label>
-          <input id="catalogQuery" placeholder="magnet, 96, DiTi">
-          <button id="catalogSearch" class="secondary" style="margin-top:8px">Search</button>
-          <label for="catalogInstall">Optional install path for rebuild</label>
-          <input id="catalogInstall" placeholder="C:\ProgramData\Tecan\VisionX\DataBase">
-          <button id="catalogRefresh" class="danger" style="margin-top:8px">Rebuild catalog index</button>
-          <div class="status" id="catalogStatus"></div>
+      <div class="page-heading"><div><span class="eyebrow">03 / DISCOVER</span><h2>Object explorer</h2><p>Search labware, carriers, workspaces, and liquid classes in the indexed FluentControl database.</p></div><span class="heading-note">Catalog metadata</span></div>
+      <div class="library-grid">
+        <section class="library-sidebar">
+          <label for="objectSearch">Search objects</label>
+          <input id="objectSearch" type="search" placeholder="Plate, DiTi, trough…">
+          <label for="objectKind">Type</label>
+          <select id="objectKind"><option value="component">Labware &amp; carriers</option><option value="all">All objects</option><option value="workspace">Workspaces</option><option value="liquid_class">Liquid classes</option></select>
+          <div id="objectList" class="result-list" aria-live="polite"></div>
         </section>
-        <section>
-          <h2>Catalog Result</h2>
-          <div class="pre" id="catalogResult"></div>
-        </section>
+        <section id="objectDetail" class="detail-panel"><div class="empty-state"><strong>Select an object</strong><p>Its recorded type, geometry, compatibility fields, and purpose hint will appear here.</p></div></section>
       </div>
+      <details class="maintenance"><summary>Catalog maintenance</summary><div class="maintenance-body"><button id="loadCatalogInfo" class="secondary mini">Refresh index info</button><label for="catalogInstall">Optional install path for rebuild</label><input id="catalogInstall" placeholder="C:\ProgramData\Tecan\VisionX\DataBase"><button id="catalogRefresh" class="danger mini">Rebuild catalog index</button><div class="status" id="catalogStatus"></div><div class="pre" id="catalogResult"></div></div></details>
     </div>
 
     <div class="panel" id="tab-fc">
@@ -672,7 +837,15 @@
       profiles: [],
       authorSessionId: null,
       authorMessages: [],
-      authorPending: false
+      authorPending: false,
+      protocols: [],
+      selectedProtocol: null,
+      protocolSource: '',
+      protocolConversation: [],
+      protocolChatConfig: null,
+      protocolChatBusy: false,
+      objects: [],
+      selectedObject: null
     };
 
     const $ = (id) => document.getElementById(id);
@@ -822,6 +995,7 @@
         ).join('');
         await loadProfiles();
         await loadCatalogInfo();
+        await loadWorkspace();
       } catch (err) {
         setStatus('status', err.message, 'error');
       }
@@ -830,21 +1004,30 @@
     function bindTabs() {
       document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', () => {
-          document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+          document.querySelectorAll('.tab').forEach(tab => { tab.classList.remove('active'); tab.removeAttribute('aria-current'); });
           document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
           btn.classList.add('active');
+          btn.setAttribute('aria-current', 'page');
           $(`tab-${btn.dataset.tab}`).classList.add('active');
+          if (btn.dataset.tab === 'library' && !state.protocols.length) loadProtocols();
+          if (btn.dataset.tab === 'catalog' && !state.objects.length) searchObjects();
         });
       });
     }
 
     function bindSetup() {
-      $('loadWorkspace').addEventListener('click', loadWorkspace);
+      $('loadWorkspace').addEventListener('click', () => loadWorkspace().catch(err => setStatus('status', err.message, 'error')));
       $('loadProfile').addEventListener('click', () => loadProfile().catch(err => setStatus('status', err.message, 'error')));
-      $('suggestCommon').addEventListener('click', useDefaults);
+      $('suggestCommon').addEventListener('click', () => useDefaults().catch(err => setStatus('status', err.message, 'error')));
       $('addLabware').addEventListener('click', addSelectedLabware);
-      $('saveProfile').addEventListener('click', saveProfile);
+      $('saveProfile').addEventListener('click', () => saveProfile().catch(err => setStatus('status', err.message, 'error')));
       $('categorySelect').addEventListener('change', () => refreshLabwareOptions().catch(err => setStatus('status', err.message, 'error')));
+      $('deckPositionSearch').addEventListener('input', renderPositionList);
+      $('deckOccupiedOnly').addEventListener('change', renderPositionList);
+      $('deckMap').addEventListener('click', event => {
+        const slot = event.target.closest('.slot');
+        if (slot) slot.focus();
+      });
       let searchTimer = null;
       $('labwareSearch').addEventListener('input', () => {
         clearTimeout(searchTimer);
@@ -853,7 +1036,45 @@
     }
 
     function bindWorkbench() {
+      $('refreshProtocols').addEventListener('click', loadProtocols);
+      $('protocolModelServer').addEventListener('change', () => {
+        state.protocolConversation = [];
+        renderProtocolConversation();
+        updateProtocolChatAvailability();
+      });
+      let protocolTimer;
+      $('protocolSearch').addEventListener('input', () => { clearTimeout(protocolTimer); protocolTimer = setTimeout(loadProtocols, 180); });
+      $('protocolList').addEventListener('click', event => {
+        const item = event.target.closest('[data-protocol-id]');
+        if (item) selectProtocol(item.dataset.protocolId);
+      });
+      $('protocolDetail').addEventListener('click', event => {
+        if (event.target.closest('#decompileSelected')) decompileSelectedProtocol();
+        if (event.target.closest('#openProtocolCode')) document.querySelector('[data-tab="code"]').click();
+      });
+      $('askProtocol').addEventListener('click', askAboutProtocol);
+      $('protocolQuestion').addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); askAboutProtocol(); }
+      });
+      let objectTimer;
+      $('objectSearch').addEventListener('input', () => { clearTimeout(objectTimer); objectTimer = setTimeout(searchObjects, 180); });
+      $('objectKind').addEventListener('change', searchObjects);
+      $('objectList').addEventListener('click', event => {
+        const item = event.target.closest('[data-object-guid]');
+        if (item) selectObject(item.dataset.objectGuid, item.dataset.objectKind);
+      });
       $('startAuthor').addEventListener('click', startAuthoringSession);
+      $('authorModelServer').addEventListener('change', () => {
+        $('authorModel').value = '';
+        updateAuthorModelTarget();
+        if (state.authorSessionId) {
+          state.authorSessionId = null;
+          $('authorPrompt').disabled = true;
+          $('sendAuthor').disabled = true;
+          setStatus('authorStatus', 'Model server changed. Start a new session to use it.');
+        }
+      });
+      updateAuthorModelTarget();
       $('sendAuthor').addEventListener('click', sendAuthorMessage);
       $('authorPrompt').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -865,7 +1086,6 @@
       $('compileSource').addEventListener('click', compileSource);
       $('runDecompile').addEventListener('click', runDecompile);
       $('loadCatalogInfo').addEventListener('click', loadCatalogInfo);
-      $('catalogSearch').addEventListener('click', searchCatalog);
       $('catalogRefresh').addEventListener('click', refreshCatalog);
       $('fcValidate').addEventListener('click', validateFc);
       $('deployXscr').addEventListener('click', deployXscr);
@@ -920,12 +1140,15 @@
       state.deckCoordinates = data.deck_coordinates || state.positions;
       state.deckFrame = data.deck_frame || {};
       state.workspaceSource = data.workspace_source || null;
+      $('deckPositionSearch').value = '';
+      $('deckOccupiedOnly').checked = false;
       state.categories = data.common_labware_categories || [];
       state.commonLabware = data.default_common_labware || [];
       $('categorySelect').innerHTML = state.categories.map(c =>
         `<option value="${escapeHtml(c.name)}">${escapeHtml(c.label)}</option>`
       ).join('');
       $('workspaceSummary').textContent = `${data.workspace.name} / ${data.workspace.guid}`;
+      if (!$('profileName').value.trim()) $('profileName').value = data.workspace.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
       $('configurationSummary').textContent = `${config.configuration.name}: ${config.configuration.device_count} configured device entries`;
       if (data.liquid_class) $('liquidClass').value = data.liquid_class;
       await refreshLabwareOptions();
@@ -1042,6 +1265,14 @@
       $('codeProfile').value = $('profileName').value;
     }
 
+    function updateAuthorModelTarget() {
+      const strata = $('authorModelServer').value === 'strata';
+      $('authorModel').placeholder = strata ? 'qwen3.8-flash-next-q2_0' : 'default';
+      $('authorModelTarget').textContent = strata
+        ? 'Strata at 127.0.0.1:8080 · qwen3.8-flash-next-q2_0 by default. Changes apply to the next session.'
+        : 'Default LM Studio server. A model ID override is optional.';
+    }
+
     async function startAuthoringSession() {
       $('startAuthor').disabled = true;
       try {
@@ -1050,6 +1281,7 @@
         const payload = {
           profile_name: $('authorProfile').value,
           retry_budget: Number($('authorRetry').value || 8),
+          model_server: $('authorModelServer').value,
           model: $('authorModel').value,
           lab_scope: $('authorLabScope').value
         };
@@ -1060,7 +1292,7 @@
           pushAuthorMessage(
             'system',
             'Session started',
-            `Profile: ${result.profile_name || 'none'}\nOutput: ${result.output_dir}\nSession: ${result.session_id}`
+            `Profile: ${result.profile_name || 'none'}\nModel: ${result.model} at ${result.endpoint}\nOutput: ${result.output_dir}\nSession: ${result.session_id}`
           );
           $('authorPrompt').focus();
         });
@@ -1158,21 +1390,200 @@
       }
     }
 
+    function formatDate(seconds) {
+      return seconds ? new Date(seconds * 1000).toLocaleDateString(undefined, {year: 'numeric', month: 'short', day: 'numeric'}) : 'Unknown date';
+    }
+
+    async function loadProtocols() {
+      const query = $('protocolSearch').value.trim();
+      try {
+        const data = await api(`/api/protocols?query=${encodeURIComponent(query)}`);
+        state.protocols = data.protocols || [];
+        $('protocolCount').textContent = data.available ? `${state.protocols.length} ${query ? 'matches' : 'protocols'}` : 'Datastore unavailable';
+        $('protocolList').innerHTML = state.protocols.length ? state.protocols.map(item => `
+          <button class="result-item ${state.selectedProtocol && state.selectedProtocol.id === item.id ? 'selected' : ''}" data-protocol-id="${escapeHtml(item.id)}">
+            <strong>${escapeHtml(item.name)}</strong><span>${formatDate(item.modified_at)} · ${escapeHtml(item.id.slice(0, 8))}</span>
+          </button>`).join('') : `<div class="empty-state"><strong>${data.available ? 'No matching protocols' : 'Datastore unavailable'}</strong><p>${data.available ? 'Try another name or ID.' : escapeHtml(data.directory || '')}</p></div>`;
+        if (state.protocols.length && (!state.selectedProtocol || !state.protocols.some(item => item.id === state.selectedProtocol.id))) {
+          await selectProtocol(state.protocols[0].id);
+        }
+      } catch (err) {
+        $('protocolList').innerHTML = `<div class="detail-note">${escapeHtml(err.message)}</div>`;
+        $('protocolCount').textContent = 'Library unavailable';
+      }
+    }
+
+    async function selectProtocol(id) {
+      try {
+        const detail = await api(`/api/protocol?id=${encodeURIComponent(id)}`);
+        state.selectedProtocol = detail;
+        state.protocolSource = '';
+        state.protocolConversation = [];
+        document.querySelectorAll('[data-protocol-id]').forEach(item => item.classList.toggle('selected', item.dataset.protocolId === id));
+        renderProtocolDetail();
+        renderProtocolConversation();
+        $('protocolQuestion').value = '';
+        await updateProtocolChatAvailability();
+      } catch (err) {
+        $('protocolDetail').innerHTML = `<div class="detail-note">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderProtocolDetail() {
+      const p = state.selectedProtocol;
+      if (!p) return;
+      const types = Object.entries(p.step_types || {}).slice(0, 9).map(([name, count]) => `<span>${escapeHtml(name)} ${count}</span>`).join('');
+      const outline = (p.groups || []).map(group => `
+        <h3>${escapeHtml(group.name)}</h3>
+        ${(group.steps || []).slice(0, 120).map(step => `<div class="outline-row" style="padding-left:${Math.min(step.depth || 0, 3) * 14}px"><span class="kind">${escapeHtml(step.kind)}</span><span>${escapeHtml(step.name)}</span></div>`).join('')}
+        ${(group.steps || []).length > 120 ? '<p class="small">More steps omitted from this preview.</p>' : ''}
+      `).join('');
+      $('protocolDetail').innerHTML = `
+        <span class="detail-kicker">FluentControl script</span><h2>${escapeHtml(p.name)}</h2>
+        <div class="detail-meta">${formatDate(p.modified_at)} · ${escapeHtml(p.id)} · ${Math.round(p.size_bytes / 1024)} KB</div>
+        ${p.comment ? `<p>${escapeHtml(p.comment)}</p>` : ''}
+        <div class="detail-stats"><span>${p.groups ? p.groups.length : 0} groups</span><span>${p.step_count ?? '—'} steps</span>${types}</div>
+        ${p.generic_step_names && p.generic_step_names.length ? `<div class="detail-note">Some commands could not be reconstructed as typed Python steps: ${escapeHtml(p.generic_step_names.join(', '))}. Review the source before using a decompiled draft.</div>` : ''}
+        ${p.analysis_error ? `<div class="detail-note">Step preview unavailable: ${escapeHtml(p.analysis_error)}</div>` : ''}
+        <div class="detail-actions"><button id="decompileSelected">Decompile to Python</button>${state.protocolSource ? '<button id="openProtocolCode" class="secondary">Open in code lab</button>' : ''}</div>
+        <div class="status" id="protocolActionStatus" aria-live="polite"></div>
+        <div class="detail-meta">Source: ${escapeHtml(p.path)}</div>
+        ${outline ? `<details class="outline"><summary>Step outline · ${p.step_count ?? '—'} steps in ${p.groups.length} groups</summary>${outline}</details>` : ''}
+        ${state.protocolSource ? `<details class="outline" open><summary>Decompiled Python preview</summary><pre class="pre">${escapeHtml(state.protocolSource)}</pre></details>` : ''}
+      `;
+    }
+
+    async function decompileSelectedProtocol() {
+      const p = state.selectedProtocol;
+      if (!p) return;
+      try {
+        const job = await submitAndPoll('decompile-xscr', {protocol_id: p.id, strict: false}, 'protocolActionStatus', null, result => {
+          state.protocolSource = result.source || '';
+          $('sourceText').value = state.protocolSource;
+          $('sourcePath').value = result.python_path || '';
+          $('decompilePath').value = p.path;
+          $('decompileSource').value = state.protocolSource;
+          renderProtocolDetail();
+          setStatus('protocolActionStatus', `Python draft saved to ${result.python_path}`, 'ok');
+        });
+        if (job.status === 'failure') return;
+      } catch (err) {
+        setStatus('protocolActionStatus', err.message, 'error');
+      }
+    }
+
+    async function searchObjects() {
+      try {
+        const query = $('objectSearch').value.trim();
+        const kind = $('objectKind').value;
+        const data = await api(`/api/objects?query=${encodeURIComponent(query)}&kind=${encodeURIComponent(kind)}`);
+        state.objects = data.objects || [];
+        $('objectList').innerHTML = state.objects.length ? state.objects.map(item => `
+          <button class="result-item ${state.selectedObject && state.selectedObject.guid === item.guid ? 'selected' : ''}" data-object-guid="${escapeHtml(item.guid)}" data-object-kind="${escapeHtml(item.kind)}"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.category || item.kind.replace('_', ' '))}</span></button>
+        `).join('') : '<div class="empty-state">No matching objects.</div>';
+        if (state.objects.length && (!state.selectedObject || !state.objects.some(item => item.guid === state.selectedObject.guid))) {
+          selectObject(state.objects[0].guid, state.objects[0].kind);
+        }
+      } catch (err) {
+        $('objectList').innerHTML = `<div class="detail-note">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function selectObject(guid, kind) {
+      try {
+        const data = await api(`/api/object?guid=${encodeURIComponent(guid)}&kind=${encodeURIComponent(kind)}`);
+        const obj = data.object;
+        state.selectedObject = {guid, kind};
+        document.querySelectorAll('[data-object-guid]').forEach(item => item.classList.toggle('selected', item.dataset.objectGuid === guid));
+        let supportedHeads = obj.supported_heads;
+        try { if (typeof supportedHeads === 'string') supportedHeads = JSON.parse(supportedHeads).join(', '); } catch (_) { /* keep catalog value */ }
+        const fields = [
+          ['Catalog type', obj.semantic_category || obj.category || kind.replace('_', ' ')],
+          ['Functional group', obj.functional_group], ['Component kind', obj.component_kind],
+          ['Subtype', obj.component_subtype], ['Footprint', obj.footprint],
+          ['Well grid', obj.grid_x && obj.grid_y ? `${obj.grid_x} × ${obj.grid_y}` : null],
+          ['Sites', obj.site_count],
+          ['Dimensions', obj.dim_x_mm != null ? `${obj.dim_x_mm} × ${obj.dim_y_mm} × ${obj.dim_z_mm} mm` : null],
+          ['Supported heads', supportedHeads], ['GUID', obj.guid]
+        ].filter(([, value]) => value != null && value !== '');
+        $('objectDetail').innerHTML = `
+          <span class="detail-kicker">${escapeHtml(kind.replace('_', ' '))}</span><h2>${escapeHtml(obj.name)}</h2>
+          <p>${escapeHtml(obj.purpose_hint || 'The catalog does not record a purpose for this object.')}</p>
+          <div class="detail-note">${escapeHtml(obj.purpose_source || 'Catalog metadata')}. Confirm suitability against the manufacturer definition and your instrument configuration.</div>
+          <dl class="detail-fields">${fields.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+          <div class="detail-meta">Source: ${escapeHtml(obj.file_path || '')}</div>
+        `;
+      } catch (err) {
+        $('objectDetail').innerHTML = `<div class="detail-note">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderProtocolConversation() {
+      $('protocolChatLog').innerHTML = state.protocolConversation.length
+        ? state.protocolConversation.map(turn => `<div class="discussion-message ${turn.role === 'user' ? 'user' : ''}">${escapeHtml(turn.content)}</div>`).join('')
+        : '<div class="empty-state">Ask about this selected protocol. Answers are informational and do not validate the script.</div>';
+      $('protocolChatLog').scrollTop = $('protocolChatLog').scrollHeight;
+    }
+
+    async function updateProtocolChatAvailability() {
+      try {
+        const modelServer = $('protocolModelServer').value;
+        state.protocolChatConfig = await api(`/api/protocol-chat-config?model_server=${encodeURIComponent(modelServer)}`);
+        if ($('protocolModelServer').value !== modelServer) return;
+        const enabled = state.protocolChatConfig.available && !!state.selectedProtocol && !state.protocolChatBusy;
+        $('protocolQuestion').disabled = !enabled;
+        $('askProtocol').disabled = !enabled;
+        setStatus('protocolChatStatus', state.protocolChatConfig.available
+          ? `${state.selectedProtocol ? 'Sends' : 'Select a protocol. Discussion sends'} decompiled context to ${state.protocolChatConfig.model || 'the local model'} at ${state.protocolChatConfig.endpoint}.`
+          : state.protocolChatConfig.reason);
+      } catch (err) {
+        $('protocolQuestion').disabled = true;
+        $('askProtocol').disabled = true;
+        setStatus('protocolChatStatus', err.message, 'error');
+      }
+    }
+
+    async function askAboutProtocol() {
+      const p = state.selectedProtocol;
+      const question = $('protocolQuestion').value.trim();
+      if (!p || !state.protocolChatConfig?.available || !question || state.protocolChatBusy) return;
+      const history = state.protocolConversation.slice(-8);
+      state.protocolConversation.push({role: 'user', content: question});
+      renderProtocolConversation();
+      $('protocolQuestion').value = '';
+      state.protocolChatBusy = true;
+      $('protocolQuestion').disabled = true;
+      $('askProtocol').disabled = true;
+      $('protocolModelServer').disabled = true;
+      try {
+        const job = await submitAndPoll('protocol-chat', {
+          protocol_id: p.id, modified_at: p.modified_at, question, history,
+          model_server: $('protocolModelServer').value
+        }, 'protocolChatStatus', null, result => {
+          if (state.selectedProtocol?.id !== p.id) return;
+          state.protocolConversation.push({role: 'assistant', content: result.answer || 'No answer returned.'});
+          renderProtocolConversation();
+          setStatus('protocolChatStatus', result.source_truncated
+            ? 'Answer used an excerpt of this large protocol. Inspect the full source for omitted steps.'
+            : `Answered by ${result.model}. Informational only.`, 'ok');
+        });
+        if (job.status === 'failure') return;
+      } catch (err) {
+        setStatus('protocolChatStatus', err.message, 'error');
+      } finally {
+        state.protocolChatBusy = false;
+        $('protocolModelServer').disabled = false;
+        $('protocolQuestion').disabled = !state.protocolChatConfig?.available || !state.selectedProtocol;
+        $('askProtocol').disabled = !state.protocolChatConfig?.available || !state.selectedProtocol;
+        if (!$('protocolQuestion').disabled) $('protocolQuestion').focus();
+      }
+    }
+
     async function loadCatalogInfo() {
       try {
         const info = await api('/api/catalog-info');
         showJson('catalogResult', info);
         setStatus('catalogStatus', 'Catalog info loaded.', 'ok');
-      } catch (err) {
-        setStatus('catalogStatus', err.message, 'error');
-      }
-    }
-
-    async function searchCatalog() {
-      try {
-        const data = await api(`/api/labware?query=${encodeURIComponent($('catalogQuery').value)}&limit=200`);
-        showJson('catalogResult', data);
-        setStatus('catalogStatus', `Found ${(data.matches || []).length} matches.`, 'ok');
       } catch (err) {
         setStatus('catalogStatus', err.message, 'error');
       }
@@ -1229,33 +1640,94 @@
         width: Number(frame.width_mm || geometry.maxX),
         height: Number(frame.depth_mm || geometry.maxY)
       }, geometry);
-      const slots = state.deckCoordinates.map(row => {
-        const key = `${row.location}:${row.position}`;
-        const selectedName = selected.get(key);
-        const width = Number(row.width_mm || defaultWidth(row));
-        const depth = Number(row.depth_mm || defaultDepth(row));
-        const style = rectStyle({ x: Number(row.x_mm || 0), y: Number(row.y_mm || 0), width, height: depth }, geometry);
-        const compact = width * geometry.scale < 84 || depth * geometry.scale < 52;
-        return `<div class="slot ${selectedName ? 'selected' : ''} ${compact ? 'compact' : ''}" style="${style}">
-          <div class="pos">${escapeHtml(row.location)} ${row.position}</div>
-          <div class="tiny coords">x ${escapeHtml(row.x_mm ?? '')} / y ${escapeHtml(row.y_mm ?? '')} mm</div>
-          <div class="tiny">${escapeHtml(row.occupied_by || 'empty')}</div>
-          ${selectedName ? `<span class="badge">${escapeHtml(selectedName)}</span>` : ''}
+      const footprintGroups = new Map();
+      state.deckCoordinates.forEach((row, index) => {
+        const footprint = row.x_mm != null && row.y_mm != null
+          ? `${Number(row.x_mm).toFixed(2)}:${Number(row.y_mm).toFixed(2)}`
+          : `unknown:${index}`;
+        footprintGroups.set(footprint, [...(footprintGroups.get(footprint) || []), row]);
+      });
+      const slots = Array.from(footprintGroups.values()).map((rows, index) => {
+        const row = rows[0];
+        const width = Math.max(...rows.map(item => Number(item.width_mm || defaultWidth(item))));
+        const depth = Math.max(...rows.map(item => Number(item.depth_mm || defaultDepth(item))));
+        const x = Number(row.x_mm || 0), y = Number(row.y_mm || 0);
+        const style = rectStyle({ x, y, width, height: depth }, geometry);
+        const pxLeft = geometry.pad + (x - geometry.minX) * geometry.scale;
+        const pxTop = geometry.pad + (geometry.maxY - (y + depth)) * geometry.scale;
+        const tooltipSide = canvasWidth - pxLeft < 290 ? 'tooltip-left' : '';
+        const tooltipVertical = canvasHeight - pxTop - depth * geometry.scale < 165 ? 'tooltip-above' : '';
+        const compact = width * geometry.scale < 56 || depth * geometry.scale < 22;
+        const hasPreferred = rows.some(item => selected.has(`${item.location}:${item.position}`));
+        const slotName = rows.length > 1 ? `${row.location} ×${rows.length}` : `${row.location} ${row.position}`;
+        return `<div class="slot ${hasPreferred ? 'selected' : ''} ${compact ? 'compact' : ''} ${tooltipSide} ${tooltipVertical}" style="${style}" tabindex="0" aria-describedby="slot-tip-${index}">
+          <span class="pos">${escapeHtml(slotName)}</span>
+          <span class="slot-tooltip" id="slot-tip-${index}" role="tooltip">
+            <strong>${escapeHtml(row.location)}${rows.length > 1 ? ` · ${rows.length} positions` : ''}</strong>
+            <span>Coordinates: x ${escapeHtml(row.x_mm ?? '—')}, y ${escapeHtml(row.y_mm ?? '—')} mm</span>
+            ${rows.map(item => {
+              const preferredName = selected.get(`${item.location}:${item.position}`);
+              return `<span class="slot-tooltip-entry"><strong>${escapeHtml(item.location)} ${escapeHtml(item.position)}</strong>
+                <span>On deck: ${escapeHtml(item.occupied_by || 'Empty')}</span>
+                ${preferredName ? `<span>Preferred: ${escapeHtml(preferredName)}</span>` : ''}
+                <span>Site path: ${escapeHtml(item.site_path || '—')}</span>
+              </span>`;
+            }).join('')}
+          </span>
         </div>`;
       }).join('');
       $('deckMap').innerHTML = `<div class="deck-canvas" style="width:${canvasWidth}px;height:${canvasHeight}px">
-        <div class="deck-label">Scaled worktable geometry from FluentControl templates</div>
+        <div class="deck-label">Worktable geometry · hover or focus a position for details</div>
         <div class="deck-frame" style="${frameBox}"></div>
         ${renderGrid(geometry)}
         ${renderSegments(geometry)}
         ${slots}
       </div>`;
 
+      renderPositionList();
+    }
+
+    function renderPositionList() {
       const groups = groupPositions();
-      $('slotGroups').innerHTML = Object.entries(groups).map(([location, rows]) => `
-        <h3>${escapeHtml(location)}</h3>
-        ${rows.map(row => `<div>${row.position}: ${escapeHtml(row.occupied_by || 'empty')} (${escapeHtml(row.site_path || '')})</div>`).join('')}
-      `).join('');
+      const query = $('deckPositionSearch').value.trim().toLocaleLowerCase();
+      const occupiedOnly = $('deckOccupiedOnly').checked;
+      const preferred = new Map();
+      for (const item of state.commonLabware) {
+        if (!item.preferred_location || !item.preferred_position) continue;
+        const key = `${item.preferred_location}:${item.preferred_position}`;
+        preferred.set(key, [...(preferred.get(key) || []), item.catalog_name]);
+      }
+      let shown = 0;
+      const cards = Object.entries(groups).map(([location, rows]) => {
+        const matches = rows.filter(row => {
+          const names = preferred.get(`${row.location}:${row.position}`) || [];
+          const occupied = Boolean(row.occupied_by && String(row.occupied_by).toLowerCase() !== 'empty');
+          if (occupiedOnly && !occupied && !names.length) return false;
+          return !query || [location, row.position, row.site_path, row.occupied_by, ...names]
+            .some(value => String(value ?? '').toLocaleLowerCase().includes(query));
+        }).sort((a, b) => Number(a.position) - Number(b.position));
+        if (!matches.length) return '';
+        shown += matches.length;
+        return `<div class="position-group">
+          <div class="position-group-head"><strong>${escapeHtml(location)}</strong><span>${matches.length} of ${rows.length} positions</span></div>
+          ${matches.map(row => {
+            const names = preferred.get(`${row.location}:${row.position}`) || [];
+            const occupied = row.occupied_by && String(row.occupied_by).toLowerCase() !== 'empty';
+            return `<div class="position-row">
+              <span class="position-number" aria-label="Position ${escapeHtml(row.position)}">${escapeHtml(row.position)}</span>
+              <span class="position-content">
+                ${occupied ? `<span class="position-entry"><span class="position-badge occupied">On deck</span><strong>${escapeHtml(row.occupied_by)}</strong></span>` : ''}
+                ${names.map(name => `<span class="position-entry"><span class="position-badge preferred">Preferred</span><strong>${escapeHtml(name)}</strong></span>`).join('')}
+                ${!occupied && !names.length ? '<span class="position-empty">Empty</span>' : ''}
+              </span>
+              <span class="position-path" title="Site path">Site ${escapeHtml(row.site_path || '—')}</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).filter(Boolean);
+      $('deckPositionSummary').textContent = `${state.positions.length} positions · ${Object.keys(groups).length} locations`;
+      $('positionMatchCount').textContent = `Showing ${shown} of ${state.positions.length} positions`;
+      $('slotGroups').innerHTML = cards.length ? cards.join('') : '<div class="detail-note">No positions match this filter.</div>';
     }
 
     function deckGeometry() {
@@ -1282,8 +1754,8 @@
     function rectStyle(rect, geometry) {
       const left = geometry.pad + (rect.x - geometry.minX) * geometry.scale;
       const top = geometry.pad + (geometry.maxY - (rect.y + rect.height)) * geometry.scale;
-      const width = Math.max(28, rect.width * geometry.scale);
-      const height = Math.max(26, rect.height * geometry.scale);
+      const width = Math.max(18, rect.width * geometry.scale);
+      const height = Math.max(15, rect.height * geometry.scale);
       return `left:${left.toFixed(1)}px;top:${top.toFixed(1)}px;width:${width.toFixed(1)}px;height:${height.toFixed(1)}px`;
     }
 

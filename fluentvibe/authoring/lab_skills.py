@@ -7,8 +7,9 @@ tagged skill files (``_assets/config/skills/*.md``) split along three axes —
 request, plus a small ``always_on`` core.
 
 Selection is an LM pre-pass: one tool-free ``.invoke`` returns the skill names
-to load. Any failure degrades to "load everything", so ``skills`` mode can
-never do worse than the ``enforce`` monolith.
+to load. Parse/transport failures load all skills; explicit head requirements
+and a missing family are also supplemented deterministically. Loading all
+skills preserves capability coverage, but may add irrelevant context.
 
 This module owns discovery, selection, and assembly. ``lab_scope.load_lab_scope``
 calls :func:`discover_skills` to populate the catalog; ``service``/``session``
@@ -206,7 +207,8 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
         listing = "\n".join(
             f"- {s.name} [{s.axis}]: {s.description}" for s in optional
         )
-        response = client.invoke(
+        invoke = getattr(client, "invoke_without_tools", client.invoke)
+        response = invoke(
             [
                 SystemMessage(content=_SELECTION_SYSTEM),
                 HumanMessage(
@@ -230,6 +232,19 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
 
     if chosen is None:
         chosen = optional_names  # safe fallback: load everything
+    # A syntactically valid selector reply can still omit the explicitly
+    # requested head. Keep these capabilities deterministic and additive.
+    lowered = prompt.lower()
+    required = set()
+    if re.search(r"\bmca(?:96|384)?\b", lowered):
+        required.add("head-mca96")
+    if re.search(r"\b(?:liha|fca)\b", lowered):
+        required.add("head-liha")
+    if "worklist" in lowered:
+        required.add("api-worklists")
+    if not any(s.axis == "family" and s.name in chosen for s in optional):
+        required.add("family-simple-transfer")
+    chosen |= required & optional_names
     return _order_names(always | chosen, catalog)
 
 
@@ -253,4 +268,9 @@ def build_initial_scope_message(scope: LabScope, prompt: str, client) -> str | N
         return scope.as_context_message()
     if not scope.skill_catalog:
         return None
-    return assemble_context(scope, select_skills(prompt, scope.skill_catalog, client))
+    names = select_skills(prompt, scope.skill_catalog, client)
+    raw_client = getattr(client, "_legacy", client)
+    trace = getattr(raw_client, "trace_recorder", None)
+    if trace is not None:
+        trace.record("skill_selection", scope=scope.mode, selected_skills=names)
+    return assemble_context(scope, names)

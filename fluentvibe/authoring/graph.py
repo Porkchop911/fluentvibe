@@ -1478,6 +1478,12 @@ class LegacyClientAdapter:
             return LegacyClientAdapter(self._legacy)
         return LegacyClientAdapter(self._legacy, bound_names=frozenset(names))
 
+    def invoke_without_tools(self, messages: list[BaseMessage]) -> AIMessage:
+        response = self._legacy.complete(
+            messages=[_lc_to_legacy_dict(m) for m in messages], tools=[],
+        )
+        return _legacy_dict_to_aimessage(response)
+
     def invoke(self, messages: list[BaseMessage]) -> AIMessage:
         from .tools import tool_definitions
         defs = tool_definitions()

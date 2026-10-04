@@ -203,6 +203,9 @@ def render_model_trace_file(path: Path, output: Path | None = None) -> Path:
 
 def _render_readable_event(item: dict[str, Any]) -> str:
     event = item.get("event")
+    if event == "skill_selection":
+        names = ", ".join(item.get("selected_skills") or [])
+        return f"## Skill Selection\n\n- scope: `{item.get('scope', '')}`\n- selected: {names}\n\n"
     if event == "request_start":
         bits = [
             "## Request",

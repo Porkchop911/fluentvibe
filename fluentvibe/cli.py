@@ -111,6 +111,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_lookup_eval.add_argument("--endpoint", default=None)
     p_lookup_eval.set_defaults(func=_cmd_lookup_eval)
 
+    p_strata_eval = sub.add_parser("strata-eval", help="compare Strata models on authoring tool selection")
+    p_strata_eval.add_argument("--model", action="append", dest="models", help="model ID; repeat to compare models")
+    p_strata_eval.add_argument("--endpoint", default="http://127.0.0.1:8080/v1/chat/completions")
+    p_strata_eval.add_argument("--repeats", type=int, default=1)
+    p_strata_eval.add_argument("--output", type=Path, default=Path("build") / "strata_eval.json")
+    p_strata_eval.set_defaults(func=_cmd_strata_eval)
+
     p_render_trace = sub.add_parser(
         "render-trace",
         help="render a model trace JSONL file into a readable Markdown summary",
@@ -166,6 +173,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_workspace_app.add_argument("--host", default="127.0.0.1")
     p_workspace_app.add_argument("--port", type=int, default=8765)
     p_workspace_app.set_defaults(func=_cmd_workspace_app)
+
+    p_lsp = sub.add_parser(
+        "lsp",
+        help="start the fluentvibe language server over stdio (for editors)",
+    )
+    # LSP clients (vscode-languageclient) append a transport flag to the launch
+    # command. We always speak stdio, so accept and ignore the standard ones.
+    p_lsp.add_argument("--stdio", action="store_true", help=argparse.SUPPRESS)
+    p_lsp.add_argument("--node-ipc", action="store_true", help=argparse.SUPPRESS)
+    p_lsp.add_argument("--socket", default=None, help=argparse.SUPPRESS)
+    p_lsp.add_argument("--pipe", default=None, help=argparse.SUPPRESS)
+    p_lsp.add_argument("--clientProcessId", default=None, help=argparse.SUPPRESS)
+    p_lsp.set_defaults(func=_cmd_lsp)
 
     p_deploy = sub.add_parser(
         "deploy",
@@ -432,6 +452,21 @@ def _cmd_lookup_eval(args) -> int:
     return 0
 
 
+def _cmd_strata_eval(args) -> int:
+    from .authoring.strata_eval import STRATA_MODEL, run_strata_eval
+
+    if args.repeats < 1:
+        print("--repeats must be positive", file=sys.stderr)
+        return 2
+    report = run_strata_eval(models=args.models or [STRATA_MODEL], endpoint=args.endpoint,
+                             repeats=args.repeats, output=args.output)
+    print(f"Wrote {args.output}")
+    for row in report["summary"]:
+        print(f"{row['model']}: {row['passed']}/{row['runs']} passed, {row['errors']} errors, "
+              f"required tool recall {row['mean_required_tool_recall']:.1%}")
+    return 0 if all(run["passed"] for run in report["runs"]) else 1
+
+
 def _cmd_render_trace(args) -> int:
     from .authoring.trace import render_model_trace_file
 
@@ -555,6 +590,20 @@ def _cmd_workspace_app(args) -> int:
     from .workspace_app import serve_workspace_app
 
     serve_workspace_app(host=args.host, port=args.port)
+    return 0
+
+
+def _cmd_lsp(args) -> int:
+    try:
+        from .lsp import main as lsp_main
+    except ImportError:
+        print(
+            "The language server needs the optional 'lsp' extra. Install it with:\n"
+            "  python -m pip install -e \".[lsp]\"",
+            file=sys.stderr,
+        )
+        return 1
+    lsp_main()
     return 0
 
 

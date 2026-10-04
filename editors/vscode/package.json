@@ -1,0 +1,244 @@
+{
+    "name":  "fluentvibe",
+    "displayName":  "fluentvibe",
+    "description":  "fluentvibe for Tecan FluentControl: protocol from a document, live diagnostics, check and edit in FluentControl.",
+    "version":  "0.6.2",
+    "publisher":  "fluentvibe",
+    "license":  "UNLICENSED",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/Porkchop911/fluentvibe.git",
+                       "directory":  "editors/vscode"
+                   },
+    "engines":  {
+                    "vscode":  "^1.85.0"
+                },
+    "categories":  [
+                       "Programming Languages",
+                       "Linters"
+                   ],
+    "activationEvents":  [
+                             "onLanguage:python",
+                             "onCommand:fluentvibe.generateFromDocument",
+                             "onCommand:fluentvibe.openInFluentControl",
+                             "onCommand:fluentvibe.pullFluentControlEdits",
+                             "onCommand:fluentvibe.convertOpentrons",
+                             "onCommand:fluentvibe.setInstructions",
+                             "onCommand:fluentvibe.showReplay",
+                             "onView:fluentvibe.chat"
+                         ],
+    "main":  "./out/extension.js",
+    "contributes":  {
+                        "commands":  [
+                                         {
+                                             "command":  "fluentvibe.inlineEdit",
+                                             "title":  "fluentvibe: Edit selection with AI"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.generateFromDocument",
+                                             "title":  "fluentvibe: Generate protocol from document"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.openInFluentControl",
+                                             "title":  "fluentvibe: Open in FluentControl"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.pullFluentControlEdits",
+                                             "title":  "fluentvibe: Pull FluentControl edits"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.convertOpentrons",
+                                             "title":  "fluentvibe: Convert Opentrons protocol"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.setInstructions",
+                                             "title":  "fluentvibe: Set instructions for this protocol"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.showReplay",
+                                             "title":  "fluentvibe: Show protocol replay"
+                                         },
+                                         {
+                                             "command":  "fluentvibe.explainSelection",
+                                             "title":  "fluentvibe: Explain selection"
+                                         }
+                                     ],
+                        "keybindings":  [
+                                            {
+                                                "command":  "fluentvibe.inlineEdit",
+                                                "key":  "ctrl+i",
+                                                "when":  "editorTextFocus \u0026\u0026 editorLangId == python"
+                                            },
+                                            {
+                                                "command":  "fluentvibe.openInFluentControl",
+                                                "key":  "ctrl+alt+f",
+                                                "when":  "editorLangId == python"
+                                            },
+                                            {
+                                                "command":  "fluentvibe.explainSelection",
+                                                "key":  "ctrl+alt+e",
+                                                "when":  "editorTextFocus \u0026\u0026 editorLangId == python"
+                                            }
+                                        ],
+                        "configuration":  {
+                                              "title":  "fluentvibe",
+                                              "properties":  {
+                                                                 "fluentvibe.pythonPath":  {
+                                                                                               "type":  "string",
+                                                                                               "default":  "python",
+                                                                                               "description":  "Python interpreter used to launch the fluentvibe language server (must have fluentvibe installed with the [lsp] extra)."
+                                                                                           },
+                                                                 "fluentvibe.enable":  {
+                                                                                           "type":  "boolean",
+                                                                                           "default":  true,
+                                                                                           "description":  "Enable the fluentvibe language server."
+                                                                                       },
+                                                                 "fluentvibe.profile":  {
+                                                                                            "type":  "string",
+                                                                                            "default":  "build/workspaces/sat_1080_test",
+                                                                                            "description":  "Deck profile directory (relative to the workspace folder)."
+                                                                                        },
+                                                                 "fluentvibe.outputDir":  {
+                                                                                              "type":  "string",
+                                                                                              "default":  "build/eval",
+                                                                                              "description":  "Where generated protocols are written (one folder per run)."
+                                                                                          },
+                                                                 "fluentvibe.fluentControlCheck":  {
+                                                                                                       "type":  "boolean",
+                                                                                                       "default":  true,
+                                                                                                       "description":  "Check each generated protocol in FluentControl (InfoPad)."
+                                                                                                   },
+                                                                 "fluentvibe.chooseOpenValues":  {
+                                                                                                     "type":  "boolean",
+                                                                                                     "default":  false,
+                                                                                                     "description":  "Let the model choose values the document leaves open instead of asking you."
+                                                                                                 },
+                                                                 "fluentvibe.model.endpoint":  {
+                                                                                                   "type":  "string",
+                                                                                                   "default":  "",
+                                                                                                   "description":  "OpenAI-compatible chat endpoint (empty: FLUENTVIBE_LM_ENDPOINT)."
+                                                                                               },
+                                                                 "fluentvibe.model.name":  {
+                                                                                               "type":  "string",
+                                                                                               "default":  "",
+                                                                                               "description":  "Model name (empty: FLUENTVIBE_LM_MODEL)."
+                                                                                           },
+                                                                 "fluentvibe.model.apiKey":  {
+                                                                                                 "type":  "string",
+                                                                                                 "default":  "",
+                                                                                                 "description":  "API key (empty: FLUENTVIBE_LM_API_KEY)."
+                                                                                             },
+                                                                 "fluentvibe.model.reasoningEffort":  {
+                                                                                                          "type":  "string",
+                                                                                                          "enum":  [
+                                                                                                                       "low",
+                                                                                                                       "medium",
+                                                                                                                       "high",
+                                                                                                                       "xhigh"
+                                                                                                                   ],
+                                                                                                          "default":  "xhigh",
+                                                                                                          "description":  "Reasoning effort for the model."
+                                                                                                      },
+                                                                 "fluentvibe.model.temperature":  {
+                                                                                                      "type":  "number",
+                                                                                                      "default":  0.8,
+                                                                                                      "description":  "Sampling temperature (0.8 by default)."
+                                                                                                  },
+                                                                 "fluentvibe.model.maxTokens":  {
+                                                                                                    "type":  "number",
+                                                                                                    "default":  0,
+                                                                                                    "description":  "Output token limit per request; 0: no limit (the server uses the room the prompt leaves)."
+                                                                                                },
+                                                                 "fluentvibe.checkInstructions":  {
+                                                                                                      "type":  "boolean",
+                                                                                                      "default":  true,
+                                                                                                      "description":  "Extract the instructions in your request (separate model call) and check each one on the generated protocol."
+                                                                                                  },
+                                                                 "fluentvibe.model.explainEffort":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "low",
+                                                                                                                     "medium",
+                                                                                                                     "high",
+                                                                                                                     "xhigh"
+                                                                                                                 ],
+                                                                                                        "default":  "low",
+                                                                                                        "description":  "Reasoning effort for Explain selection / Explain this problem (authoring and Ctrl+I use model.reasoningEffort)."
+                                                                                                    },
+                                                                 "fluentvibe.model.chatEffort":  {
+                                                                                                     "type":  "string",
+                                                                                                     "enum":  [
+                                                                                                                  "low",
+                                                                                                                  "medium",
+                                                                                                                  "high",
+                                                                                                                  "xhigh"
+                                                                                                              ],
+                                                                                                     "default":  "low",
+                                                                                                     "description":  "Reasoning effort for the fluentvibe chat panel (low answers in seconds; xhigh can take minutes)."
+                                                                                                 }
+                                                             }
+                                          },
+                        "menus":  {
+                                      "editor/title":  [
+                                                           {
+                                                               "command":  "fluentvibe.openInFluentControl",
+                                                               "when":  "editorLangId == python",
+                                                               "group":  "navigation"
+                                                           },
+                                                           {
+                                                               "command":  "fluentvibe.showReplay",
+                                                               "when":  "editorLangId == python",
+                                                               "group":  "navigation"
+                                                           }
+                                                       ],
+                                      "editor/context":  [
+                                                             {
+                                                                 "command":  "fluentvibe.explainSelection",
+                                                                 "when":  "editorLangId == python",
+                                                                 "group":  "fluentvibe@1"
+                                                             },
+                                                             {
+                                                                 "command":  "fluentvibe.inlineEdit",
+                                                                 "when":  "editorLangId == python",
+                                                                 "group":  "fluentvibe@2"
+                                                             }
+                                                         ],
+                                      "commandPalette":  [
+                                                             {
+                                                                 "command":  "fluentvibe.explainProblem",
+                                                                 "when":  "false"
+                                                             }
+                                                         ]
+                                  },
+                        "viewsContainers":  {
+                                                "activitybar":  [
+                                                                    {
+                                                                        "id":  "fluentvibe",
+                                                                        "title":  "fluentvibe",
+                                                                        "icon":  "chat-icon.svg"
+                                                                    }
+                                                                ]
+                                            },
+                        "views":  {
+                                      "fluentvibe":  [
+                                                         {
+                                                             "type":  "webview",
+                                                             "id":  "fluentvibe.chat",
+                                                             "name":  "Chat"
+                                                         }
+                                                     ]
+                                  }
+                    },
+    "scripts":  {
+                    "compile":  "tsc -p ./",
+                    "watch":  "tsc -watch -p ./"
+                },
+    "dependencies":  {
+                         "vscode-languageclient":  "^9.0.1"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^20.0.0",
+                            "@types/vscode":  "^1.85.0",
+                            "typescript":  "^5.4.0"
+                        }
+}

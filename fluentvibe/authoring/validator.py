@@ -61,6 +61,16 @@ class AuthoringValidator:
                 attempt_index=attempt_index,
             )
 
+        geometry_error = self.check_transfer_geometry(wt, prompt)
+        if geometry_error:
+            return ValidationReport(
+                success=False, python_build_ok=True, compile_ok=False,
+                strict_simulation_ok=False,
+                failure_category=FailureCategory.PYTHON_BUILD_FAILURE,
+                failure_message=geometry_error, python_path=python_path,
+                attempt_index=attempt_index,
+            )
+
         try:
             wt.compile(xscr_path)
         except Exception as exc:
@@ -118,6 +128,12 @@ class AuthoringValidator:
 
         sim_report = getattr(wt, "simulation_report", None)
         final_labware = getattr(sim_report, "final_labware", None) if sim_report is not None else None
+
+        # Narrowed scopes have no declare_intent tool. Recover the simple
+        # spatial transfer contract from the request and built IR instead.
+        inferred_intent = self.partial_stamp_intent(wt, prompt)
+        if inferred_intent is not None:
+            intent = inferred_intent
 
         intent_ok: bool | None = None
         if intent is not None and intent.is_specified():
@@ -188,7 +204,7 @@ class AuthoringValidator:
         lowered = prompt.lower()
         transfer_intent = any(
             token in lowered
-            for token in ("transfer", "fill", "dispense", "aspirate", "pipette", "add ")
+            for token in ("transfer", "stamp", "fill", "dispense", "aspirate", "pipette", "add ")
         )
         if not transfer_intent:
             return None
@@ -199,6 +215,58 @@ class AuthoringValidator:
                 "Prompt asks for liquid handling, but generated source does not contain both "
                 "aspirate(...) and dispense(...) calls."
             )
+        return None
+
+    @staticmethod
+    def partial_stamp_intent(wt, prompt: str | None) -> IntentSpec | None:
+        """Recognize the unambiguous left-half-to-center rectangular stamp.
+
+        Supports repeated transfer pairs (split volumes) between 96-well
+        plates; other geometries require their own resolved intent.
+        """
+        from ..ir.schema import AspirateStep, DispenseStep
+
+        text = (prompt or "").lower()
+        latest = text.splitlines()[-1] if text else ""
+        if "instead" in latest and ("right half" in latest or "columns" in latest):
+            return None  # An explicit spatial correction supersedes the default.
+        if not ("left half" in text and re.search(r"\b(?:center(?:ed)?|centre(?:d)?|central)\b", text)
+                and re.search(r"\bmca(?:96)?\b", text)):
+            return None
+        steps = [s for g in wt.to_protocol().groups for s in g.steps]
+        aspirates = [s for s in steps if isinstance(s, AspirateStep)]
+        dispenses = [s for s in steps if isinstance(s, DispenseStep)]
+        if not aspirates or len(aspirates) != len(dispenses):
+            return None
+        src, dst = aspirates[0], dispenses[0]
+        if any(s.labware_name != src.labware_name for s in aspirates) or any(
+                s.labware_name != dst.labware_name for s in dispenses):
+            return None
+        labware = {lw.label: lw for stack in wt.slot_map.values() for lw in stack}
+        if any(len(getattr(labware.get(label), "wells", {})) != 96
+               for label in (src.labware_name, dst.labware_name)):
+            return None
+        return IntentSpec(
+            target_volume_ul=_requested_transfer_volume(text),
+            source_label=src.labware_name, destination_label=dst.labware_name,
+            destination_wells=tuple(f"{row}{col}" for col in range(4, 10) for row in "ABCDEFGH"),
+        )
+
+    @classmethod
+    def check_transfer_geometry(cls, wt, prompt: str | None) -> str | None:
+        from ..ir.schema import AspirateStep, DispenseStep
+
+        intent = cls.partial_stamp_intent(wt, prompt)
+        if intent is None:
+            return None
+        steps = [s for g in wt.to_protocol().groups for s in g.steps]
+        aspirates = [s for s in steps if isinstance(s, AspirateStep)]
+        dispenses = [s for s in steps if isinstance(s, DispenseStep)]
+        if any(s.columns != list(range(1, 7)) for s in aspirates) or any(
+                s.columns != list(range(4, 10)) for s in dispenses):
+            return ("Left-half-to-center MCA stamp on 96-well plates requires source "
+                    "columns [1,2,3,4,5,6] and destination columns [4,5,6,7,8,9]. "
+                    "Columns 7-12 are the right half, not the center.")
         return None
 
     def _load_protocol(self, input_path: Path):
@@ -214,8 +282,18 @@ class AuthoringValidator:
             sys.dont_write_bytecode = original
 
         if hasattr(module, "build_worktable"):
-            return module.build_worktable()
+            from ..worktable import Worktable
+
+            wt = module.build_worktable()
+            if not isinstance(wt, Worktable):
+                raise ValueError("build_worktable() must return a Worktable; add 'return wt' at the end of the function")
+            return wt
         raise ValueError(f"{input_path}: expected build_worktable()")
+
+
+def _requested_transfer_volume(text: str) -> float | None:
+    matches = re.findall(r"\b(\d+(?:\.\d+)?)\s*[uµμ]l\b", text)
+    return float(matches[-1]) if matches else None
 
 
 def _check_intent_against_final_labware(
@@ -249,7 +327,7 @@ def _check_intent_against_final_labware(
     )
     target = float(intent.target_volume_ul)
     tolerance = max(0.5, target * 0.05)
-    underfilled: list[str] = []
+    incorrect: list[str] = []
     missing: list[str] = []
     for address in expected:
         well = wells.get(address)
@@ -257,16 +335,23 @@ def _check_intent_against_final_labware(
             missing.append(address)
             continue
         volume = float(well.get("volume_ul") or 0.0)
-        if volume + tolerance < target:
-            underfilled.append(f"{address}={volume:.1f}uL")
-    if missing or underfilled:
+        if abs(volume - target) > tolerance:
+            incorrect.append(f"{address}={volume:.1f}uL")
+    unexpected = [
+        address for address, well in wells.items()
+        if intent.destination_wells and address not in expected
+        and float(well.get("volume_ul") or 0.0) > tolerance
+    ]
+    if missing or incorrect or unexpected:
         details = []
         if missing:
             details.append(f"missing wells: {', '.join(missing[:8])}"
                            + (" ..." if len(missing) > 8 else ""))
-        if underfilled:
-            details.append(f"underfilled: {', '.join(underfilled[:8])}"
-                           + (" ..." if len(underfilled) > 8 else ""))
+        if incorrect:
+            details.append(f"incorrect volumes: {', '.join(incorrect[:8])}"
+                           + (" ..." if len(incorrect) > 8 else ""))
+        if unexpected:
+            details.append(f"unexpected filled wells: {', '.join(unexpected[:8])}")
         return (
             f"Intent not satisfied on {intent.destination_label!r}: expected "
             f"{target:.1f} uL in {len(expected)} wells. "

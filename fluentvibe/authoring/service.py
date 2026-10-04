@@ -249,6 +249,14 @@ class PromptAuthoringService:
         # Stored on the registry so the Lever-B tool filter can consult it.
         scope = load_lab_scope(lab_scope)
         registry.lab_scope = scope
+        trace = ModelTraceRecorder(
+            trace_config
+            if trace_config is not None
+            else ModelTraceConfig.from_env(output_dir=output_dir)
+        )
+        trace.start_turn(1)
+        if hasattr(self._client, "trace_recorder"):
+            self._client.trace_recorder = trace
         initial_messages: list[Any] | None = None
         # For off/cheatsheet/enforce this is the static cheatsheet; for skills
         # mode it runs the LM pre-pass to select the relevant skill subset (the
@@ -268,14 +276,6 @@ class PromptAuthoringService:
             pool_size=self._concurrency.worker_pool_size,
             timeout_s=240.0,
         )
-        trace = ModelTraceRecorder(
-            trace_config
-            if trace_config is not None
-            else ModelTraceConfig.from_env(output_dir=output_dir)
-        )
-        trace.start_turn(1)
-        if hasattr(self._client, "trace_recorder"):
-            self._client.trace_recorder = trace
         prefetcher = self._start_prefetch(prompt, registry)
         try:
             return run_graph(
@@ -284,7 +284,7 @@ class PromptAuthoringService:
                 retry_budget=retry_budget,
                 registry=registry,
                 client=self._client,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=system_prompt_for_scope(scope),
                 initial_messages=initial_messages,
                 concurrency=self._concurrency,
                 trace_recorder=trace,
@@ -470,6 +470,29 @@ def _draft_pressure_message(calls: tuple[dict[str, Any], ...] | list[dict[str, A
             "any next repair."
         ),
     }
+
+
+def system_prompt_for_scope(scope) -> str:
+    """Expose one workflow matching the tools available in this scope."""
+    if not scope.enforces:
+        return SYSTEM_PROMPT
+    return """You author executable fluentvibe Python protocols using the authoritative
+lab-scope API, catalog, workspace and rules supplied in the next message.
+Write a complete def build_worktable() -> Worktable using
+Worktable.from_workspace(..., workspace_guid=..., auto_place=False).
+Declare variables and set simulator values before wt.group('Labware Placement').
+Pass declared volume and liquid-class variable names as strings to pipetting.
+Use the profile's default liquid class when none is requested, and state that
+assumption. Respect explicit user choices. Do not request a supplied default.
+Use simulate_python_draft on the complete source, repair failures, then call
+compile_and_simulate on that same source. Only report success after both pass.
+No grounding, planning or approval tools are available in this mode.
+If essential geometry is ambiguous, ask one focused question in plain text.
+If the provided API cannot represent the request, explain the limitation.
+Never replace a requested partial transfer with a whole-plate transfer.
+Return the validated Python source as the final protocol. Never use
+raw_xml_step or generic_step.
+"""
 
 
 def _missing_intent_axes(text: str) -> list[str]:

@@ -440,18 +440,23 @@ class Simulator:
             raise MissingTipsError(
                 f"PickUpTips: {step.labware_name!r} is not a tip box"
             )
-        if not tip_box.is_full:
+        picked = self._partial_box_columns(step, tip_box)
+        present = tip_box.columns_present
+        missing = picked - present
+        if missing:
             raise _with_sim_details(
                 MissingTipsError(
-                    f"PickUpTips: {step.labware_name!r} is empty (already picked up)"
+                    f"PickUpTips: {step.labware_name!r} has no tips in "
+                    f"column(s) {sorted(missing)} (already picked up)"
                 ),
                 category="tip_box_empty",
                 tip_box=step.labware_name,
             )
+        self._check_peel_edge(step, picked, present)
         capacity = tip_box.capacity_ul
-        self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(96)]
+        tip_box.remove_columns(picked)
+        self._mca_tips = [Tip(capacity_ul=capacity) for _ in range(8 * len(picked))]
         self._mca_tip_box_label = step.labware_name
-        tip_box.is_full = False
 
     def _on_return_tips(self, step: SetTipsBackStep) -> None:
         if not self._mca_tips:
@@ -460,9 +465,55 @@ class Simulator:
         if target is not None:
             tip_box = self._twin.get(target)
             if isinstance(tip_box, TipBox):
-                tip_box.is_full = True
+                columns = self._partial_box_columns(step, tip_box)
+                if len(columns) * 8 != len(self._mca_tips):
+                    raise MissingTipsError("ReturnTips column count must match the mounted partial tip block; pass columns explicitly")
+                tip_box.add_columns(columns)
         self._mca_tips = []
         self._mca_tip_box_label = None
+
+    @staticmethod
+    def _check_peel_edge(step, picked: set[int], present: set[int]) -> None:
+        """Enforce the physical peel rule for a partial pickup.
+
+        A partial selection can lift either the **whole** filled box at once, or
+        a **contiguous block flush to the current left-most or right-most filled
+        column** — so the head's idle channels overhang empty space and don't
+        knock neighbouring tips. Anything else (an interior or sparse subset that
+        leaves tips on both sides) is physically impossible: the idle channels
+        would land on tips you don't mean to pick.
+        """
+        if not picked or picked == present:
+            return
+        lo, hi = min(picked), max(picked)
+        contiguous = picked == set(range(lo, hi + 1))
+        flush = lo == min(present) or hi == max(present)
+        if not (contiguous and flush):
+            raise _with_sim_details(
+                MissingTipsError(
+                    f"PickUpTips: {step.labware_name!r} column(s) {sorted(picked)} "
+                    f"are not a left/right edge of the filled columns "
+                    f"{sorted(present)} — a single column can only be peeled from "
+                    f"the current outermost filled column."
+                ),
+                category="partial_pickup_not_edge",
+                tip_box=step.labware_name,
+            )
+
+    @staticmethod
+    def _partial_box_columns(step, tip_box: "TipBox") -> set[int]:
+        """1-based box columns a pickup/set-back addresses.
+
+        ``step.columns`` *is* the addressed box columns (the well-selection); the
+        ``PartialColumnOffset`` is derived from them at render time and does not
+        independently change which columns are touched. ``columns=None`` is a
+        full pickup.
+        """
+        total = getattr(tip_box, "total_columns", 12)
+        cols = getattr(step, "columns", None)
+        if cols:
+            return {int(c) for c in cols if 1 <= int(c) <= total}
+        return set(range(1, total + 1))
 
     def _on_mca384_get_tips(self, step: Mca384GetTipsStep) -> None:
         label = step.labware_name
@@ -524,9 +575,15 @@ class Simulator:
         # Auto-parallel over wells: aspirate `volume` from each addressed well.
         wells = self._iter_aspirate_wells(target)
         if len(wells) == 1 and target.category == "trough":
-            for tip in self._mca_tips:
+            count = 8 * len(step.columns) if step.columns is not None else len(self._mca_tips)
+            if count > len(self._mca_tips):
+                raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
+            for tip in self._mca_tips[:count]:
                 self._aspirate_one(target, wells[0], volume, tip)
             return
+        wells = self._select_mca_columns(wells, getattr(step, "columns", None))
+        if len(wells) > len(self._mca_tips):
+            raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
         for tip, well in zip(self._mca_tips, wells):
             self._aspirate_one(target, well, volume, tip)
 
@@ -542,6 +599,9 @@ class Simulator:
             )
         volume = float(step.volume) if not isinstance(step.volume, str) else self._resolve_sim_number(step.volume)
         wells = self._iter_aspirate_wells(target)
+        wells = self._select_mca_columns(wells, getattr(step, "columns", None))
+        if len(wells) > len(self._mca_tips):
+            raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
         for tip, well in zip(self._mca_tips, wells):
             self._dispense_one(target, well, volume, tip)
 
@@ -1042,6 +1102,27 @@ class Simulator:
         if labware.wells:
             return list(labware.wells.values())
         return []
+
+    @staticmethod
+    def _select_mca_columns(wells: list, columns: Optional[list[int]]) -> list:
+        """Restrict addressed wells to the requested 1-based plate columns.
+
+        Wells are column-major (A1..H1, A2..H2, …); a column is the trailing
+        number of the well address. ``columns`` of ``None`` addresses every
+        well (full-plate, current behavior)."""
+        if columns is None:
+            return wells
+        wanted = {int(c) for c in columns}
+        available = {int(''.join(ch for ch in well.address if ch.isdigit())) for well in wells}
+        if not columns or len(wanted) != len(columns) or not wanted <= available:
+            raise SimulationError("MCA column selection must contain unique columns present on the plate")
+        selected = []
+        for well in wells:
+            addr = getattr(well, "address", "") or ""
+            digits = "".join(ch for ch in addr if ch.isdigit())
+            if digits and int(digits) in wanted:
+                selected.append(well)
+        return selected
 
     def _liha_channels(self, tip_index: int | None = None) -> list[int]:
         if tip_index is None:

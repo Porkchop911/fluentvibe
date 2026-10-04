@@ -49,3 +49,14 @@ current_worktable.py
 # Review/build artifacts
 htmlcov/
 .coverage
+
+# Local assistant sessions and temporary test/evaluation output
+.hermes/
+.hermes-notes/
+.hermes.md
+.pi/
+tmp/
+*.vsix
+editors/vscode/out/*.map
+editors/vscode/out/
+fluentvibe/catalog/install_index.db-*

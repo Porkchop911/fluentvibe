@@ -11,7 +11,11 @@ Choose the head by the shape of the move:
 - **Whole-plate 1:1 copy (MCA96):** every well of the source goes to the same
   address on the destination. One aspirate + one dispense touches all 96 wells
   — no loop.
-- **Selective / per-column (LiHa):** copy, pool, or rearrange specific columns.
+- **Partial rectangular stamp (MCA96):** use `columns=` for whole-column
+  subsets and shifted blocks; load `head-mca96`. On 96-well plates, left half
+  to center maps source columns 1-6 to destination columns 4-9, all rows.
+- **Individual wells / per-column (LiHa):** copy, pool, or rearrange wells that
+  cannot be represented by an MCA rectangular stamp.
   Iterate columns with a native loop and `well_offset`; do not unroll with a
   Python `for`.
 

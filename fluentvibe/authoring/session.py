@@ -29,7 +29,7 @@ from .lm_client import (
 )
 from .models import ApprovalRequest, AuthoringResult, AuthoringStatus, ClarificationQuestion, FailureCategory
 from .service import (
-    SYSTEM_PROMPT,
+    system_prompt_for_scope,
     PromptAuthoringService,
     _intent_axis_message,
     _missing_intent_axes,
@@ -101,7 +101,7 @@ class PromptAuthoringSession:
         self._registry.lab_scope = self._lab_scope
         self._validator = AuthoringValidator()
         self._helpers = PromptAuthoringService.__new__(PromptAuthoringService)
-        self._messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
+        self._messages: list[BaseMessage] = [SystemMessage(content=system_prompt_for_scope(self._lab_scope))]
         # skills mode selects its context from the prompt, which isn't known
         # until the first send(); defer injection (see _inject_skill_context).
         # off/cheatsheet/enforce have static context, so inject it now.
@@ -143,20 +143,25 @@ class PromptAuthoringSession:
         return self._registry
 
     def _inject_skill_context(self, prompt: str) -> None:
-        """Select + inject the skills-mode context on the first turn.
-
-        No-op unless skills mode is pending. Runs the LM pre-pass against the
-        first prompt and inserts the assembled context right after the system
-        prompt, mirroring where static cheatsheets land for the other modes.
-        """
-        if not self._skill_msg_pending:
+        """Refresh skills against accumulated user intent after corrections."""
+        if self._lab_scope.mode != "skills":
             return
+        latest = self._user_turns[-1].strip().lower().rstrip(".! ") if self._user_turns else ""
+        if not self._skill_msg_pending and latest in {
+            "yes", "approve", "approved", "looks good", "go ahead", "continue",
+            "confirmed", "confirm", "ok", "okay",
+        }:
+            return
+        pending = self._skill_msg_pending
         self._skill_msg_pending = False
         from .lab_skills import build_initial_scope_message
 
         scope_text = build_initial_scope_message(self._lab_scope, prompt, self._client)
         if scope_text is not None:
-            self._messages.insert(1, SystemMessage(content=scope_text))
+            if not pending and len(self._messages) > 1 and isinstance(self._messages[1], SystemMessage):
+                self._messages[1] = SystemMessage(content=scope_text)
+            else:
+                self._messages.insert(1, SystemMessage(content=scope_text))
 
     def send(self, user_text: str) -> AuthoringResult:
         text = user_text.strip()
@@ -167,10 +172,10 @@ class PromptAuthoringSession:
 
         if not self._user_turns:
             self._original_prompt = text
-            self._inject_skill_context(text)
         self._user_turns.append(text)
         self._trace.start_turn(len(self._user_turns))
         history_text = "\n".join(self._user_turns)
+        self._inject_skill_context(history_text)
         self._registry.set_authoring_context(
             original_prompt=self._original_prompt,
             latest_user_text=text,
@@ -197,7 +202,7 @@ class PromptAuthoringSession:
         # Inject the intent-axis nudge AT MOST ONCE per session. The check
         # runs against the union of every prior user message so a volume
         # mentioned in turn 1 still counts when turn 3 only says "yes".
-        if not self._intent_nudge_added and not self._registry.current_intent.is_specified():
+        if not self._lab_scope.enforces and not self._intent_nudge_added and not self._registry.current_intent.is_specified():
             missing_axes = _missing_intent_axes(history_text)
             if missing_axes:
                 self._messages.append(_to_lc_message(_intent_axis_message(missing_axes)))

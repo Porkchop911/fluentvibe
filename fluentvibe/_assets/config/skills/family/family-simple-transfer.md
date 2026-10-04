@@ -39,6 +39,9 @@ adapt the volume and labware to the request.
      head.drop_adapter()
      ```
 
-Pick MCA96 only for true 96-channel plate-to-plate moves; use the LiHa for
-trough-to-plate and per-column work. Pass volume and liquid_class BY NAME
+For partial rectangular plate-to-plate stamps, MCA96 supports `columns=` on
+pickup, aspirate, dispense and return. Load `head-mca96` and follow its shifted
+stamp mapping; do not force a user-requested MCA stamp onto LiHa.
+Use LiHa for trough-to-plate and individual/per-column work that needs it.
+Pass volume and liquid_class BY NAME
 (strings), not the Python values. Include only the groups the request needs.

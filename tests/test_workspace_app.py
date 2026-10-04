@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from pathlib import Path
+
+import pytest
 
 from fluentvibe.authoring.grounding import load_current_worktable_snapshot
 from fluentvibe.catalog.catalog import index_exists
@@ -198,6 +201,27 @@ def test_workbench_authoring_session_job_finishes_without_model_call() -> None:
     assert job["result"]["session_id"]
 
 
+def test_strata_authoring_session_uses_selected_local_instance(tmp_path: Path, monkeypatch) -> None:
+    from fluentvibe import authoring
+
+    settings = {}
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            settings.update(kwargs)
+
+    monkeypatch.setattr(authoring, "PromptAuthoringSession", FakeSession)
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path)
+    result = service._job_authoring_session({"model_server": "strata"})
+
+    assert settings["endpoint"] == service.STRATA_CHAT_ENDPOINT
+    assert settings["model"] == service.STRATA_MODEL
+    assert result["endpoint"] == service.STRATA_CHAT_ENDPOINT
+    assert result["model"] == service.STRATA_MODEL
+    with pytest.raises(ValueError, match="Unknown model server"):
+        service._job_authoring_session({"model_server": "other"})
+
+
 def test_workbench_simulate_source_job_reports_structured_result(tmp_path: Path) -> None:
     source = """
 from fluentvibe import Worktable
@@ -221,6 +245,94 @@ def test_workbench_decompile_missing_file_is_structured_failure() -> None:
     job = _wait_job(created["job"]["id"])
     assert job["status"] == "failure"
     assert "not found" in job["error"]["message"].lower()
+
+
+def test_protocol_library_lists_and_decompiles_selected_datastore_script(tmp_path: Path, monkeypatch) -> None:
+    source = Path(__file__).parent / "fixtures" / "decompiled_corpus" / "liha_selected_transfer.xscr"
+    root = tmp_path / "UserSpecific"
+    root.mkdir()
+    script = root / "12345678-1234-1234-1234-123456789abc.xscr"
+    shutil.copyfile(source, script)
+    monkeypatch.setattr(service, "DEFAULT_PROTOCOL_DIR", root)
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path / "workbench")
+
+    listing = service.list_protocols()
+    assert listing["available"] is True
+    assert len(listing["protocols"]) == 1
+    item = listing["protocols"][0]
+    assert item["id"] == script.stem
+    assert service.list_protocols(query=item["name"])["protocols"]
+    detail = service.protocol_detail(item["id"])
+    assert detail["step_count"] and detail["groups"]
+
+    result = service._job_decompile_xscr({"protocol_id": item["id"]})
+    assert result["source"]
+    assert Path(result["python_path"]).is_file()
+    for invalid in ("../outside", "C:/outside", "", "missing"):
+        try:
+            service.protocol_detail(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid protocol ID accepted: {invalid!r}")
+
+
+def test_object_explorer_exposes_catalog_classification() -> None:
+    if not index_exists():
+        return
+    matches = service.search_objects("plate", kind="component", limit=10)["objects"]
+    assert matches
+    detail = service.object_detail(matches[0]["guid"], "component")
+    assert detail["object"]["name"] == matches[0]["name"]
+    assert "purpose_source" in detail["object"]
+    assert service.search_objects("", kind="workspace", limit=3)["objects"]
+
+
+def test_protocol_chat_requires_loopback_and_uses_selected_script(tmp_path: Path, monkeypatch) -> None:
+    source = Path(__file__).parent / "fixtures" / "decompiled_corpus" / "liha_selected_transfer.xscr"
+    root = tmp_path / "UserSpecific"
+    root.mkdir()
+    script = root / "12345678-1234-1234-1234-123456789abc.xscr"
+    shutil.copyfile(source, script)
+    monkeypatch.setattr(service, "DEFAULT_PROTOCOL_DIR", root)
+    monkeypatch.setenv("FLUENTVIBE_LM_ENDPOINT", "http://192.168.0.126:1234/v1/chat/completions")
+    assert service.protocol_chat_config()["available"] is False
+    try:
+        service._job_protocol_chat({"protocol_id": script.stem, "question": "What happens?"})
+    except ValueError as exc:
+        assert "loopback" in str(exc)
+    else:
+        raise AssertionError("LAN endpoint was accepted for protocol chat")
+
+    monkeypatch.setenv("FLUENTVIBE_LM_ENDPOINT", "http://127.0.0.1:18020/v1/chat/completions")
+    monkeypatch.setenv("FLUENTVIBE_LM_MODEL", "test-local-model")
+    from fluentvibe.authoring import lm_client
+
+    calls = []
+    def fake_complete(self, *, messages, tools):
+        calls.append((self.endpoint, messages, tools))
+        return {"content": "It moves liquid with the LiHa."}
+    monkeypatch.setattr(lm_client.LMStudioChatClient, "complete", fake_complete)
+    result = service._job_protocol_chat({
+        "protocol_id": script.stem, "modified_at": script.stat().st_mtime,
+        "question": "What happens?",
+    })
+    assert result["answer"] == "It moves liquid with the LiHa."
+    assert calls[0][0].startswith("http://127.0.0.1:")
+    assert calls[0][1][-1] == {"role": "user", "content": "What happens?"}
+    assert "Decompiled Python" in calls[0][1][0]["content"]
+    assert calls[0][2] == []
+
+    strata_config = service.protocol_chat_config("strata")
+    assert strata_config["available"] is True
+    assert strata_config["endpoint"] == service.STRATA_CHAT_ENDPOINT
+    strata_result = service._job_protocol_chat({
+        "model_server": "strata", "protocol_id": script.stem, "question": "What happens?",
+    })
+    assert strata_result["model"] == service.STRATA_MODEL
+    assert calls[-1][0] == service.STRATA_CHAT_ENDPOINT
+    with pytest.raises(ValueError, match="Unknown model server"):
+        service.protocol_chat_config("other")
 
 
 def test_saved_profile_is_listable_and_loadable(tmp_path: Path) -> None:
