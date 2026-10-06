@@ -47,7 +47,8 @@ def _ident(text: str, used: set[str]) -> str:
 
 
 def _is_trash(info: dict) -> bool:
-    return "trash" in (info.get("load_name", "") + info.get("display", "")).lower()
+    name = (info.get("load_name", "") + " " + info.get("display", "")).lower()
+    return "trash" in name or "waste" in name  # OT-2 trash, Flex trash bin / waste chute
 
 
 @dataclass
@@ -77,18 +78,38 @@ def _well_budget(trace: dict) -> tuple[dict, dict, dict]:
     running: dict[tuple[str, str], float] = defaultdict(float)
     lowest: dict[tuple[str, str], float] = defaultdict(float)
     peak: dict[tuple[str, str], float] = defaultdict(float)
-    for e in trace["events"]:
-        if e["kind"] not in ("aspirate", "dispense") or not e.get("labware") or e.get("volume") is None:
-            continue
+    for e, volume in _liquid_moves(trace["events"]):
         sign = -1.0 if e["kind"] == "aspirate" else 1.0
         for well in e["wells"]:
             key = (e["labware"], well)
-            running[key] += sign * float(e["volume"])
+            running[key] += sign * volume
             lowest[key] = min(lowest[key], running[key])
             peak[key] = max(peak[key], running[key])
     need = {k: -v for k, v in lowest.items() if v < -1e-9}
     content = {k: need.get(k, 0.0) + peak[k] for k in running}
     return need, content, dict(running)
+
+
+def _liquid_moves(events):
+    """(event, liquid volume per channel) for every aspirate/dispense with a well.
+
+    An Opentrons air gap is air drawn after the liquid; the next dispense
+    reports liquid + air ("aspirate 125, air gap 5, dispense 130"). The liquid
+    part is the dispense minus the air the tip carries."""
+    air = 0.0
+    for e in events:
+        kind = e["kind"]
+        if kind == "air_gap":
+            air += float(e.get("volume") or 0)
+        elif kind in ("pick_up_tip", "drop_tip", "return_tip"):
+            air = 0.0
+        elif kind in ("aspirate", "dispense") and e.get("labware") and e.get("volume") is not None:
+            volume = float(e["volume"])
+            if kind == "dispense" and air:
+                liquid = max(0.0, volume - air)
+                air = max(0.0, air - volume)
+                volume = liquid
+            yield e, volume
 
 
 def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conversion:
@@ -244,6 +265,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
     groups: set[str] = set()
     have_tips = False
     tip_load = 0.0                # what the current tip holds (per channel)
+    liquid = {id(ev): volume for ev, volume in _liquid_moves(trace["events"])}  # air gaps taken out
 
     def group(title: str) -> None:
         name = title
@@ -295,13 +317,16 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
             for channel, well in enumerate(e["wells"]):
                 label, fv_well = mapping[f"{e['labware']}|{well}"]
                 per_target[label].append((channel, fv_well))
+            volume = liquid.get(id(e), float(e["volume"] or 0))
+            if volume <= 0:
+                continue  # an air-gap-only dispense: nothing liquid to move
             for label, pairs in per_target.items():
                 c = by_label[label]
                 wells = [w for _, w in pairs]
                 channels = [ch for ch, _ in pairs]
-                lines.append(f"    fca.{kind}({c.var}, {float(e['volume']):g}, liquid_class={lc!r}, "
+                lines.append(f"    fca.{kind}({c.var}, {volume:g}, liquid_class={lc!r}, "
                              f"wells={wells!r}, channels={channels!r})")
-            change = float(e["volume"] or 0)
+            change = volume
             tip_load = max(0.0, tip_load + (change if kind == "aspirate" else -change))
         elif kind == "pause":
             message = e.get("message") or e["text"]

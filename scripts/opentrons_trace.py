@@ -20,12 +20,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import opentrons_to_spec as ots  # noqa: E402  (shares the simulator set-up)
+
+WASTE_KEY = "waste:trash"
 
 
 def _labware_key(labware) -> str:
@@ -107,6 +110,8 @@ def trace(protocol: Path, hardware_dir: Path) -> dict:
             kind = "return_tip"  # back into the rack; a "parked" tip may still hold liquid
         elif text.startswith("Dropping tip"):
             kind = "drop_tip"
+        elif text.lower().startswith("air gap"):
+            kind = "air_gap"  # air drawn into the tip; the next dispense includes it
         event: dict = {"kind": kind, "text": text[:300]}
         if kind in ("aspirate", "dispense"):
             location = payload.get("location")
@@ -116,13 +121,23 @@ def trace(protocol: Path, hardware_dir: Path) -> dict:
             channels = _channels(instrument) if instrument is not None else 1
             volume = payload.get("volume", base.get("volume"))
             if well is None or not hasattr(well, "well_name"):
-                event["unresolved"] = True
+                if kind == "dispense" and re.search(r"waste chute|trash", text, re.I):
+                    # Flex waste chute / trash bin: no well, but a place: the waste.
+                    labware.setdefault(WASTE_KEY, {"load_name": "waste", "display": "Waste", "slot": "",
+                                                   "wells": ["A1"], "rows": 1, "columns": 1,
+                                                   "capacity_ul": 1e9, "is_tiprack": False})
+                    event.update(labware=WASTE_KEY, wells=["A1"] * channels)
+                else:
+                    event["unresolved"] = True
             else:
                 key = _labware_key(well.parent)
                 labware.setdefault(key, _labware_info(well.parent))
                 event.update(labware=key, wells=_touched(well, channels))
             event.update(volume=float(volume) if volume is not None else None, channels=channels,
                          pipette=str(getattr(instrument, "name", "")))
+        elif kind == "air_gap":
+            m = ots.VOL_RE.search(text) or ots.re.search(r"(?P<vol>\d+(?:\.\d+)?)\s*u[lL]", text)
+            event["volume"] = float(m.group("vol")) if m else 0.0
         elif kind == "delay":
             event["seconds"] = base.get("seconds", 0.0)
         elif kind == "pause":

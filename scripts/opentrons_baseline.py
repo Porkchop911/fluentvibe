@@ -93,7 +93,10 @@ def main() -> int:
     ap.add_argument("--only", choices=("library", "git"), default=None)
     ap.add_argument("--memory-gb", type=float, default=8.0, help="hard limit per protocol (all its processes)")
     ap.add_argument("--min-free-gb", type=float, default=12.0, help="wait while free memory is below this")
-    ap.add_argument("--timeout", type=float, default=900.0)
+    ap.add_argument("--timeout", type=float, default=300.0)
+    ap.add_argument("--rerun", default="",
+                    help="comma-separated outcomes to run again: stages (gate, deck, convert, trace, crash) "
+                         "or 'mismatch' (done, but not every well matches); the newest result counts")
     args = ap.parse_args()
 
     from fluentvibe.protocol_index import load_index, related_protocols
@@ -111,8 +114,15 @@ def main() -> int:
                 done[row["id"]] = row
     started = time.monotonic()
     new = 0
+    rerun = {x.strip() for x in args.rerun.split(",") if x.strip()}
+
+    def again(row: dict) -> bool:
+        f = row.get("fidelity") or {}
+        mismatch = row.get("stage") == "done" and f.get("wells_matching") != f.get("wells_checked")
+        return row.get("stage") in rerun or ("mismatch" in rerun and mismatch)
+
     for e in entries:
-        if e.id in done:
+        if e.id in done and not again(done[e.id]):
             continue
         if args.limit and new >= args.limit:
             break

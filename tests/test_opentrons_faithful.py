@@ -192,3 +192,29 @@ def test_inventory_links_parts_variants_and_readme_links(tmp_path):
     rows = {r["id"]: r for r in csv.DictReader(out.open(encoding="utf-8-sig"))}
     assert rows["bca"]["related_protocols"] == "normalization" and rows["bca"]["path"].endswith("p.py")
     assert rows["lonely"]["description"].startswith("Does things")
+
+
+def test_air_gap_is_not_liquid_and_the_waste_chute_is_the_waste(monkeypatch):
+    if not (PROFILE / "workspace_profile.json").exists():
+        pytest.skip("no 1080_Dev profile on this machine")
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.authoring.skeleton import load_deck
+
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE))
+    trace = _trace()
+    trace["labware"]["waste:trash"] = {"load_name": "waste", "display": "Waste", "slot": "", "wells": ["A1"],
+                                       "rows": 1, "columns": 1, "capacity_ul": 1e9, "is_tiprack": False}
+    # "Remove & discard supernate": aspirate 25, air gap 5, dispense 30 into the waste chute.
+    trace["events"][10:12] = [
+        {"kind": "aspirate", "labware": "1:plate", "wells": ["A1"], "volume": 25.0, "channels": 1, "text": ""},
+        {"kind": "air_gap", "volume": 5.0, "text": "Air gap of 5 uL"},
+        {"kind": "dispense", "labware": "waste:trash", "wells": ["A1"], "volume": 30.0, "channels": 1, "text": ""},
+    ]
+    trace["labware"]["1:plate"]["capacity_ul"] = 200.0
+    conv = convert_trace(trace, load_deck(PROFILE))
+    assert "fca.dispense(waste, 25," in conv.source.lower().replace("waste_2", "waste")
+    wt = build_worktable_from_source(conv.source, "tiny.py")
+    wt.simulate(strict=True)  # was: "tip holds 25 ul but 30 ul requested"
+    fidelity = volume_fidelity(trace, conv, wt.simulation_report.final_labware)
+    assert fidelity["wells_matching"] == fidelity["wells_checked"], fidelity
