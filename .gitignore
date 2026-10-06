@@ -65,3 +65,6 @@ tmp/
 editors/vscode/out/*.map
 editors/vscode/out/
 fluentvibe/catalog/install_index.db-*
+
+# Local double-click launchers (start-main-8765.cmd, start-dev-8766.cmd)
+shortcuts/
