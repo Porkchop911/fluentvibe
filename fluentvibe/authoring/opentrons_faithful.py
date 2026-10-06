@@ -318,8 +318,15 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                 label, fv_well = mapping[f"{e['labware']}|{well}"]
                 per_target[label].append((channel, fv_well))
             volume = liquid.get(id(e), float(e["volume"] or 0))
+            if kind == "dispense" and volume > tip_load + 0.5:
+                # The Opentrons simulator does not track liquid: it dispenses more than
+                # the tip holds. Dispense what the tip holds and say so; the per-well
+                # check (from the Opentrons volumes) shows the difference.
+                unconverted.append(f"dispense of {volume:g} ul but the tip holds {tip_load:g} ul: "
+                                   f"{e['text'][:70]}")
+                volume = tip_load
             if volume <= 0:
-                continue  # an air-gap-only dispense: nothing liquid to move
+                continue  # an air-gap-only (or empty-tip) dispense: nothing liquid to move
             for label, pairs in per_target.items():
                 c = by_label[label]
                 wells = [w for _, w in pairs]

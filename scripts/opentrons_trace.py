@@ -95,14 +95,25 @@ def _touched(well, channels: int) -> list[str]:
     return [w.well_name for w in picked] or [well.well_name]
 
 
+def _walk(entries, parent_text: str = ""):
+    """(entry, its parent's text) in run order. An air gap is logged as
+    "Air gap of 5 uL" with an "Aspirating 5.0 uL" inside it: that aspirate is air."""
+    for entry in entries:
+        yield entry, parent_text
+        text = " ".join(str((entry.get("payload") or {}).get("text", "")).split())
+        yield from _walk(entry.get("subsequent", []) or [], text)
+
+
 def trace(protocol: Path, hardware_dir: Path) -> dict:
     runlog, _captured = ots._simulate(protocol, hardware_dir)
     labware: dict[str, dict] = {}
     events: list[dict] = []
-    for entry in ots._flatten(runlog):
+    for entry, parent_text in _walk(runlog):
         payload = entry.get("payload", {}) or {}
         text = " ".join(str(payload.get("text", "")).split())
         base = ots._event(entry)
+        if parent_text.lower().startswith("air gap") and text.startswith("Aspirating"):
+            continue  # the air gap's own aspirate: air, already counted by the "Air gap" entry
         kind = base.get("kind", "other")
         if text.startswith("Picking up tip"):
             kind = "pick_up_tip"
