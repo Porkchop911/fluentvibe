@@ -310,7 +310,7 @@ export async function openInFluentControl(): Promise<void> {
     return;
   }
   if (!result.opened) {
-    vscode.window.showErrorMessage(`FluentControl could not load the script: ${result.load_error}`);
+    vscode.window.showErrorMessage(`FluentControl: ${result.load_error}`);
     return;
   }
   if (editor.document.version !== checkedVersion) {

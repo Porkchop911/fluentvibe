@@ -390,11 +390,20 @@ def _connect_fluent_window(process_id: Optional[int] = None):
     from pywinauto.application import Application
 
     timings.Timings.window_find_timeout = 8
-    if process_id is not None:
-        app = Application(backend="uia").connect(process=process_id)
-    else:
-        app = Application(backend="uia").connect(title="FluentControl")
-    return app.window(title="FluentControl")
+    try:
+        if process_id is not None:
+            app = Application(backend="uia").connect(process=process_id)
+        else:
+            app = Application(backend="uia").connect(title="FluentControl")
+        window = app.window(title="FluentControl")
+        found = window.exists(timeout=2)
+    except Exception:  # pywinauto's not-found error prints only its search criteria
+        found = False
+    if not found:
+        raise FluentControlShellError(
+            "FluentControl is not running (no window titled 'FluentControl'). "
+            "Start FluentControl and log in, then try again.")
+    return window
 
 
 def _pick_leftmost_shell_element(fc_win, script_name="shell"):

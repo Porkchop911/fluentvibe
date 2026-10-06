@@ -305,3 +305,32 @@ def test_shell_open_does_not_double_click_a_loading_script_again(monkeypatch):
     monkeypatch.setattr(shell_tools, "_read_infopad_validation", lambda *args: ([], []))
     result = shell_tools.open_shell_and_read_infopad(close_before_open=False)
     assert result.ok and clicked == []
+
+
+def test_fluentcontrol_not_running_is_said_plainly(monkeypatch):
+    # pywinauto's own error printed only its search criteria ("{'title':
+    # 'FluentControl', 'backend': 'uia', ...}"), shown as a load failure.
+    import sys
+    import types
+
+    class NotFound(Exception):
+        pass
+
+    class Application:
+        def __init__(self, backend):
+            pass
+
+        def connect(self, **kwargs):
+            raise NotFound({"title": "FluentControl", "backend": "uia"})
+
+    application = types.ModuleType("pywinauto.application")
+    application.Application = Application
+    timings = types.ModuleType("pywinauto.timings")
+    timings.Timings = types.SimpleNamespace(window_find_timeout=0)
+    pywinauto = types.ModuleType("pywinauto")
+    pywinauto.timings = timings
+    monkeypatch.setitem(sys.modules, "pywinauto", pywinauto)
+    monkeypatch.setitem(sys.modules, "pywinauto.application", application)
+    monkeypatch.setitem(sys.modules, "pywinauto.timings", timings)
+    with pytest.raises(shell_tools.FluentControlShellError, match="FluentControl is not running"):
+        shell_tools._connect_fluent_window()
