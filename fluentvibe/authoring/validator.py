@@ -303,9 +303,27 @@ class AuthoringValidator:
         raise ValueError(f"{input_path}: expected build_worktable()")
 
 
+_VOLUME_RE = re.compile(
+    r"(?<![\w.])(\d+(?:\.\d+)?)\s*[uµμ]l\b(?!\s*-?\s*(?:filter\s+)?(?:tip|box|rack))", re.I)
+_CATALOG_SIZE_RE = re.compile(r"\b(?:mca(?:96|384)?|fca|liha)\s*,\s*\d+(?:\.\d+)?\s*[uµμ]l\b", re.I)
+
+
 def _requested_transfer_volume(text: str) -> float | None:
-    matches = re.findall(r"\b(\d+(?:\.\d+)?)\s*[uµμ]l\b", text)
-    return float(matches[-1]) if matches else None
+    """The one transfer volume the request names, or None when it is not unique.
+
+    A tip or box size ("200 ul tips", "MCA96, 200ul") is not a transfer volume:
+    it was read as one, a 50 ul stamp was checked against 200 ul and a draft
+    padded with unrequested liquid was accepted. The latest line wins over
+    earlier turns (a correction); two different volumes leave the check to the
+    declared intent."""
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    for chunk in ([lines[-1]] if lines else []) + ["\n".join(lines)]:
+        values = {float(v) for v in _VOLUME_RE.findall(_CATALOG_SIZE_RE.sub(" ", chunk))}
+        if len(values) == 1:
+            return values.pop()
+        if len(values) > 1:
+            return None
+    return None
 
 
 def _check_intent_against_final_labware(

@@ -231,3 +231,20 @@ def test_partial_tips_cannot_silently_cover_a_full_plate():
     wt.mca96.aspirate(src, 50, liquid_class="Water Free Single")
     with pytest.raises(MissingTipsError, match="exceed the mounted tip count"):
         wt.simulate()
+
+
+@pytest.mark.parametrize("text, volume", [
+    ("transfer 50 ul from the left half to the centre with the mca, 200 ul tips", 50.0),
+    ("stamp 50 µl using MCA96, 200ul tips", 50.0),
+    ("move 50ul left half to center with mca (200 ul filter tips)", 50.0),
+    ("transfer 50 uL", 50.0),
+    ("transfer 50 ul\nuse 30 ul instead", 30.0),
+    ("transfer 50 ul then 20 ul", None),
+    ("stamp with mca, 200 ul tips", None),
+])
+def test_requested_volume_ignores_tip_sizes(text, volume):
+    # "200 ul tips" was read as the transfer volume: a correct 50 ul stamp was
+    # rejected and a draft padded with 150 ul of unrequested liquid accepted.
+    from fluentvibe.authoring.validator import _requested_transfer_volume
+
+    assert _requested_transfer_volume(text) == volume
