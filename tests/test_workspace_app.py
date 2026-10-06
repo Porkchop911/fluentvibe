@@ -578,3 +578,23 @@ def test_xscr_paths_accept_quotes_uploads_and_a_recent_list(tmp_path, monkeypatc
     assert {f["path"] for f in files} == {str(uploaded), str((run / "draft.xscr").resolve())}
     with pytest.raises(ValueError, match="not found"):
         service._xscr_from_payload({"xscr_path": '"D:/nowhere/x.xscr"'})
+
+
+def test_authoring_session_temperature_defaults_to_0_8_and_follows_the_page(tmp_path: Path, monkeypatch) -> None:
+    from fluentvibe import authoring
+
+    settings = {}
+
+    class FakeSession:
+        def __init__(self, **kwargs):
+            settings.update(kwargs)
+
+    monkeypatch.setattr(authoring, "PromptAuthoringSession", FakeSession)
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path)
+    monkeypatch.delenv("FLUENTVIBE_LM_TEMPERATURE", raising=False)
+    assert service._job_authoring_session({})["temperature"] == 0.8
+    assert settings["temperature"] == 0.8
+    assert service._job_authoring_session({"temperature": 0.3})["temperature"] == 0.3
+    assert settings["temperature"] == 0.3
+    with pytest.raises(ValueError, match="between 0 and 2"):
+        service._job_authoring_session({"temperature": 5})

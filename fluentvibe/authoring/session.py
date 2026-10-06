@@ -64,6 +64,7 @@ class PromptAuthoringSession:
         lab_scope: str | None = None,
         profile_dir: Path | str | None = None,
         request_timeout_s: float | None = None,
+        temperature: float | None = None,
     ) -> None:
         self.output_dir = output_dir
         self.retry_budget = retry_budget
@@ -97,6 +98,7 @@ class PromptAuthoringSession:
                 model=model,
                 trace_recorder=self._trace,
                 request_timeout_s=request_timeout_s,
+                temperature=temperature,
             )
         )
         if hasattr(raw_client, "trace_recorder"):

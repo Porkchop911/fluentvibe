@@ -885,6 +885,10 @@
             <label for="authorTimeout" title="How long one model call may take before it is given up (both modes). Stop ends a run at any time.">Response limit (s)</label>
             <input id="authorTimeout" type="number" min="60" step="60" value="3600" style="width:110px">
           </div>
+          <div class="fp-field">
+            <label for="authorTemperature" title="Sampling temperature for the model (both modes). 0.8 is the default; lower is more deterministic. Applies to the next run or session.">Temperature</label>
+            <input id="authorTemperature" type="number" min="0" max="2" step="0.1" value="0.8" style="width:80px">
+          </div>
           <button id="authorStop" class="danger" disabled>Stop</button>
         </div>
         <div class="mode-options" id="fastOptions">
@@ -1467,6 +1471,7 @@
           check_instructions: $('fastCheckInstructions').checked,
           fc_check: fcChecked, choose: $('fastChoose').checked,
           request_timeout_s: Number($('authorTimeout').value || 3600),
+          temperature: Number($('authorTemperature').value || 0.8),
         });
       } catch (err) {
         pushAuthorMessage('error', 'Could not start', String(err.message || err));
@@ -1983,7 +1988,8 @@
           model_server: $('authorModelServer').value,
           model: $('authorModel').value,
           lab_scope: $('authorLabScope').value,
-          request_timeout_s: Number($('authorTimeout').value || 3600)
+          request_timeout_s: Number($('authorTimeout').value || 3600),
+          temperature: Number($('authorTemperature').value || 0.8)
         };
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
@@ -1993,7 +1999,7 @@
           pushAuthorMessage(
             'system',
             'Session started',
-            `Profile: ${result.profile_name || 'none'}\nModel: ${result.model} at ${result.endpoint}\nOutput: ${result.output_dir}\nResponse limit: ${result.request_timeout_s || 240}s\nSession: ${result.session_id}`
+            `Profile: ${result.profile_name || 'none'}\nModel: ${result.model} at ${result.endpoint}\nTemperature: ${result.temperature}\nOutput: ${result.output_dir}\nResponse limit: ${result.request_timeout_s || 240}s\nSession: ${result.session_id}`
           );
           $('authorPrompt').focus();
         });

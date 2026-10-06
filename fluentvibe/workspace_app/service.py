@@ -659,7 +659,8 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     os.environ[PROFILE_DIR_ENV] = str(profile_dir)
     result = author_from_document(
         # One model call may take this long (the page's "response limit"; 60 min default).
-        LMStudioChatClient(request_timeout_s=float(payload.get("request_timeout_s") or 3600)),
+        LMStudioChatClient(request_timeout_s=float(payload.get("request_timeout_s") or 3600),
+                           temperature=_temperature(payload)),
         document, profile_dir, output_dir,
         request=request or None,
         ask=choose_yourself if payload.get("choose") else (lambda questions: _job_ask(payload, questions)),
@@ -706,6 +707,19 @@ def _job_replay_source(payload: dict[str, Any]) -> dict[str, Any]:
     wt = build_worktable_from_source(source, "<workbench>")
     frames = replay_frames(wt, title=str(payload.get("title") or getattr(wt, "name", "Protocol")))
     return {"ok": True, "frames": len(frames["frames"]), "html": replay_html(frames)}
+
+
+def _temperature(payload: dict[str, Any]) -> float:
+    """The page's sampling temperature (the client default, 0.8, when unset)."""
+    from ..authoring.lm_client import _temperature_from_env
+
+    raw = payload.get("temperature")
+    if raw is None or str(raw).strip() == "":
+        return _temperature_from_env()
+    value = float(raw)
+    if not 0 <= value <= 2:
+        raise ValueError("temperature must be between 0 and 2")
+    return value
 
 
 def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
@@ -761,6 +775,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         profile_dir=profile_dir,
         trace_config=trace_config,
         request_timeout_s=request_timeout_s,
+        temperature=_temperature(payload),
     )
     session_id = str(uuid.uuid4())
     with _JOB_LOCK:
@@ -772,6 +787,7 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         "output_dir": str(output_dir),
         "model_traces": str(output_dir / "model_traces") if trace_enabled else None,
         "request_timeout_s": request_timeout_s,
+        "temperature": _temperature(payload),
         "model_server": model_server,
         "endpoint": endpoint,
         "model": model,
