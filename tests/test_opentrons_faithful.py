@@ -78,7 +78,7 @@ def _trace() -> dict:
             "labware": {"3:falcon": tube_rack, "2:eppi": eppis, "1:plate": plate}}
 
 
-def test_faithful_conversion_keeps_every_well_and_volume(monkeypatch):
+def test_faithful_conversion_keeps_every_well_and_volume(monkeypatch, tmp_path):
     if not (PROFILE / "workspace_profile.json").exists():
         pytest.skip("no 1080_Dev profile on this machine")
     from fluentvibe.authoring.eval_rubric import build_worktable_from_source
@@ -93,6 +93,15 @@ def test_faithful_conversion_keeps_every_well_and_volume(monkeypatch):
     assert conv.mapping["2:eppi|A1"][1] == "A1" and conv.mapping["2:eppi|A1"][0] != conv.mapping["2:eppi|B1"][0]
     assert conv.mapping["1:plate|C2"] == (conv.mapping["1:plate|A1"][0], "C2")
     assert "wt.user_prompt('Vortex the tubes.')" in conv.source and "wt.wait(duration_seconds=30)" in conv.source
+    # The authoring gate the conversion really goes through (it wants a
+    # declared variable before placement; the plain simulation does not).
+    from fluentvibe.authoring.lab_scope import load_lab_scope
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    registry = AuthoringToolRegistry(output_dir=tmp_path)
+    registry.lab_scope = load_lab_scope("skills")
+    gate = registry.compile_and_simulate(conv.source)
+    assert gate.get("success"), gate.get("failure_message")
     wt = build_worktable_from_source(conv.source, "tiny.py")
     wt.simulate(strict=True)
     fidelity = volume_fidelity(trace, conv, wt.simulation_report.final_labware)
@@ -137,3 +146,23 @@ def test_strata_review_failures_never_break_the_conversion(tmp_path):
     assert "could not review" in down["error"] and "8080" in down["error"]
     garbled = review_conversion(protocol, {}, client=_Client("looks fine to me"))
     assert garbled["error"].startswith("Strata's review was not readable") and garbled["raw"] == "looks fine to me"
+
+
+def test_a_parked_tip_with_liquid_is_named_not_hidden(monkeypatch):
+    if not (PROFILE / "workspace_profile.json").exists():
+        pytest.skip("no 1080_Dev profile on this machine")
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.authoring.skeleton import load_deck
+
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE))
+    trace = _trace()
+    # Opentrons "aspirate_and_park_tip": the tip goes back into the rack holding 60 ul.
+    trace["events"][2:7] = [
+        {"kind": "pick_up_tip", "text": "Picking up tip"},
+        {"kind": "aspirate", "labware": "3:falcon", "wells": ["A1"], "volume": 60.0, "channels": 1, "text": ""},
+        {"kind": "return_tip", "text": "Returning tip to A1 of tiprack"},
+    ]
+    conv = convert_trace(trace, load_deck(PROFILE))
+    parked = [u for u in conv.report["unconverted"] if u.startswith("parked tip")]
+    assert parked and "60 ul" in parked[0]
+    assert "operator prompt: Vortex the tubes." in conv.report["kept_pauses_and_waits"]

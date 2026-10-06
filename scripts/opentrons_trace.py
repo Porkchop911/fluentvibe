@@ -103,7 +103,9 @@ def trace(protocol: Path, hardware_dir: Path) -> dict:
         kind = base.get("kind", "other")
         if text.startswith("Picking up tip"):
             kind = "pick_up_tip"
-        elif text.startswith(("Dropping tip", "Returning tip")):
+        elif text.startswith("Returning tip"):
+            kind = "return_tip"  # back into the rack; a "parked" tip may still hold liquid
+        elif text.startswith("Dropping tip"):
             kind = "drop_tip"
         event: dict = {"kind": kind, "text": text[:300]}
         if kind in ("aspirate", "dispense"):

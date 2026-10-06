@@ -208,6 +208,7 @@ def _well_by_well(python, protocol, profile, output, summary, note) -> Optional[
         {"report": conversion.report, "mapping": conversion.mapping,
          "fills": {f"{k[0]}|{k[1]}": v for k, v in conversion.fills.items()}}, indent=1), encoding="utf-8")
     summary.update(unconverted=conversion.report["unconverted"],
+                   kept_pauses_and_waits=conversion.report["kept_pauses_and_waits"],
                    substitutions=conversion.report["substitutions"],
                    containers=conversion.report["containers"],
                    fca_tips_used=conversion.report["fca_tips_used"],

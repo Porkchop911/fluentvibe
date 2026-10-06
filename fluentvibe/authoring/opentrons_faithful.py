@@ -187,7 +187,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
         if e["kind"] == "aspirate" and e.get("volume"):
             load += float(e["volume"])
             max_load = max(max_load, load)
-        elif e["kind"] in ("dispense", "drop_tip", "pick_up_tip"):
+        elif e["kind"] in ("dispense", "drop_tip", "return_tip", "pick_up_tip"):
             load = 0.0 if e["kind"] != "dispense" else max(0.0, load - float(e.get("volume") or 0))
     tip_catalog, tip_class = (("FCA, 1000ul SBS", "FCA1000Box") if max_load > 200
                               else ("FCA, 200ul SBS", "FCA200Box"))
@@ -206,7 +206,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             fill = min(fill, cap - max(0.0, content[(lw, w)] - amount))
         fills[target] = round(fill, 2)
 
-    source, unconverted = _write(trace, containers, mapping, fills, tips, lc, deck)
+    source, unconverted, kept = _write(trace, containers, mapping, fills, tips, lc, deck)
     picks = sum(1 for e in trace["events"] if e["kind"] == "pick_up_tip")
     report = {
         "labware": {lw: labware.get(lw, {}).get("display", lw) for lw in used_wells},
@@ -214,6 +214,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
                        for c in containers],
         "substitutions": notes,
         "unconverted": unconverted,
+        "kept_pauses_and_waits": kept,
         "tip_pickups": picks,
         "fca_tips_used": picks * 8,
         "max_tip_load_ul": round(max_load, 1),
@@ -239,8 +240,10 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
     by_label = {c.label: c for c in containers}
     lines: list[str] = []
     unconverted: list[str] = []
+    kept: list[str] = []          # pauses and waits that are in the Fluent protocol
     groups: set[str] = set()
     have_tips = False
+    tip_load = 0.0                # what the current tip holds (per channel)
 
     def group(title: str) -> None:
         name = title
@@ -263,10 +266,19 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                 lines.append("    fca.drop_tips()")
             lines.append(f"    fca.get_tips({tips.var})")
             have_tips = True
-        elif kind == "drop_tip":
+            tip_load = 0.0
+        elif kind in ("drop_tip", "return_tip"):
+            if kind == "return_tip" and tip_load > 0.5:
+                # Opentrons parks a tip with liquid in the rack and picks it up
+                # again later; the FCA cannot. That liquid is not carried over.
+                note = (f"parked tip: {tip_load:g} ul stayed in a tip the Opentrons protocol put back into "
+                        f"the rack for later; the FCA drops it ({e['text'][:60]})")
+                unconverted.append(note)
+                lines.append(f"    wt.add_comment({('NOT CONVERTED: ' + note)[:200]!r})")
             if have_tips:
                 lines.append("    fca.drop_tips()")
             have_tips = False
+            tip_load = 0.0
         elif kind in ("aspirate", "dispense"):
             if e.get("unresolved") or not e.get("labware"):
                 unconverted.append(f"{kind} with no well: {e['text'][:80]}")
@@ -289,13 +301,17 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                 channels = [ch for ch, _ in pairs]
                 lines.append(f"    fca.{kind}({c.var}, {float(e['volume']):g}, liquid_class={lc!r}, "
                              f"wells={wells!r}, channels={channels!r})")
+            change = float(e["volume"] or 0)
+            tip_load = max(0.0, tip_load + (change if kind == "aspirate" else -change))
         elif kind == "pause":
             message = e.get("message") or e["text"]
             lines.append(f"    wt.user_prompt({message[:200]!r})")
+            kept.append(f"operator prompt: {message[:120]}")
         elif kind == "delay":
             seconds = float(e.get("seconds") or 0)
             if seconds >= 1:
                 lines.append(f"    wt.wait(duration_seconds={seconds:g})")
+                kept.append(f"wait {seconds:g} s")
         elif kind in ("device", "magnet", "move"):
             unconverted.append(f"{kind}: {e['text'][:100]}")
             lines.append(f"    wt.user_prompt({('Opentrons ' + kind + ' step: ' + e['text'][:160])!r})")
@@ -303,6 +319,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
         lines.append("    fca.drop_tips()")
 
     used_classes = sorted({c.python_class for c in containers})
+    run_id = re.sub(r"[^0-9a-z_]+", "_", str(trace.get("name", "opentrons")).lower()).strip("_")[:40] or "opentrons"
     head = [
         "# OPENTRONS FAITHFUL CONVERSION",
         f'"""{trace.get("name", "Opentrons protocol")}',
@@ -322,6 +339,10 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
         f"        protocol_name={str(trace.get('name', 'Opentrons protocol'))[:60]!r},",
         "    )",
         "    fca = wt.liha",
+        # The authoring gate: Variables first (at least one declared), then placement.
+        f"    wt.declare_variable('RunId', {run_id!r})",
+        f"    wt.set_sim_value('RunId', {run_id!r})",
+        "    wt.group('Variables')",
         "    wt.group('Labware Placement')",
     ]
     for c in containers:
@@ -333,7 +354,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
             head.append(f"    {c.var}.fill_all(Reagent({(label + ' stock')!r}), {volume:g})")
         else:
             head.append(f"    {c.var}.fill_wells([{well!r}], Reagent({(label + ' ' + well + ' stock')!r}), {volume:g})")
-    return "\n".join(head + lines + ["    return wt", ""]), unconverted
+    return "\n".join(head + lines + ["    return wt", ""]), unconverted, kept
 
 
 def volume_fidelity(trace: dict, conversion: Conversion, final_labware: dict) -> dict[str, Any]:

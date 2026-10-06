@@ -71,7 +71,10 @@ def review_material(protocol: Path, summary: dict[str, Any]) -> str:
         "well-by-well comparison": summary.get("fidelity"),
         "Fluent containers": summary.get("containers"),
         "Opentrons wells placed in other containers": (summary.get("substitutions") or [])[:_LIST_ITEMS],
-        "steps kept as operator prompts (not automated)": (summary.get("unconverted") or [])[:_LIST_ITEMS],
+        "Opentrons pauses and delays that ARE in the Fluent protocol (operator prompts / waits)":
+            (summary.get("kept_pauses_and_waits") or [])[:_LIST_ITEMS],
+        "not converted (module programs, magnet, gripper, parked tips: operator prompts or comments)":
+            (summary.get("unconverted") or [])[:_LIST_ITEMS],
         "FCA tips used": summary.get("fca_tips_used"),
         "FluentControl InfoPad": summary.get("fc_findings") if summary.get("fc_ok") is not None else None,
     }
