@@ -542,17 +542,6 @@
       animation: author-blink 1s infinite;
     }
     @keyframes author-blink { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-    .fast-path { border: 1px solid var(--line, #d0d7de); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
-    .fast-path > summary { cursor: pointer; font-weight: 600; }
-    .fast-path textarea { min-height: 54px; width: 100%; }
-    .fast-path .fp-row { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
-    .fast-path .fp-progress { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; max-height: 140px; overflow: auto; }
-    .fast-path table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
-    .fast-path td, .fast-path th { border-bottom: 1px solid var(--line, #d0d7de); padding: 4px 6px; text-align: left; vertical-align: top; }
-    .fast-path .fp-summary { font-weight: 600; margin-top: 6px; }
-    .fast-path .fp-title { font-size: 16px; margin: 0 0 4px; }
-    .fast-path .fp-help, .author-advanced .fp-help { color: var(--muted); font-size: 13px; margin: 0 0 8px; max-width: 980px; }
-    .fast-path .fp-field { display: flex; flex-direction: column; min-width: 280px; }
     .fp-questions { border: 1px solid #f0c36d; background: #fffbeb; border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
     .fp-questions .fp-q { margin: 8px 0; }
     .fp-questions .fp-q label { display: block; font-size: 13px; margin-bottom: 3px; }
@@ -590,9 +579,7 @@
       color: var(--muted); background: #f8fafc; border-left: 3px solid #c7d2fe; border-radius: 4px;
       white-space: pre-wrap; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
     .fp-asklist li { margin: 4px 0; }
-    .author-attachbar #fastReplay { width: auto; margin-left: auto; }
-    .fast-path .fp-row label { display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; }
-    .fast-path .fp-row input[type=checkbox] { width: auto; margin: 0; }
+    .author-attachbar #authorReplay { width: auto; margin-left: auto; }
     .fp-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; max-width: 760px; }
     .fp-steps li { display: grid; grid-template-columns: 26px 220px 1fr; align-items: center; padding: 8px 10px;
       border: 1px solid var(--line, #d0d7de); border-radius: 8px; background: #fff; font-size: 14px; }
@@ -604,7 +591,6 @@
     .fp-steps li.active .ic { animation: fp-pulse 1.2s ease-in-out infinite; }
     @keyframes fp-pulse { 50% { opacity: .35; } }
     .fp-log > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
-    .fast-path .fp-row > button { width: auto; min-width: 160px; }
     .author-extras {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -874,30 +860,17 @@
             <select id="authorProfile"></select>
           </div>
           <div class="fp-field">
-            <label>Mode</label>
-            <div class="mode-toggle" role="group" aria-label="Authoring mode">
-              <button id="modeFast" class="mode on" type="button" aria-pressed="true">Fast</button>
-              <button id="modeFull" class="mode" type="button" aria-pressed="false">Full Python</button>
-            </div>
-          </div>
-          <p class="mode-help" id="modeHelp"></p>
-          <div class="fp-field">
-            <label for="authorTimeout" title="How long one model call may take before it is given up (both modes). Stop ends a run at any time.">Response limit (s)</label>
+            <label for="authorTimeout" title="How long one model call may take before it is given up. Stop ends a run at any time.">Response limit (s)</label>
             <input id="authorTimeout" type="number" min="60" step="60" value="3600" style="width:110px">
           </div>
           <div class="fp-field">
-            <label for="authorTemperature" title="Sampling temperature for the model (both modes). 0.8 is the default; lower is more deterministic. Applies to the next run or session.">Temperature</label>
+            <label for="authorTemperature" title="Sampling temperature for the model. 0.8 is the default; lower is more deterministic. Applies to the next run or session.">Temperature</label>
             <input id="authorTemperature" type="number" min="0" max="2" step="0.1" value="0.8" style="width:80px">
           </div>
           <button id="authorStop" class="danger" disabled>Stop</button>
         </div>
-        <div class="mode-options" id="fastOptions">
-          <label><input type="checkbox" id="fastCheckInstructions" checked> check my instructions</label>
-          <label><input type="checkbox" id="fastFcCheck"> check in FluentControl</label>
-          <label title="No questions: the model decides every open value itself"><input type="checkbox" id="fastChoose"> don't ask me, let the model decide</label>
-        </div>
-        <details class="mode-options" id="fullOptions" hidden>
-          <summary>Full Python settings</summary>
+        <details class="mode-options" id="fullOptions">
+          <summary>Settings</summary>
           <div class="author-sb-fields">
             <div>
               <label for="authorLabScope">Lab scope</label>
@@ -935,7 +908,7 @@
           <label class="attach-button secondary" for="authorAttachments">Attach files</label>
           <input id="authorAttachments" type="file" multiple accept=".pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.py,application/pdf,text/*">
           <div class="attachment-list" id="authorAttachmentList"></div>
-          <button id="fastReplay" class="secondary" disabled>Show replay</button>
+          <button id="authorReplay" class="secondary" disabled>Show replay</button>
         </div>
 
         <details class="author-extras">
@@ -1137,7 +1110,7 @@
         parts.push(`<div class="msg model author-pending rich"><div class="msg-title">Author</div>thinking${live}</div>`);
       }
       if (!parts.length) {
-        parts.push('<div class="msg system"><div class="msg-title">How it works</div>Choose the deck and the mode, attach the protocol document, describe what should be automated and send (Ctrl+Enter). The model tells you what it understood and asks when something is unclear; answer here. Stop ends a run at any time.</div>');
+        parts.push('<div class="msg system"><div class="msg-title">How it works</div>Choose the deck, attach the protocol document, describe what should be automated and send (Ctrl+Enter). The model tells you what it understood and asks when something is unclear; answer here. Stop ends a run at any time.</div>');
       }
       chat.innerHTML = parts.join('');
       chat.scrollTop = chat.scrollHeight;
@@ -1296,132 +1269,15 @@
 
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // ── Author: one chat, two modes ─────────────────────────────────
-    // Fast: a message (+ attached document) starts the fast path; its
-    // questions come back as chat messages and the next message answers them.
-    // Full Python: the same chat talks to the model that writes the Python.
-    const FAST_STAGES = [
-      { label: 'Understand your request', match: /understanding your request/ },
-      { label: 'Your answers', match: /waiting for you|waiting for your answer|revising the spec/ },
-      { label: 'Read the document', match: /reading the document|extracting your instructions|^spec:/ },
-      { label: 'Build and simulate', match: /compiling and simulating|custom|model-written/ },
-      { label: 'Check your instructions', match: /checking your instructions/ },
-      { label: 'Check in FluentControl', match: /FluentControl/ },
-    ];
-    const MODE_HELP = {
-      fast: 'Fast: reads the document into steps and builds the protocol from checked building blocks (5–10 min). It first tells you what it understood and asks what is unclear.',
-      full: 'Full Python: the model writes the Python itself (15–60 min), for protocols the fast path cannot express. It asks in this chat when something is unclear.',
-    };
-    const ACCEPT_WORDS = /^\s*(ok|okay|yes|y|keep|keep everything|go|go ahead|passt|ja|continue)\s*[.!]?\s*$/i;
-
-    function fastStepsHtml(job, fcChecked, instructionsChecked, noQuestions) {
-      const lines = (job.progress || []).map(line => {
-        const m = /^\s*(\d+)\s*s\s+(.*)$/.exec(line);
-        return m ? { t: Number(m[1]), msg: m[2] } : { t: 0, msg: line.trim() };
-      });
-      let current = -1, currentStart = 0;
-      const reached = new Set();
-      for (const { t, msg } of lines) {
-        const k = FAST_STAGES.findIndex(s => s.match.test(msg));
-        if (k < 0) continue;
-        if (k !== current) currentStart = t;
-        current = k; reached.add(k);
-      }
-      const spec = lines.map(l => /^spec: \d+ steps in (\d+) s/.exec(l.msg)).find(Boolean);
-      const running = job.status === 'queued' || job.status === 'running';
-      const summary = job.result && job.result.summary;
-      const failed = job.status === 'failure' || job.status === 'stopped' || (summary && summary.stage !== 'done');
-      const tokens = job.streamed_tokens ? ` · model writing, ~${job.streamed_tokens.toLocaleString()} tokens` : '';
-      const rows = FAST_STAGES.map((stage, k) => {
-        if (k === 4 && !instructionsChecked) return '';
-        if (k === 5 && !fcChecked) return '';
-        let cls = 'pending', icon = '○', detail = '';
-        if (k === current && running) {
-          cls = 'active'; icon = '●';
-          detail = (job.question || []).length ? 'waiting for your reply below'
-            : `${formatDuration(Math.max(0, (job.elapsed_s || 0) - currentStart))}${tokens}`;
-        } else if (k === current && failed) {
-          cls = 'failed'; icon = '✕'; detail = job.status === 'stopped' ? 'stopped' : 'did not finish';
-        } else if (reached.has(k) || (!running && !failed)) {
-          cls = 'done'; icon = '✓';
-          if (k === 2 && spec) detail = `read in ${formatDuration(Number(spec[1]))}`;
-        } else if (k === 1 && ([3, 4, 5].some(j => reached.has(j)) || (!running && !failed))) {
-          // Only known once building has started (questions can come after the read).
-          cls = 'done'; icon = '✓'; detail = noQuestions ? 'the model decided (you chose no questions)' : 'nothing to ask';
-        } else if (k === 1 && noQuestions) {
-          detail = 'the model decides (you chose no questions)';
-        } else if (k === 0 && !reached.has(0) && [1, 2, 3, 4, 5].some(j => reached.has(j))) {
-          icon = '–'; detail = noQuestions ? 'skipped (you chose no questions)' : 'skipped';
-        }
-        return `<li class="${cls}"><span class="ic">${icon}</span><span>${stage.label}</span><span class="dt">${escapeHtml(detail)}</span></li>`;
-      });
-      const thinking = running && job.thinking && !(job.question || []).length
-        ? `<div class="fp-thinking" title="what the model is thinking right now">${escapeHtml(job.thinking.slice(-420))}</div>` : '';
-      return `<ol class="fp-steps">${rows.join('')}</ol>${thinking}`;
-    }
-
-    function fastResultHtml(r) {
-      const sm = r.summary || {};
-      const ins = sm.instructions || {};
-      const icon = { pass: '✅', fail: '❌', unknown: '⚪' };
-      const fc = sm.fc_ok === true ? 'FluentControl: no InfoPad errors' :
-        sm.fc_ok === false ? `FluentControl: ${(sm.fc_findings || []).length} finding(s)` : 'compiled and simulated';
-      const head = sm.stage === 'done'
-        ? `${fc}` + (ins.total ? ` · your instructions: ${ins.verified}/${ins.total} verified` +
-            (ins.failed ? `, ${ins.failed} NOT met` : '') + (ins.unverified ? `, ${ins.unverified} not checkable` : '') : '')
-        : `Stopped at ${sm.stage}: ${sm.error || ''}`;
-      let table = '';
-      if ((r.requirements || []).length) {
-        table = '<table class="fp-table"><tr><th></th><th>Instruction</th><th>Evidence</th></tr>' +
-          r.requirements.map(q => {
-            // One sentence can hold several checks ("beads and elution buffer via the FCA"): say which one.
-            const twin = r.requirements.filter(o => o.text === q.text).length > 1;
-            const which = twin && q.params && q.params.reagent ? ` — ${q.params.reagent}` : '';
-            return `<tr><td>${icon[q.status] || '⚪'}</td><td>${escapeHtml(q.text + which)}</td><td>${escapeHtml(q.evidence)}</td></tr>`;
-          }).join('') + '</table>';
-      }
-      const spec = r.spec_markdown ? `<details><summary>Bench Spec (what the model read from the document)</summary><div class="pre">${escapeHtml(r.spec_markdown)}</div></details>` : '';
-      const more = r.source ? '<div class="small">The protocol is under “Generated code” below; <b>Show replay</b> plays it step by step.</div>' : '';
-      const assumed = (sm.assumed || []).length
-        ? `<details open><summary>Assumed by the model (${sm.assumed.length}) — send a new message to change any of them</summary>` +
-          `<ul class="fp-asklist">${sm.assumed.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul></details>`
-        : '';
-      const files = r.output_dir ? `<div class="fp-files">Saved in <code>${escapeHtml(r.output_dir)}</code>` +
-        (r.python_path ? `<br>Python: <code>${escapeHtml(r.python_path)}</code>` : '') +
-        (r.xscr_path ? `<br>FluentControl: <code>${escapeHtml(r.xscr_path)}</code>` +
-          `<br><button class="secondary" data-open-fc="${escapeHtml(r.xscr_path)}">Check in FluentControl</button>` : '') +
-        '</div>' : '';
-      return `<div class="fp-summary">${escapeHtml(head)}</div>${table}${assumed}${files}${more}${spec}`;
-    }
-
-    function upsertAuthorMessage(id, role, title, html) {
-      const existing = state.authorMessages.find(m => m.id === id);
-      if (existing) { existing.html = html; existing.title = title; existing.role = role; }
-      else state.authorMessages.push({ id, role, title, html });
-      renderAuthorChat();
-    }
-
-    function setAuthorMode(mode) {
-      state.authorMode = mode;
-      $('modeFast').classList.toggle('on', mode === 'fast');
-      $('modeFull').classList.toggle('on', mode === 'full');
-      $('modeFast').setAttribute('aria-pressed', String(mode === 'fast'));
-      $('modeFull').setAttribute('aria-pressed', String(mode === 'full'));
-      $('fastOptions').hidden = mode !== 'fast';
-      $('fullOptions').hidden = mode !== 'full';
-      $('modeHelp').textContent = MODE_HELP[mode];
-      try { localStorage.setItem('fluentvibe.authorMode', mode); } catch (e) { /* private window */ }
-    }
-
+    // ── Author: one chat with the model that writes the Python ──────
+    // (Fast mode, document -> Bench Spec -> blocks, was removed 2026-10-06:
+    // in a 16-run eval on Strata it was not faster and missed what Full got.)
     function authorBusy(busy) {
       state.authorBusy = busy;
-      $('modeFast').disabled = busy; $('modeFull').disabled = busy;
       $('authorStop').disabled = !busy;
     }
 
     async function sendFromComposer() {
-      if (state.authorMode === 'fast') return sendFast();
-      if (state.fastJobId) { setStatus('authorStatus', 'A Fast run is still going: Stop it first.', 'error'); return; }
       if (!state.authorSessionId) {
         await startAuthoringSession();
         if (!state.authorSessionId) return;
@@ -1429,138 +1285,7 @@
       return sendAuthorMessage();
     }
 
-    async function sendFast() {
-      const message = $('authorPrompt').value.trim();
-      // A running Fast job waiting for answers: this message is the answer.
-      if (state.fastJobId && state.fastWaiting) {
-        if (!message) { setStatus('authorStatus', 'Type your answer (or "ok" to keep everything).', 'error'); return; }
-        const answer = ACCEPT_WORDS.test(message) ? '__accept__' : message;
-        try {
-          await post('/api/job-answer', { id: state.fastJobId, answer });
-          pushAuthorMessage('user', 'You', message);
-          $('authorPrompt').value = '';
-          state.fastWaiting = false;
-        } catch (err) { setStatus('authorStatus', String(err.message || err), 'error'); }
-        return;
-      }
-      if (state.fastJobId) { setStatus('authorStatus', 'Still working; Stop first to start over.', 'error'); return; }
-      const profile = $('authorProfile').value;
-      if (!profile) { setStatus('authorStatus', 'Choose a deck profile first.', 'error'); return; }
-      // Fast reads a protocol document: never start without one (a pasted
-      // protocol of some length counts), rather than guess from one sentence.
-      if (!state.authorAttachments.length && message.length < 400) {
-        setStatus('authorStatus', 'Attach the protocol document first (Attach files below), or paste the whole protocol as text.', 'error');
-        pushAuthorMessage('system', 'Document missing',
-          'Fast builds the protocol from a document. Attach the protocol (PDF or text) with “Attach files”, then send again. Your message is kept.');
-        return;
-      }
-      const attachments = await buildAuthorAttachmentPayload();
-      const fcChecked = $('fastFcCheck').checked;
-      const instructionsChecked = $('fastCheckInstructions').checked && !!message;
-      const noQuestions = $('fastChoose').checked;
-      pushAuthorMessage('user', 'You', `${message || '(document only)'}` +
-        (attachments.length ? `\n\nAttached: ${attachments.map(a => a.name).join(', ')}` : ''));
-      $('authorPrompt').value = '';
-      // The document stays attached: a second run or a follow-up uses it again.
-      // A new run starts clean: nothing from the previous one can be replayed or mistaken for this result.
-      $('generatedCode').value = ''; $('fastReplay').disabled = true;
-      let created;
-      try {
-        created = await post('/api/jobs/author-spec', {
-          profile_name: profile, request: message, attachments,
-          check_instructions: $('fastCheckInstructions').checked,
-          fc_check: fcChecked, choose: $('fastChoose').checked,
-          request_timeout_s: Number($('authorTimeout').value || 3600),
-          temperature: Number($('authorTemperature').value || 0.8),
-        });
-      } catch (err) {
-        pushAuthorMessage('error', 'Could not start', String(err.message || err));
-        return;
-      }
-      const run = { jobId: created.job.id, fcChecked, instructionsChecked, noQuestions };
-      try { localStorage.setItem('fastRun', JSON.stringify(run)); } catch (_) { /* per-viewer convenience only */ }
-      await followFast(run);
-    }
-
-    // Follows a Fast job to its end: questions, progress, result. Also picks
-    // up a job that was running when the page was reloaded.
-    async function followFast({ jobId, fcChecked, instructionsChecked, noQuestions }) {
-      state.fastJobId = jobId; state.fastWaiting = false;
-      authorBusy(true);
-      const runId = `fast-${jobId}`;
-      let shownQuestions = '', job;
-      try {
-        while (true) {
-          job = await fetchJob(jobId, 'authorStatus');
-          upsertAuthorMessage(runId, 'model', 'Fast', fastStepsHtml(job, fcChecked, instructionsChecked, noQuestions));
-          const questions = job.question || [];
-          const key = JSON.stringify(questions);
-          if (questions.length && key !== shownQuestions) {
-            shownQuestions = key;
-            const understood = /^I understood:/.test(questions[0]) ? questions[0] : null;
-            const asked = understood ? questions.slice(1) : questions;
-            const body = (understood ? `<p>${escapeHtml(understood)}</p>` : '') +
-              (asked.length ? `<ol class="fp-asklist">${asked.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ol>` : '') +
-              '<div class="small">Reply below: correct what is wrong or answer by number (e.g. “2: 1.2 ml deep-well plate”). ' +
-              'Anything you leave out, the model decides. <b>ok</b> keeps everything.</div>';
-            pushAuthorMessage('model', understood ? 'Is this right?' : 'Please check', null);
-            state.authorMessages[state.authorMessages.length - 1].html = body;
-            renderAuthorChat();
-            state.fastWaiting = true;
-            $('authorPrompt').placeholder = 'Your answer… ("ok" keeps everything; Ctrl+Enter sends)';
-            $('authorPrompt').focus();
-          } else if (!questions.length && shownQuestions) {
-            shownQuestions = ''; state.fastWaiting = false;
-            $('authorPrompt').placeholder = 'Describe what to automate and attach the protocol document.  (Ctrl+Enter sends; Enter is a new line)';
-          }
-          if (job.status === 'queued' || job.status === 'running') {
-            setStatus('authorStatus', `${questions.length ? 'waiting for your reply' : 'working'} · ${formatDuration(job.elapsed_s || 0)}`, 'running');
-            await sleep(1000);
-            continue;
-          }
-          break;
-        }
-        upsertAuthorMessage(runId, 'model', 'Fast', fastStepsHtml(job, fcChecked, instructionsChecked, noQuestions));
-        if (job.status === 'stopped') {
-          setStatus('authorStatus', `Stopped after ${formatDuration(job.elapsed_s || 0)}.`, 'error');
-          pushAuthorMessage('system', 'Stopped', 'Nothing was generated. Send a new message to start again.');
-          return;
-        }
-        if (job.status === 'failure') {
-          setStatus('authorStatus', job.error ? job.error.message : 'failed', 'error');
-          pushAuthorMessage('error', 'Failed', job.error ? job.error.message : 'failed');
-          return;
-        }
-        const r = job.result, sm = r.summary || {}, ins = sm.instructions || {};
-        // Green only when everything holds: built, FluentControl not failing, no instruction unmet.
-        const allGood = sm.stage === 'done' && sm.fc_ok !== false && !ins.failed;
-        setStatus('authorStatus', `${allGood ? 'done' : sm.stage === 'done' ? 'done with problems' : 'stopped at ' + sm.stage} · ${formatDuration(job.elapsed_s || 0)}`, allGood ? 'ok' : 'error');
-        pushAuthorMessage(allGood ? 'model' : 'model warn', allGood ? 'Protocol ready' : 'Result — please look', null);
-        state.authorMessages[state.authorMessages.length - 1].html = fastResultHtml(r);
-        renderAuthorChat();
-        showJson('authorResult', r);
-        if (r.source) { $('generatedCode').value = r.source; $('fastReplay').disabled = false; }
-      } catch (err) {
-        setStatus('authorStatus', String(err.message || err), 'error');
-      } finally {
-        state.fastJobId = null; state.fastWaiting = false;
-        try { localStorage.removeItem('fastRun'); } catch (_) { /* ignore */ }
-        authorBusy(false);
-      }
-    }
-
-    function resumeFast() {
-      let run = null;
-      try { run = JSON.parse(localStorage.getItem('fastRun') || 'null'); } catch (_) { run = null; }
-      if (run && run.jobId && !state.fastJobId) followFast(run);
-    }
-
     function bindAuthor() {
-      let saved = 'fast';
-      try { saved = localStorage.getItem('fluentvibe.authorMode') || 'fast'; } catch (e) { /* private window */ }
-      setAuthorMode(saved === 'full' ? 'full' : 'fast');
-      $('modeFast').addEventListener('click', () => setAuthorMode('fast'));
-      $('modeFull').addEventListener('click', () => setAuthorMode('full'));
       $('sendAuthor').addEventListener('click', sendFromComposer);
       // Enter is a new line (a half-typed answer must never go out by accident);
       // Ctrl+Enter / Cmd+Enter sends.
@@ -1579,14 +1304,14 @@
         setStatus('fcStatus', 'Protocol chosen; press “Validate via shell”.', 'ok');
       });
       $('authorStop').addEventListener('click', async () => {
-        const jobId = state.fastJobId || (state.runningJobs && state.runningJobs.authorStatus);
+        const jobId = state.runningJobs && state.runningJobs.authorStatus;
         if (!jobId) return;
         $('authorStop').disabled = true;
         setStatus('authorStatus', 'stopping…', 'running');
         try { await post('/api/job-cancel', { id: jobId }); }
         catch (err) { setStatus('authorStatus', String(err.message || err), 'error'); }
       });
-      $('fastReplay').addEventListener('click', async () => {
+      $('authorReplay').addEventListener('click', async () => {
         const win = window.open('', '_blank');
         setStatus('authorStatus', 'simulating for the replay…', 'running');
         try {
@@ -1608,7 +1333,6 @@
       bindSetup();
       bindWorkbench();
       bindAuthor();
-      resumeFast();
       try {
         await loadCapabilities();
         const [configs, workspaces, liquidClasses] = await Promise.all([
@@ -2122,6 +1846,7 @@
             { tool_calls: authored.tool_calls || [] }
           );
           $('generatedCode').value = authored.generated_code || authored.best_draft_code || $('generatedCode').value;
+          $('authorReplay').disabled = !$('generatedCode').value;
           if (authored.compiled_xscr) $('fcXscrPath').value = authored.compiled_xscr;
         });
       } catch (err) {

@@ -112,11 +112,6 @@
           "default": true,
           "description": "Check each generated protocol in FluentControl (InfoPad)."
         },
-        "fluentvibe.chooseOpenValues": {
-          "type": "boolean",
-          "default": false,
-          "description": "Let the model choose values the document leaves open instead of asking you."
-        },
         "fluentvibe.model.endpoint": {
           "type": "string",
           "default": "",

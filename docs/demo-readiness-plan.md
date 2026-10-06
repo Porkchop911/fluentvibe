@@ -53,6 +53,8 @@ These affect how to prepare the demo today.
 
 Implementation references: [CLI](../fluentvibe/cli.py), [Fast authoring](../fluentvibe/authoring/spec_path.py), [web service](../fluentvibe/workspace_app/service.py), [VS Code workflows](../editors/vscode/src/workflow.ts), [language-server startup](../editors/vscode/src/extension.ts), [requirement diagnostics](../fluentvibe/copilot/analyzer.py), and [FC shell integration](../fluentvibe/authoring/fluentcontrol_shell.py).
 
+> **2026-10-06:** Fast mode was removed from the web app and VS Code after a 16-run eval on Strata (not faster than Full Python, and it missed steps Full Python got). The demo flow is Full Python; the Fast sections below are historical.
+
 The main flow should be **Fast document generation**, not Full Python or `wt.add` as a speed showcase. The recorded architecture experiment did not show `wt.add` making model authoring faster. See the [resolver ADR](adr-authoring-resolver.md). Historical timings on another profile are useful planning information, not a promise for this recording.
 
 ## 3. Preparation: freeze and configure the machine

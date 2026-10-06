@@ -169,49 +169,21 @@ export async function generateFromDocument(): Promise<void> {
   if (request === undefined) {
     return;
   }
-  const mode = await vscode.window.showQuickPick(
-    [
-      { label: "Fast", description: "document → spec → protocol from checked building blocks (~15 min)", value: "fast" },
-      { label: "Full Python", description: "the model writes the protocol in the DSL (~15-25 min)", value: "full" },
-    ],
-    { title: "How should the protocol be written?", ignoreFocusOut: true }
-  );
-  if (!mode) {
-    return;
-  }
   const stem = path.basename(doc, path.extname(doc)).replace(/[^0-9A-Za-z_-]+/g, "_").slice(0, 40);
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const outDir = resolveInRoot(path.join(settings().get<string>("outputDir", "build/eval"), `${stem}-${stamp}`));
   const checkInstructions = request.trim() && settings().get<boolean>("checkInstructions", true);
-  let args: string[];
-  let extraEnv: NodeJS.ProcessEnv = {};
-  if (mode.value === "fast") {
-    args = ["author-spec", doc, ...profileArgs(), "-o", outDir];
-    if (request.trim()) {
-      // "--request=" keeps a request that starts with "-" from reading as a flag.
-      args.push(`--request=${request.trim()}`);
-    }
-    if (checkInstructions) {
-      args.push("--check-instructions");
-    }
-    if (settings().get<boolean>("fluentControlCheck", true)) {
-      args.push("--fc-check");
-    }
-    if (settings().get<boolean>("chooseOpenValues", false)) {
-      args.push("--choose");
-    }
-  } else {
-    args = ["author", "--document", doc, ...profileArgs(), "--output-dir", outDir, "--lab-scope", "skills",
-            "--model-trace"];
-    if (checkInstructions) {
-      args.push("--check-instructions");
-    }
-    // The request last, after "--": it may start with "-".
-    args.push("--", request.trim() || "Automate this protocol on this deck.");
-    if (settings().get<boolean>("fluentControlCheck", true)) {
-      extraEnv = { FLUENTVIBE_FC_CHECK: "1" };
-    }
+  // Full Python only: the Fast path (document -> spec -> blocks) was removed
+  // after a 16-run eval on Strata (not faster, and it missed what Full got).
+  const args = ["author", "--document", doc, ...profileArgs(), "--output-dir", outDir, "--lab-scope", "skills",
+                "--model-trace"];
+  if (checkInstructions) {
+    args.push("--check-instructions");
   }
+  // The request last, after "--": it may start with "-".
+  args.push("--", request.trim() || "Automate this protocol on this deck.");
+  const extraEnv: NodeJS.ProcessEnv = settings().get<boolean>("fluentControlCheck", true)
+    ? { FLUENTVIBE_FC_CHECK: "1" } : {};
   output.clear();
   output.show(true);
   output.appendLine(`Document: ${doc}`);

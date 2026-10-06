@@ -15,24 +15,21 @@ What works end to end, how to start it, and what to leave out of a live demo.
 
 ## The Author page
 
-One chat, a **Fast | Full Python** toggle, one **Stop**.
+One chat and one **Stop**. The model writes the Python itself: attach the protocol (PDF/text),
+write the request and send with **Ctrl+Enter** (Enter is a new line). It asks in the chat when
+something is unclear. On Strata (q2_0) a run took 40 s for a half-plate stamp and 2-6 min for the
+Dynabeads and AMPure clean-ups (fast-vs-full eval, 2026-10-06). **Temperature** (default 0.8) and the
+response limit sit next to Stop; **Settings** holds lab scope, retry budget and the model.
 
-- **Fast** (5-10 min): attach the protocol (PDF/text) and, for normalisation, a sample sheet
-  (CSV: well or sample number, ng/µl); write the request; **Ctrl+Enter** sends (Enter is a
-  new line). After ~30-60 s the model says what it understood and asks at most 5 questions;
-  answer in the chat ("ok" keeps everything). The stages then run live (read the document,
-  build and simulate, check your instructions, check in FluentControl) with the model's
-  thinking shown. The result names the folder, `draft.py` and the `.xscr`, lists what the
-  model assumed, and offers **Check in FluentControl** and **Show replay**.
-- **Full Python** (15-60 min, many model turns): the model writes the Python itself in the
-  same chat. Record it; do not wait for it live.
-- The same document with the same request and answers reuses the finished read (seconds).
+The Fast mode (document -> Bench Spec -> blocks) was removed on 2026-10-06: over 16 runs it was not
+faster than Full Python and it dropped the Dynabeads 15-min incubation and the shifted stamp's target
+columns, which Full Python got every time.
 
 ## Flows
 
 | Flow | Where | Time | What the viewer sees |
 |---|---|---|---|
-| Document → protocol | Author, Fast (or VS Code *Generate protocol from document* → Fast) | 5-10 min | understanding + questions after ~30-60 s, live stages, "your instructions: n/n verified", FluentControl result |
+| Document → protocol | Author (or VS Code *Generate protocol from document*) | 1-6 min on Strata | the model's questions, the draft, simulation, FluentControl result |
 | Repetitions as loops | same | – | "3 washes" is one FluentControl loop with a count variable (`REPEAT_WASH_TIMES`), not 3 copies |
 | Per-sample normalisation | same, with a sample sheet | – | per-well water and DNA volumes (FCA); concentrated samples pre-diluted as in the ONT table |
 | Change one volume | `wt.volume("S3_AXP_UL", 36)` → `30` in the Python, or `S3_AXP_UL` in FluentControl's Variables group | save | removals and mixes follow (Set Variable formulas) |

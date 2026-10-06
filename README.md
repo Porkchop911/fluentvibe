@@ -178,7 +178,8 @@ fluentvibe author "..." --endpoint http://localhost:1234/v1/chat/completions --m
 ### Documents, instructions, FluentControl
 
 ```bash
-# Document -> Bench Spec -> protocol from checked building blocks (fast path);
+# Document -> Bench Spec -> protocol from checked building blocks (CLI only; the
+# Fast mode was removed from the web app and VS Code on 2026-10-06);
 # open values become questions; the request's instructions and the document's
 # steps are checked on the result; optional FluentControl InfoPad check.
 fluentvibe author-spec protocol.pdf --profile build/workspaces/<deck> -o out/ \
