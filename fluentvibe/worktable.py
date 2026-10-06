@@ -59,6 +59,12 @@ if TYPE_CHECKING:
 # Catalog-name markers of SBS-footprint reservoirs: they may sit on plate nests
 # and the MCA96 can pipette in them (slim troughs: neither).
 _SBS_MARKERS = ("sbs", "mca96", "mca384")
+_STORAGE_MARKERS = ("hotel",)
+# Steps where an arm works on the labware itself (pipetting, tips).
+_ARM_STEPS = frozenset({
+    "AspirateStep", "DispenseStep", "Mca384MixStep", "PickUpTipsStep", "SetTipsBackStep",
+    "LihaAspirateStep", "LihaDispenseStep", "LihaMixStep", "LihaGetTipsStep",
+})
 
 
 class Worktable:
@@ -920,6 +926,7 @@ class Worktable:
         self._validate_empty_tip_liquid_classes()
         self._validate_mca_reservoirs()
         self._validate_reach()
+        self._validate_storage_sites()
         protocol = self.to_protocol()
         xml = render_protocol(protocol)
         path = Path(out_path)
@@ -1119,6 +1126,42 @@ class Worktable:
                     f"with `Liquid subclass section \"Mix\" is missing`. Use a "
                     f"Mix-capable class such as \"Water Mix\" for mixing steps "
                     f"(keep \"Water Free Single\" for plain transfers)."
+                )
+
+    def _validate_storage_sites(self) -> None:
+        """Refuse pipetting and tip handling on a storage site (a hotel).
+
+        Hotels only hold labware for the gripper; the FCA and MCA cannot work
+        there. A tip box placed in ``HotelDWP_Pos`` compiled and simulated,
+        and FluentControl answered "No DiTi-Labware FCA, 200ul SBS found" and
+        "Tip(s) are not mounted" for every following FCA step. Labware the
+        gripper moves out of a hotel first is judged where it is at the step.
+        Storage carriers are recognised by name (deck rule
+        ``storage_markers``, default "hotel").
+        """
+        rules = self._deck_rules() or {}
+        markers = [str(m).lower() for m in (rules.get("storage_markers") or _STORAGE_MARKERS)]
+        where: dict[str, tuple[str, int]] = {}
+        for step in self._iter_all_steps():
+            kind = type(step).__name__
+            if kind == "AddLabwareStep":
+                where[step.label] = (step.location, int(step.position))
+                continue
+            if kind == "RgaTransferLabwareStep":
+                where[step.labware_name] = (step.destination_location, int(step.destination_site))
+                continue
+            if kind not in _ARM_STEPS:
+                continue
+            name = getattr(step, "labware_name", None)
+            if not name or name not in where:
+                continue
+            location, position = where[name]
+            if any(marker in location.lower() for marker in markers):
+                from .simulator.invariants import InvalidSlotError
+                raise InvalidSlotError(
+                    f"{name!r} sits on {location} {position}, a hotel (storage): the FCA and MCA cannot "
+                    f"pipette or pick up tips there. Place it on a deck site (a nest), or move it there "
+                    f"with the gripper before this step."
                 )
 
     def _validate_reach(self) -> None:

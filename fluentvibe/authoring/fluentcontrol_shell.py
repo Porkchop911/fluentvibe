@@ -575,9 +575,23 @@ def _click_tab_close_button(tab) -> bool:
 
 
 def _close_shell_tab_if_open(fc_win, timeout_s: float = 3.0, script_name: str = "shell") -> bool:
-    tab = _script_tab(fc_win, script_name)
-    if tab is None:
-        return False
+    """Close every open tab of ``script_name``: a second, stale tab would
+    otherwise be taken for the freshly opened script and its InfoPad read."""
+    closed = False
+    for _ in range(5):
+        tab = _script_tab(fc_win, script_name)
+        if tab is None:
+            return closed
+        _close_one_tab(fc_win, tab, script_name, timeout_s)
+        closed = True
+    if _script_tab(fc_win, script_name) is not None:
+        raise FluentControlShellError(f"Script tab did not close: {script_name}")
+    return closed
+
+
+def _close_one_tab(fc_win, tab, script_name: str, timeout_s: float) -> None:
+    before = sum(1 for t in fc_win.descendants(control_type="TabItem")
+                 if (t.window_text() or "").strip().rstrip(" *") == script_name)
     _safe_click(tab)
     if not _click_tab_close_button(tab):
         # No close button found: Ctrl+F4, but only with this tab active.
@@ -590,13 +604,16 @@ def _close_shell_tab_if_open(fc_win, timeout_s: float = 3.0, script_name: str = 
             raise FluentControlShellError(f"Could not close the {script_name!r} tab safely; close it in FluentControl")
         _bring_to_foreground(fc_win)
         fc_win.type_keys("^{F4}")
-    # A dirty tab asks to save: _dismiss_modal_dialogs refuses rather than discard edits.
-    _until(lambda: _script_tab(fc_win, script_name) is None or _fc_dialog_open(fc_win), timeout_s)
-    _dismiss_modal_dialogs(fc_win, timeout_s=1.0)
-    if _until(lambda: _script_tab(fc_win, script_name) is None, 1.0) is not True:
-        raise FluentControlShellError(f"Script tab did not close: {script_name}")
-    return True
 
+    def fewer():
+        return sum(1 for t in fc_win.descendants(control_type="TabItem")
+                   if (t.window_text() or "").strip().rstrip(" *") == script_name) < before
+
+    # A dirty tab asks to save: _dismiss_modal_dialogs refuses rather than discard edits.
+    _until(lambda: fewer() or _fc_dialog_open(fc_win), timeout_s)
+    _dismiss_modal_dialogs(fc_win, timeout_s=1.0)
+    if not _until(fewer, 1.0):
+        raise FluentControlShellError(f"Script tab did not close: {script_name}")
 
 def _wait_for_script_tab(fc_win, script_name: str, timeout_s: float = 5.0) -> bool:
     return _until(lambda: _script_tab(fc_win, script_name) is not None, timeout_s) is True

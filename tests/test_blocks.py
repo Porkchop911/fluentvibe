@@ -537,3 +537,39 @@ def test_variable_prefix_is_ascii_only():
     from fluentvibe.blocks.common import variable_prefix
 
     assert variable_prefix("s03: Add 36 µL beads (1.8 × 20 µL)") == "S03_ADD_36_L_BEADS_1_8_20_L"
+
+
+def _storage_steps(*steps):
+    """IR-like steps by class name for Worktable._validate_storage_sites."""
+    from types import SimpleNamespace
+
+    made = []
+    for kind, fields in steps:
+        made.append(type(kind, (SimpleNamespace,), {})(**fields))
+    return SimpleNamespace(_deck_rules=lambda: {}, _iter_all_steps=lambda: iter(made))
+
+
+def test_tips_in_a_hotel_are_refused_at_compile():
+    """FluentControl: 'No DiTi-Labware FCA, 200ul SBS found' and 'Tip(s) are not
+    mounted' for every FCA step when the tip box sat in HotelDWP_Pos."""
+    from fluentvibe.simulator.invariants import InvalidSlotError
+    from fluentvibe.worktable import Worktable
+
+    wt = _storage_steps(
+        ("AddLabwareStep", {"label": "ReagentTips", "location": "HotelDWP_Pos", "position": 1}),
+        ("LihaGetTipsStep", {"labware_name": "ReagentTips"}),
+    )
+    with pytest.raises(InvalidSlotError, match="hotel"):
+        Worktable._validate_storage_sites(wt)
+
+
+def test_labware_moved_out_of_a_hotel_first_is_fine():
+    from fluentvibe.worktable import Worktable
+
+    wt = _storage_steps(
+        ("AddLabwareStep", {"label": "Plate", "location": "HotelMP_Pos", "position": 3}),
+        ("RgaTransferLabwareStep", {"labware_name": "Plate", "destination_location": "Nest61mm_Pos",
+                                    "destination_site": 2}),
+        ("AspirateStep", {"labware_name": "Plate"}),
+    )
+    Worktable._validate_storage_sites(wt)
