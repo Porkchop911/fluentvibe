@@ -15,14 +15,24 @@ from typing import Any
 
 from .trace import ModelTraceRecorder
 
-# The authoring loop talks to any OpenAI-compatible chat endpoint (LM Studio,
-# Ollama, vLLM, …). Defaults target a local server; override per-machine with
-# FLUENTVIBE_LM_ENDPOINT / FLUENTVIBE_LM_MODEL or the `fluentvibe author` flags.
-# FLUENTVIBE_LM_API_KEY supplies an optional Bearer token for secured endpoints.
-DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get(
-    "FLUENTVIBE_LM_ENDPOINT", "http://localhost:18020/v1/chat/completions"
-)
-DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL", "qwen3.8-27b")
+# Every model call (authoring, chat, explain, edit, web app) goes to the local
+# Strata server by default. It serves whichever model is loaded and ignores the
+# requested name, so the name is only a label. FLUENTVIBE_LM_ENDPOINT /
+# FLUENTVIBE_LM_MODEL or the CLI flags still override per run;
+# FLUENTVIBE_LM_API_KEY supplies an optional Bearer token.
+STRATA_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
+STRATA_MODEL = "strata"
+DEFAULT_LM_STUDIO_ENDPOINT = os.environ.get("FLUENTVIBE_LM_ENDPOINT") or STRATA_ENDPOINT
+DEFAULT_LM_STUDIO_MODEL = os.environ.get("FLUENTVIBE_LM_MODEL") or STRATA_MODEL
+
+
+def configured_endpoint() -> str:
+    """The endpoint now (the environment read at call time, else Strata)."""
+    return os.environ.get("FLUENTVIBE_LM_ENDPOINT", "").strip() or STRATA_ENDPOINT
+
+
+def configured_model() -> str:
+    return os.environ.get("FLUENTVIBE_LM_MODEL", "").strip() or STRATA_MODEL
 
 
 def chat_completions_url(endpoint: str) -> str:

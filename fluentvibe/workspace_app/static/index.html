@@ -857,7 +857,7 @@
           <section id="protocolDetail" class="detail-panel"><div class="empty-state"><strong>Select a protocol</strong><p>Its groups, step types, source path, and decompilation options will appear here.</p></div></section>
           <section class="protocol-discussion">
             <div class="section-title"><div><h2>Discuss this protocol</h2><p>Ask about its steps and intent using the selected XSCR as context.</p></div></div>
-            <div class="model-server-picker"><label for="protocolModelServer">Model server</label><select id="protocolModelServer"><option value="configured">Configured local model</option><option value="strata">Strata · local test instance</option></select></div>
+            <div class="model-server-picker"><label for="protocolModelServer">Model server</label><select id="protocolModelServer"><option value="strata">Strata · 127.0.0.1:8080</option></select></div>
             <div id="protocolChatLog" class="discussion-log" role="log" aria-live="polite"><div class="empty-state">Select a protocol to start a focused discussion.</div></div>
             <div class="author-composer"><textarea id="protocolQuestion" rows="2" placeholder="What does this protocol do?" disabled></textarea><button id="askProtocol" disabled>Ask</button></div>
             <div class="status" id="protocolChatStatus" aria-live="polite"></div>
@@ -910,14 +910,14 @@
             </div>
             <div>
               <label for="authorModelServer">Model server</label>
-              <select id="authorModelServer"><option value="default">Default LM Studio</option><option value="strata">Strata · local test instance</option></select>
+              <select id="authorModelServer"><option value="strata">Strata · 127.0.0.1:8080</option></select>
             </div>
             <div>
               <label for="authorModel">Model ID override</label>
               <input id="authorModel" placeholder="default">
             </div>
           </div>
-          <div class="small model-target" id="authorModelTarget">Default LM Studio server. A model ID override is optional.</div>
+          <div class="small model-target" id="authorModelTarget">Strata at 127.0.0.1:8080 serves whichever model is loaded.</div>
         </details>
         <div class="status" id="authorStatus" aria-live="polite"></div>
 
@@ -1971,11 +1971,8 @@
     }
 
     function updateAuthorModelTarget() {
-      const strata = $('authorModelServer').value === 'strata';
-      $('authorModel').placeholder = strata ? 'qwen3.8-flash-next-q2_0' : 'default';
-      $('authorModelTarget').textContent = strata
-        ? 'Strata at 127.0.0.1:8080 · qwen3.8-flash-next-q2_0 by default. Changes apply to the next session.'
-        : 'Default LM Studio server. A model ID override is optional.';
+      $('authorModel').placeholder = 'loaded model';
+      $('authorModelTarget').textContent = 'Strata at 127.0.0.1:8080 serves whichever model is loaded.';
     }
 
     async function startAuthoringSession() {

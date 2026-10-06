@@ -5,11 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .lm_client import make_chat_client
+from .lm_client import STRATA_ENDPOINT, STRATA_MODEL, make_chat_client  # noqa: F401  (re-exported)
 from .lookup_eval import LookupEvalScenario, run_lookup_eval, write_lookup_eval_report
-
-STRATA_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
-STRATA_MODEL = "qwen3.8-flash-next-iq3_xxs"
 
 
 def strata_scenarios() -> list[LookupEvalScenario]:

@@ -33,6 +33,14 @@ from ..authoring.grounding import (
     _write_current_worktable_snapshot,
     load_generation_config,
 )
+from ..authoring.lm_client import (
+    DEFAULT_LM_STUDIO_ENDPOINT,
+    DEFAULT_LM_STUDIO_MODEL,
+    STRATA_MODEL,
+    configured_endpoint,
+    configured_model,
+)
+from ..authoring.lm_client import STRATA_ENDPOINT as STRATA_CHAT_ENDPOINT
 from ..authoring.tools import _catalog_entry, _python_class_for, _semantic_category
 from ..authoring.workspace_modules import (
     MANIFEST_NAME,
@@ -55,8 +63,6 @@ WORKBENCH_BASE_DIR = Path("build") / "workbench"
 DEFAULT_FC_INSTALL = Path(r"C:\ProgramData\Tecan\VisionX\DataBase")
 DEFAULT_INSTRUMENT_CONFIG_DIR = Path(r"C:\ProgramData\Tecan\VisionX\InstrumentConfigurations")
 DEFAULT_PROTOCOL_DIR = Path(r"C:\ProgramData\Tecan\VisionX\DataBase\UserSpecific")
-STRATA_CHAT_ENDPOINT = "http://127.0.0.1:8080/v1/chat/completions"
-STRATA_MODEL = "qwen3.8-flash-next-q2_0"
 COMMON_LABWARE_CATEGORIES: tuple[dict[str, Any], ...] = (
     {"name": "", "label": "All labware"},
     {"name": "plate", "label": "Plates"},
@@ -333,10 +339,7 @@ def protocol_chat_config(model_server: str = "configured") -> dict[str, Any]:
     """Allow protocol discussion through a known loopback model endpoint."""
     if model_server not in {"configured", "strata"}:
         raise ValueError("Unknown model server")
-    endpoint = (
-        STRATA_CHAT_ENDPOINT if model_server == "strata"
-        else os.environ.get("FLUENTVIBE_LM_ENDPOINT", "").strip()
-    )
+    endpoint = STRATA_CHAT_ENDPOINT if model_server == "strata" else configured_endpoint()
     parsed = urlparse(endpoint)
     local = (
         parsed.scheme in {"http", "https"}
@@ -347,8 +350,7 @@ def protocol_chat_config(model_server: str = "configured") -> dict[str, Any]:
     return {
         "ok": True, "available": bool(local),
         "model": (
-            STRATA_MODEL if model_server == "strata"
-            else os.environ.get("FLUENTVIBE_LM_MODEL", "")
+            STRATA_MODEL if model_server == "strata" else configured_model()
         ) if local else None,
         "endpoint": endpoint if local else None,
         "model_server": model_server,
@@ -618,7 +620,6 @@ def _job_progress(payload: dict[str, Any], message: str) -> None:
 def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
     """Document + request -> Bench Spec -> protocol (fast path), with the
     request's instructions checked on the protocol and optionally FluentControl."""
-    import os
 
     from ..authoring.attachments import extract_uploaded_attachments
     from ..authoring.bench_spec import spec_to_markdown
@@ -693,7 +694,6 @@ def _job_author_spec(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _job_replay_source(payload: dict[str, Any]) -> dict[str, Any]:
     """Simulate Python source and return a standalone replay page (deck and wells per step)."""
-    import os
 
     from ..authoring.eval_rubric import build_worktable_from_source
     from ..authoring.profile import PROFILE_DIR_ENV
@@ -710,7 +710,6 @@ def _job_replay_source(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
     from ..authoring import PromptAuthoringSession
-    from ..authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
     from ..authoring.profile import resolve_profile
     from ..authoring.trace import ModelTraceConfig
 

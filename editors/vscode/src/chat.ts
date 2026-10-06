@@ -115,9 +115,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async stream(messages: object[], signal: AbortSignal, started: number): Promise<string> {
     const s = vscode.workspace.getConfiguration("fluentvibe");
     const endpoint = chatCompletionsUrl(
-      s.get<string>("model.endpoint") || process.env.FLUENTVIBE_LM_ENDPOINT || "http://localhost:18020/v1/chat/completions"
+      s.get<string>("model.endpoint") || process.env.FLUENTVIBE_LM_ENDPOINT || "http://127.0.0.1:8080/v1/chat/completions"
     );
-    const model = s.get<string>("model.name") || process.env.FLUENTVIBE_LM_MODEL || "qwen3.8-27b";
+    const model = s.get<string>("model.name") || process.env.FLUENTVIBE_LM_MODEL || "strata";
     const key = s.get<string>("model.apiKey") || process.env.FLUENTVIBE_LM_API_KEY || "";
     const body = {
       model,

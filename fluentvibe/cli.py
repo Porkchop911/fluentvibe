@@ -154,7 +154,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                                "and labware/liquid whitelist for this run")
     p_author.add_argument("--endpoint", default=None,
                           help="OpenAI-compatible chat endpoint (default: "
-                               "env FLUENTVIBE_LM_ENDPOINT or http://localhost:18020/v1/chat/completions)")
+                               "env FLUENTVIBE_LM_ENDPOINT or Strata at http://127.0.0.1:8080/v1/chat/completions)")
     p_author.add_argument("--model", default=None,
                           help="model name (default: env FLUENTVIBE_LM_MODEL)")
     p_author.add_argument("--request-timeout", type=float, default=None,
