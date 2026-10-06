@@ -423,7 +423,7 @@ def _cmd_fc_open(args) -> int:
         wt.simulate(strict=True)
         output = args.input.with_suffix(".xscr")
         wt.compile(output)
-        ui = validate_generated_xscr_via_shell(output, restore_shell=True, backup=True)
+        ui = validate_generated_xscr_via_shell(output, by="human", backup=True)
         result.update(ui.to_dict(xscr_path=output))
         result["load_error"] = ui.load_error_text
         if ui.load_failed:
@@ -1129,7 +1129,7 @@ def _cmd_opentrons(args) -> int:
         progress("checking in FluentControl (InfoPad)")
         xscr = args.output / "draft.xscr"
         build_worktable_from_source(source, str(draft)).compile(xscr)
-        fc = check_in_fluentcontrol(xscr, source=source, source_file=str(draft))
+        fc = check_in_fluentcontrol(xscr, source=source, source_file=str(draft), by="human")
         summary["fc_ok"] = fc.get("ok")
         summary["fc_findings"] = [f"{f['kind']}: {f['message'][:100]}" for f in fc.get("findings", [])]
     summary["stage"] = "done"

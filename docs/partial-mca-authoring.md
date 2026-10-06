@@ -42,8 +42,9 @@ Default workspace outputs now use a dated, unique subfolder under
 `build/workbench/authored` (and the equivalent folder for other jobs).
 An explicitly chosen output directory is still honored.
 
-Workspace FluentControl validation backs up and restores the shell by
-default. It closes the shell editor before patching, preserves the shell
+Workspace FluentControl validation backs up the shell and leaves the
+inspected script open in it (2026-10-06: no restore; a human inspection
+ends with FluentControl in front, an agent inspection gives the focus back). It closes the shell editor before patching, preserves the shell
 identity, verifies the vendor checksum on a staged file, and replaces the
 file atomically. Validation requires the expected script tab and readable
 InfoPad; load failures are displayed as failures in the app. UI automation

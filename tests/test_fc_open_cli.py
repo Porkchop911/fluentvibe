@@ -20,7 +20,7 @@ def test_fc_open_compiles_current_python_before_validation(tmp_path, monkeypatch
     result = json.loads(capsys.readouterr().out)
     assert [event[0] for event in events] == ["simulate", "compile", "validate"]
     assert events[0][1] == {"strict": True}
-    assert events[2][1] == {"restore_shell": True, "backup": True}
+    assert events[2][1] == {"by": "human", "backup": True}
     assert result["opened"] and len(result["findings"]) == 1
     assert result["findings"][0]["python_lines"] == []
 

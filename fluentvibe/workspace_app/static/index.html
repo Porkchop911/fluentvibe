@@ -994,7 +994,6 @@
           <details><summary>Validation options</summary>
             <label for="fcShellPath">Optional shell XSCR path</label>
             <input id="fcShellPath" placeholder="Use the configured shell">
-            <label><input id="fcRestoreShell" type="checkbox" checked style="width:auto;min-height:auto"> Restore the shell after validation</label>
             <label><input id="fcBackupShell" type="checkbox" checked style="width:auto;min-height:auto"> Back up the shell before patching</label>
           </details>
           <button id="fcValidate" class="secondary">Validate in FluentControl</button>
@@ -2136,7 +2135,6 @@
           ...(await fcXscrPayload()),
           open_direct: $('fcOpenDirect').checked,
           shell_xscr: $('fcShellPath').value,
-          restore_shell: $('fcRestoreShell').checked,
           backup: $('fcBackupShell').checked
         }, 'fcStatus', 'fcResult');
       } catch (err) {

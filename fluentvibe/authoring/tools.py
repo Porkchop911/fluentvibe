@@ -1093,8 +1093,7 @@ def tool_definitions() -> list[dict[str, Any]]:
             "xscr_path": {"type": "string", "description": "Optional existing .xscr path to validate if source is not supplied."},
             "shell_xscr": {"type": "string", "description": "Optional UserSpecific shell .xscr path."},
             "process_id": {"type": "integer", "description": "Optional SystemSW.exe/FluentControl process id."},
-            "restore_shell": {"type": "boolean", "description": "Restore shell content after validation. Default false."},
-            "backup": {"type": "boolean", "description": "Create a shell backup before patching. Default false."},
+            "backup": {"type": "boolean", "description": "Create a shell backup before patching. Default true."},
             "open_direct": {"type": "boolean", "description": "Open xscr directly instead of patching shell. Default false."},
         }, required=()),
     ]
@@ -3117,9 +3116,9 @@ class AuthoringToolRegistry:
         xscr_path: str | None = None,
         shell_xscr: str | None = None,
         process_id: int | None = None,
-        restore_shell: bool = False,
-        backup: bool = False,
+        backup: bool = True,
         open_direct: bool = False,
+        by: str = "agent",
     ) -> dict[str, Any]:
         compiled: dict[str, Any] | None = None
         resolved_xscr: Path | None = None
@@ -3161,7 +3160,7 @@ class AuthoringToolRegistry:
                     resolved_xscr,
                     shell_xscr=shell_path,
                     process_id=process_id,
-                    restore_shell=restore_shell,
+                    by=by,
                     backup=backup,
                 )
         except Exception as exc:

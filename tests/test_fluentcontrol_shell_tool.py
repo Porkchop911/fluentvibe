@@ -97,28 +97,39 @@ def test_malformed_patch_does_not_overwrite_shell(tmp_path):
     assert shell.read_bytes() == original
 
 
-def test_validation_closes_before_patch_and_restores_bytes(tmp_path, monkeypatch):
+@pytest.mark.parametrize("by", ["human", "agent"])
+def test_inspection_closes_before_patch_and_leaves_the_script_open(tmp_path, monkeypatch, by):
     generated, shell = _patch_files(tmp_path)
     original = shell.read_bytes()
     events = []
     monkeypatch.setattr(shell_tools, "_connect_fluent_window", lambda pid: object())
     def close(window, **kwargs):
         events.append("close")
-        if len(events) == 1:
-            assert shell.read_bytes() == original
+        assert shell.read_bytes() == original
     monkeypatch.setattr(shell_tools, "_close_shell_tab_if_open", close)
     monkeypatch.setattr(deployer, "_checksum_rewrite_and_verify", lambda path: {"is_valid": True})
     def opened(**kwargs):
         events.append("open")
-        assert kwargs["close_before_open"] is False
+        assert kwargs["close_before_open"] is False and kwargs["close_after_read"] is False
         assert kwargs["script_name"] == "shell"
         assert '<Comment>new</Comment>' in shell.read_text(encoding="utf-8")
-        return shell_tools.UiResult(True, [], [])
+        return shell_tools.UiResult(True, [], [], timings={"open_s": 1.0})
     monkeypatch.setattr(shell_tools, "open_shell_and_read_infopad", opened)
-    result = shell_tools.validate_generated_xscr_via_shell(generated, shell_xscr=shell, restore_shell=True)
+    monkeypatch.setattr(shell_tools, "_foreground_window", lambda: 4242)
+    monkeypatch.setattr(shell_tools, "_bring_to_foreground", lambda win: events.append("front"))
+    monkeypatch.setattr(shell_tools, "_restore_foreground", lambda hwnd: events.append(f"back:{hwnd}"))
+    result = shell_tools.validate_generated_xscr_via_shell(generated, shell_xscr=shell, by=by, backup=False)
     assert result.ok
-    assert events == ["close", "open", "close"]
-    assert shell.read_bytes() == original
+    # Never restored, never closed: the inspected script stays open.
+    assert events == ["close", "open", "front" if by == "human" else "back:4242"]
+    assert '<Comment>new</Comment>' in shell.read_text(encoding="utf-8")
+    assert result.timings["open_s"] == 1.0 and "total_s" in result.timings
+
+
+def test_inspection_rejects_an_unknown_caller(tmp_path):
+    generated, shell = _patch_files(tmp_path)
+    with pytest.raises(ValueError, match="human"):
+        shell_tools.validate_generated_xscr_via_shell(generated, shell_xscr=shell, by="robot")
 
 
 def test_combined_checksum_and_load_failure_is_not_accepted():
@@ -126,17 +137,32 @@ def test_combined_checksum_and_load_failure_is_not_accepted():
     assert checksum and failed
 
 
-def test_shell_not_opened_is_reported_as_failure(monkeypatch):
+def _quick_ui(monkeypatch, tab_states):
+    """Fake FluentControl: ``tab_states`` says, call by call, whether the
+    script tab is there; no dialog ever shows; waits check once."""
     class Window:
         def exists(self, **kwargs):
             return True
+    states = iter(tab_states)
+    last = [False]
+    def tab(win, name):
+        last[0] = next(states, last[0])
+        return "tab" if last[0] else None
     monkeypatch.setattr(shell_tools, "_connect_fluent_window", lambda pid: Window())
     monkeypatch.setattr(shell_tools, "_bring_to_foreground", lambda win: None)
-    monkeypatch.setattr(shell_tools, "_pick_leftmost_shell_element", lambda win, name: object())
     monkeypatch.setattr(shell_tools, "_safe_double_click", lambda el: None)
-    monkeypatch.setattr(shell_tools, "_dismiss_modal_dialogs", lambda *a, **k: shell_tools.DialogScanResult([], False, []))
-    monkeypatch.setattr(shell_tools, "_wait_for_script_tab", lambda *a: False)
-    result = shell_tools.open_shell_and_read_infopad(close_before_open=False, settle_seconds=0)
+    monkeypatch.setattr(shell_tools, "_script_tab", tab)
+    monkeypatch.setattr(shell_tools, "_fc_dialog_open", lambda win: False)
+    monkeypatch.setattr(shell_tools, "_until", lambda predicate, timeout_s, interval_s=0.05: predicate())
+
+
+def test_shell_not_opened_is_reported_as_failure(monkeypatch):
+    class ScriptElement:
+        def double_click_input(self):
+            pass
+    _quick_ui(monkeypatch, [False])
+    monkeypatch.setattr(shell_tools, "_pick_leftmost_shell_element", lambda win, name: ScriptElement())
+    result = shell_tools.open_shell_and_read_infopad(close_before_open=False)
     assert not result.ok
     assert not result.opened
     assert "did not open" in result.load_error_text
@@ -194,3 +220,88 @@ def test_live_fluentcontrol_shell_accepts_simple_transfer(tmp_path: Path) -> Non
     assert result["opened"] is True
     assert result["load_failed"] is False
     assert result["error_count"] == 0
+
+
+def test_shell_picker_accepts_wpf_text_inside_list_item(monkeypatch):
+    from types import SimpleNamespace
+    class Element:
+        def __init__(self, kind, parent=None, visible=True):
+            self.element_info = SimpleNamespace(control_type=kind)
+            self._parent = parent
+            self._visible = visible
+        def parent(self):
+            return self._parent
+        def is_visible(self):
+            return self._visible
+        def rectangle(self):
+            return SimpleNamespace(left=10, top=20, right=100, bottom=40)
+    item = Element("ListItem")
+    label = Element("Text", item)
+    tab = Element("TabItem")
+    hidden = Element("TreeItem", visible=False)
+    class Window:
+        def descendants(self, **kwargs):
+            assert kwargs == {"title": "shell"}
+            return [tab, hidden, label]
+    assert shell_tools._pick_leftmost_shell_element(Window()) is item
+
+
+def test_infopad_catches_errors_before_context_marker(monkeypatch):
+    from types import SimpleNamespace
+    class Element:
+        element_info = SimpleNamespace(control_type="Text")
+        def __init__(self, text):
+            self.text = text
+        def window_text(self):
+            return self.text
+    class Window:
+        def descendants(self):
+            return [Element("035: Liquid subclass missing.\n036: Invalid location."),
+                    Element("Infopad"), Element("shell")]
+    lines, errors = shell_tools._read_infopad_validation(Window(), 200)
+    assert errors == ["035: Liquid subclass missing.", "036: Invalid location."]
+
+
+def test_infopad_missing_content_never_passes():
+    class Window:
+        def descendants(self):
+            return []
+    with pytest.raises(shell_tools.FluentControlShellError, match="could not be located"):
+        shell_tools._read_infopad_validation(Window(), 200)
+
+
+def test_infopad_is_read_until_errors_show(monkeypatch):
+    error = "052: Liquid subclass missing."
+    reads = iter([(True, [], []), (True, [], []), (True, [error], [error])])
+    monkeypatch.setattr(shell_tools, "_read_infopad_pass", lambda *args: next(reads))
+    monkeypatch.setattr(shell_tools.time, "sleep", lambda _: None)
+    lines, errors = shell_tools._read_infopad_validation(object(), 200)
+    assert errors == [error]
+
+
+def test_shell_open_retries_double_click_when_invoke_only_selects(monkeypatch):
+    clicked = []
+    class Element:
+        def double_click_input(self):
+            clicked.append(True)
+    # Nothing happens after invoke; after the real double-click the tab is there.
+    _quick_ui(monkeypatch, [False, False, True])
+    monkeypatch.setattr(shell_tools, "_pick_leftmost_shell_element", lambda *args: Element())
+    monkeypatch.setattr(shell_tools, "_click_infopad_tab", lambda win: True)
+    monkeypatch.setattr(shell_tools, "_read_infopad_validation", lambda *args: ([], []))
+    result = shell_tools.open_shell_and_read_infopad(close_before_open=False)
+    assert result.ok and clicked == [True]
+
+
+def test_shell_open_does_not_double_click_a_loading_script_again(monkeypatch):
+    # The tab came up after invoke: no second open while FluentControl loads.
+    clicked = []
+    class Element:
+        def double_click_input(self):
+            clicked.append(True)
+    _quick_ui(monkeypatch, [True])
+    monkeypatch.setattr(shell_tools, "_pick_leftmost_shell_element", lambda *args: Element())
+    monkeypatch.setattr(shell_tools, "_click_infopad_tab", lambda win: True)
+    monkeypatch.setattr(shell_tools, "_read_infopad_validation", lambda *args: ([], []))
+    result = shell_tools.open_shell_and_read_infopad(close_before_open=False)
+    assert result.ok and clicked == []

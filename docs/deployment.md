@@ -169,9 +169,12 @@ local model can act on:
 - each verdict is written to `fluentcontrol_check.json` in the run folder
   (`scripts/eval_authoring.py` and `scripts/corpus_model_benchmark.py` report
   it as the `fluentcontrol` column);
-- checks are serialised with a lock file and the shell script is restored after
-  each one. When FluentControl is not running the check says "unavailable"
-  and never fails a draft.
+- checks are serialised with a lock file; the shell keeps the last inspected
+  script and its tab stays open (nothing is restored). The model's checks hand
+  the focus back to the window that had it; a button (web app, VS Code,
+  `fc-open`) leaves FluentControl in front with the InfoPad showing. When
+  FluentControl is not running the check says "unavailable" and never fails
+  a draft.
 
 ## Path D — edits made in FluentControl flow back into the Python
 

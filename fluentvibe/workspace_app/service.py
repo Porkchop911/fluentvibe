@@ -1003,7 +1003,7 @@ def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
         source=source,
         xscr_path=xscr,
         shell_xscr=str(payload.get("shell_xscr") or "") or None,
-        restore_shell=bool(payload.get("restore_shell", True)),
+        by="human",
         backup=bool(payload.get("backup", True)),
         open_direct=bool(payload.get("open_direct", False)),
     )

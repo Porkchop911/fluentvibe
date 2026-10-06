@@ -17,7 +17,7 @@ def test_explicit_output_directory_is_preserved(tmp_path):
     assert service._workbench_path(str(explicit), "authored") == explicit
 
 
-def test_fc_validation_restores_and_backs_up_shell_by_default(tmp_path, monkeypatch):
+def test_fc_validation_from_the_page_is_a_human_inspection_with_backup(tmp_path, monkeypatch):
     from fluentvibe.authoring.tools import AuthoringToolRegistry
 
     calls = []
@@ -29,4 +29,4 @@ def test_fc_validation_restores_and_backs_up_shell_by_default(tmp_path, monkeypa
     xscr = tmp_path / "example.xscr"
     xscr.write_text("<Script/>", encoding="utf-8")
     service._job_fc_validate({"xscr_path": str(xscr)})
-    assert calls[0]["restore_shell"] and calls[0]["backup"]
+    assert calls[0]["by"] == "human" and calls[0]["backup"] and "restore_shell" not in calls[0]

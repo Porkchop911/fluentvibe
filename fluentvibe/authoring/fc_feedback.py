@@ -261,35 +261,28 @@ def _fc_check_timeout_s() -> float:
         return 300.0
 
 
-def _run_fc_worker(xscr_path: Path) -> SimpleNamespace:
+def _run_fc_worker(xscr_path: Path, by: str = "agent") -> SimpleNamespace:
     """Run the UI check in ``fc_worker`` (a child process) and read its result.
 
     UI Automation in the web server's job thread stalled the job polling, so
     the COM work gets its own process. Called under ``_fluentcontrol_lock``;
-    a timeout kills the child, and the shell script it was patching is put
-    back here because the child's own restore never ran.
+    a timeout kills the child. The shell is not restored: the patch is atomic,
+    so the shell holds either the previous or the new script.
     """
     from .fc_worker import RESULT_PREFIX
-    from .fluentcontrol_shell import DEFAULT_SHELL_XSCR, read_xscr_text, write_xscr_text
 
-    try:
-        shell_text = read_xscr_text(DEFAULT_SHELL_XSCR)
-    except Exception:
-        shell_text = None
     timeout_s = _fc_check_timeout_s()
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "fluentvibe.authoring.fc_worker", str(Path(xscr_path).resolve())],
+            [sys.executable, "-m", "fluentvibe.authoring.fc_worker", str(Path(xscr_path).resolve()), by],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_s,
             cwd=str(Path(__file__).resolve().parents[2]),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except subprocess.TimeoutExpired:  # run() has killed the child
-        _restore_shell(shell_text, write_xscr_text, DEFAULT_SHELL_XSCR)
         raise RuntimeError(f"FluentControl did not finish within {timeout_s:g} s (worker killed)") from None
     lines = [line for line in (proc.stdout or "").splitlines() if line.startswith(RESULT_PREFIX)]
     if proc.returncode != 0 or not lines:
-        _restore_shell(shell_text, write_xscr_text, DEFAULT_SHELL_XSCR)
         detail = (proc.stderr or "").strip().splitlines()[-1:] or ["no result"]
         raise RuntimeError(f"worker exited with code {proc.returncode}: {detail[0][:300]}")
     try:
@@ -304,17 +297,8 @@ def _run_fc_worker(xscr_path: Path) -> SimpleNamespace:
     )
 
 
-def _restore_shell(text, write, path) -> None:
-    if text is None:
-        return
-    try:
-        write(path, text)
-    except Exception:
-        pass
-
-
 def check_in_fluentcontrol(xscr_path: Path, *, source: str | None = None, source_file: str | None = None,
-                           validator=None) -> dict[str, Any]:
+                           validator=None, by: str = "agent") -> dict[str, Any]:
     """Open ``xscr_path`` in FluentControl, read the InfoPad, explain the findings.
 
     ``source`` / ``source_file`` (the draft the .xscr was compiled from) let
@@ -325,7 +309,8 @@ def check_in_fluentcontrol(xscr_path: Path, *, source: str | None = None, source
         available, reason = fluentcontrol_available()
         if not available:
             return {"ok": None, "available": False, "message": f"FluentControl check skipped: {reason}"}
-        validator = _run_fc_worker
+        def validator(path: Path, by: str = by) -> SimpleNamespace:
+            return _run_fc_worker(path, by)
 
     try:
         with _fluentcontrol_lock():

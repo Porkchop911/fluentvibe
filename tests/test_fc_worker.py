@@ -46,6 +46,7 @@ def test_parent_parses_the_worker_result_and_holds_the_lock(tmp_path, monkeypatc
     out = check_in_fluentcontrol(tmp_path / "x.xscr")
     assert seen["locked"] and not lock.exists()
     assert seen["cmd"][1:3] == ["-m", "fluentvibe.authoring.fc_worker"] and seen["timeout"] == 42.0
+    assert seen["cmd"][-1] == "agent"
     assert out["available"] is True and out["ok"] is False and out["error_count"] == 1
     assert out["findings"][0]["kind"] == "duplicate_labware_name"
 
@@ -57,7 +58,9 @@ def test_clean_worker_result_is_ok(tmp_path, monkeypatch):
     assert out["ok"] is True and out["available"] is True
 
 
-def test_timeout_kills_the_worker_and_restores_the_shell(tmp_path, monkeypatch):
+def test_timeout_kills_the_worker_and_leaves_the_shell(tmp_path, monkeypatch):
+    # The shell is never restored: the patch is atomic, so it holds a whole
+    # script either way, and the last inspected one stays to be looked at.
     def run(cmd, **kwargs):
         shell.write_text("PATCHED BY A KILLED WORKER", encoding="utf-8")
         raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
@@ -66,7 +69,7 @@ def test_timeout_kills_the_worker_and_restores_the_shell(tmp_path, monkeypatch):
     out = check_in_fluentcontrol(tmp_path / "x.xscr")
     assert out["ok"] is None and out["available"] is False
     assert out["message"].startswith("FluentControl check could not run:") and "killed" in out["message"]
-    assert shell.read_text(encoding="utf-8") == "ORIGINAL" and not lock.exists()
+    assert shell.read_text(encoding="utf-8") == "PATCHED BY A KILLED WORKER" and not lock.exists()
 
 
 def test_real_timeout_kills_a_hanging_child(tmp_path, monkeypatch):
@@ -102,7 +105,7 @@ def test_worker_prints_one_result_line(monkeypatch, capsys, tmp_path):
 
     def validate(path, **kwargs):
         print("stray print")  # goes to stderr, not into the result
-        assert kwargs == {"restore_shell": True}
+        assert kwargs == {"by": "agent"}
         return ui
 
     monkeypatch.setattr(fc_worker, "_init_com", lambda: None)

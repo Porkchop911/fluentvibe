@@ -2,10 +2,11 @@
 
 The UI automation (pywinauto / UI Automation over COM) runs here, not in the
 web server: in the server's job thread it stalled the job polling for seconds.
-Usage: ``python -m fluentvibe.authoring.fc_worker <draft.xscr>``. Prints one
-JSON line (prefixed with ``RESULT_PREFIX``) on stdout; exits non-zero with a
-message on stderr when the check itself fails. The parent holds the lock,
-enforces the timeout and restores the shell script if this process is killed.
+Usage: ``python -m fluentvibe.authoring.fc_worker <draft.xscr> [human|agent]``
+(default agent). Prints one JSON line (prefixed with ``RESULT_PREFIX``) on
+stdout; exits non-zero with a message on stderr when the check itself fails.
+The parent holds the lock and enforces the timeout. The shell keeps the
+inspected script (it is never restored; the patch itself is atomic).
 """
 
 from __future__ import annotations
@@ -32,8 +33,8 @@ def _init_com() -> None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 1:
-        print("usage: python -m fluentvibe.authoring.fc_worker <draft.xscr>", file=sys.stderr)
+    if len(argv) not in (1, 2) or (len(argv) == 2 and argv[1] not in ("human", "agent")):
+        print("usage: python -m fluentvibe.authoring.fc_worker <draft.xscr> [human|agent]", file=sys.stderr)
         return 2
     try:
         _init_com()
@@ -45,7 +46,7 @@ def main(argv: list[str]) -> int:
 
         # Stray prints from the automation must not corrupt the result line.
         with contextlib.redirect_stdout(sys.stderr):
-            ui = validate_generated_xscr_via_shell(Path(argv[0]), restore_shell=True)
+            ui = validate_generated_xscr_via_shell(Path(argv[0]), by=argv[1] if len(argv) == 2 else "agent")
     except Exception as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
