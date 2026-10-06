@@ -586,6 +586,7 @@
     .ot-check input { width: auto; min-height: auto; }
     #otConvert { width: auto; }
     .ot-steps { margin: 6px 0 6px 18px; padding: 0; }
+    .ot-mode { max-width: 420px; margin-top: 8px; }
     .fp-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; max-width: 760px; }
     .fp-steps li { display: grid; grid-template-columns: 26px 220px 1fr; align-items: center; padding: 8px 10px;
       border: 1px solid var(--line, #d0d7de); border-radius: 8px; background: #fff; font-size: 14px; }
@@ -919,8 +920,10 @@
 
         <details class="author-extras" id="otPanel">
           <summary>Convert an Opentrons protocol (no model)</summary>
-          <p class="small">The Opentrons protocol runs in the Opentrons simulator; its steps become a protocol for the
-            deck profile above, which is compiled and simulated. About 10 s; nothing is sent to a model.</p>
+          <p class="small">The Opentrons protocol runs in the Opentrons simulator. <b>Well by well</b> moves the same
+            volumes between the same wells (labware mapped to the deck profile above) and checks every well against
+            the Opentrons run; <b>via a Bench Spec</b> writes shorter block-based code but loses which liquid goes into
+            which wells. Nothing is sent to a model.</p>
           <div class="ot-fields">
             <div class="fp-field">
               <label for="otFile">Opentrons protocol (.py)</label>
@@ -931,6 +934,12 @@
               <input id="otPath" placeholder="D:\Opentron_protocols\0000025894">
             </div>
           </div>
+          <div class="fp-field ot-mode">
+            <label for="otMode">Conversion</label>
+            <select id="otMode"><option value="faithful">Well by well (checked against the Opentrons run)</option>
+              <option value="spec">Via a Bench Spec (block-based, approximate)</option></select>
+          </div>
+          <label class="ot-check"><input type="checkbox" id="otReview" checked> Strata reviews the conversion against the Opentrons protocol</label>
           <label class="ot-check"><input type="checkbox" id="otFcCheck"> open it in FluentControl afterwards (InfoPad check)</label>
           <button id="otConvert" class="secondary">Convert</button>
         </details>
@@ -1316,15 +1325,37 @@
       const steps = (s.steps || []).map(op => `<li>${escapeHtml(op)}</li>`).join('');
       const lines = [];
       lines.push(`<div>Source: ${escapeHtml(s.protocol || '')}</div>`);
+      if (s.name) lines.push(`<div>Protocol: ${escapeHtml(s.name)} · ${escapeHtml(s.mode || '')}</div>`);
       if (steps) lines.push(`<div>Steps read from the Opentrons run:</div><ol class="ot-steps">${steps}</ol>`);
+      if (s.liquid_events) lines.push(`<div>${s.liquid_events} aspirate/dispense events in the Opentrons run.</div>`);
       if (s.stage === 'done') {
-        lines.push(`<div>Compiled and simulated on this deck${s.todo_steps ? ` · <b>${s.todo_steps} step(s) left as TODO</b> (not convertible)` : ' · no TODO steps'}.</div>`);
+        const f = s.fidelity;
+        if (f) {
+          const all = f.wells_matching === f.wells_checked;
+          lines.push(`<div>${all ? '' : '<b>'}Well by well: ${f.wells_matching}/${f.wells_checked} wells end with the same volume change as in the Opentrons run.${all ? '' : '</b>'}</div>`);
+          if ((f.mismatches || []).length) lines.push(`<ul>${f.mismatches.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`);
+        }
+        lines.push(`<div>Compiled and simulated on this deck${s.todo_steps ? ` · <b>${s.todo_steps} step(s) left as TODO</b> (not convertible)` : ''}.</div>`);
+        if ((s.unconverted || []).length) {
+          lines.push(`<div><b>Not converted</b> (kept as operator prompts):</div><ul>${s.unconverted.slice(0, 12).map(u => `<li>${escapeHtml(u)}</li>`).join('')}${s.unconverted.length > 12 ? `<li>… ${s.unconverted.length - 12} more</li>` : ''}</ul>`);
+        }
+        if ((s.substitutions || []).length) {
+          lines.push(`<details><summary>${s.substitutions.length} Opentrons wells placed elsewhere on this deck</summary><ul>${s.substitutions.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul></details>`);
+        }
+        if (s.fca_tips_used) lines.push(`<div class="small">FCA tips used: ${s.fca_tips_used} (8 per Opentrons tip pick-up).</div>`);
       } else {
         lines.push(`<div><b>Stopped at ${escapeHtml(s.stage || '?')}:</b> ${escapeHtml(s.error || 'unknown error')}</div>`);
       }
       if (s.fc_ok === true) lines.push('<div>FluentControl: InfoPad clean.</div>');
       if (s.fc_ok === false) lines.push(`<div><b>FluentControl found problems:</b></div><ul>${(s.fc_findings || []).map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`);
       if (s.fc_ok == null && s.fc_message) lines.push(`<div>FluentControl: ${escapeHtml(s.fc_message)}</div>`);
+      const r = s.review;
+      if (r && r.error) lines.push(`<div><b>Strata review:</b> ${escapeHtml(r.error)}</div>`);
+      if (r && r.verdict) {
+        lines.push(`<div><b>Strata review: ${escapeHtml(r.verdict)}.</b> ${escapeHtml(r.summary || '')}</div>`);
+        if ((r.must_fix || []).length) lines.push(`<div>Check or fix before running:</div><ul>${r.must_fix.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`);
+        if ((r.source_problems || []).length) lines.push(`<div>Problems in the Opentrons protocol itself:</div><ul>${r.source_problems.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`);
+      }
       lines.push(`<div class="small">Folder: ${escapeHtml(s.output_dir || '')}</div>`);
       if (s.xscr) lines.push(`<div><button class="secondary" data-open-fc="${escapeHtml(s.xscr)}">Check in FluentControl</button></div>`);
       return lines.join('');
@@ -1336,7 +1367,8 @@
       const file = $('otFile').files && $('otFile').files[0];
       const path = $('otPath').value.trim();
       if (!file && !path) { setStatus('authorStatus', 'Attach an Opentrons protocol (.py) or give its path.', 'error'); return; }
-      const payload = { profile_name: profile, fc_check: $('otFcCheck').checked };
+      const payload = { profile_name: profile, fc_check: $('otFcCheck').checked, mode: $('otMode').value,
+                        review: $('otReview').checked };
       if (file) payload.protocol_upload = { name: file.name, content_base64: await readFileAsBase64(file) };
       else payload.protocol_path = path;
       pushAuthorMessage('user', 'You', `Convert the Opentrons protocol ${file ? file.name : path}`);

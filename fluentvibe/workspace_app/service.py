@@ -881,7 +881,9 @@ def _job_opentrons_convert(payload: dict[str, Any]) -> dict[str, Any]:
         if not protocol.exists():
             raise ValueError(f"Opentrons protocol not found: {protocol}")
     summary = convert_opentrons(
-        protocol, profile_dir, output_dir, fc_check=bool(payload.get("fc_check")), fc_by="human",
+        protocol, profile_dir, output_dir, faithful=payload.get("mode") != "spec",
+        review=bool(payload.get("review", True)),
+        fc_check=bool(payload.get("fc_check")), fc_by="human",
         progress=lambda message: _job_progress(payload, message),
     )
 

@@ -258,14 +258,41 @@ def main(argv: Optional[list[str]] = None) -> int:
                                help="seconds per model request (spec extraction reads the whole document)")
     p_author_spec.set_defaults(func=_cmd_author_spec)
 
+    p_pi = sub.add_parser(
+        "protocols",
+        help="find Opentrons / PyLabRobot protocols by what they do (index of their descriptions)",
+    )
+    pi_sub = p_pi.add_subparsers(dest="protocols_cmd", required=True)
+    p_pi_search = pi_sub.add_parser("search", help="protocols whose title/description/steps contain every word")
+    p_pi_search.add_argument("words", nargs="+")
+    p_pi_search.add_argument("--source", choices=("library", "git", "sdk", "pylabrobot"), default=None)
+    p_pi_search.add_argument("--robot", choices=("OT-2", "Flex"), default=None)
+    p_pi_search.add_argument("--convertible", action="store_true", help="only Opentrons protocols the converter runs")
+    p_pi_search.add_argument("--limit", type=int, default=25)
+    p_pi_search.add_argument("--json", action="store_true")
+    p_pi_show = pi_sub.add_parser("show", help="one protocol: title, description, steps, labware, path")
+    p_pi_show.add_argument("id", help="index id (0000025894, git:00222e, sdk:...) or the folder / .py path")
+    p_pi_show.add_argument("--json", action="store_true")
+    p_pi_index = pi_sub.add_parser("index", help="(re)build the index (build/protocol_index.json)")
+    p_pi_index.add_argument("roots", nargs="*", type=Path,
+                            help="folders to index (default: FLUENTVIBE_PROTOCOL_ROOTS or D:/Opentron_protocols "
+                                 "and D:/opentron_and_pylab_git)")
+    p_pi.set_defaults(func=_cmd_protocols)
+
     p_ot = sub.add_parser(
         "opentrons",
         help="convert an Opentrons protocol (.py or its folder) into a protocol for this deck",
     )
-    p_ot.add_argument("protocol", type=Path, help="Opentrons protocol .py file or its folder")
+    p_ot.add_argument("protocol", type=Path,
+                      help="Opentrons protocol .py file or its folder, or its index id (see `fluentvibe protocols`)")
     p_ot.add_argument("--profile", type=Path, required=True, help="workspace-app profile dir")
     p_ot.add_argument("--output", "-o", type=Path, required=True, help="directory for spec, draft, checks")
     p_ot.add_argument("--fc-check", action="store_true", help="also check the draft in FluentControl")
+    p_ot.add_argument("--review", action="store_true",
+                      help="Strata (the configured model) reviews the conversion against the Opentrons protocol")
+    p_ot.add_argument("--via-spec", action="store_true",
+                      help="summarise into Bench Spec steps and build block-based code (shorter, but loses which "
+                           "liquid goes into which wells); default: well by well, checked against the Opentrons run")
     p_ot.add_argument("--opentrons-python", type=Path, default=None,
                       help="python with the opentrons package (default: .venv-opentrons in the repo)")
     p_ot.set_defaults(func=_cmd_opentrons)
@@ -1050,14 +1077,76 @@ def _cmd_fc_pull(args) -> int:
     return 0
 
 
+def _cmd_protocols(args) -> int:
+    """Search / show / rebuild the protocol index."""
+    import json as _json
+    from dataclasses import asdict
+
+    from .protocol_index import find, load_index, search
+
+    if args.protocols_cmd == "index":
+        entries = load_index(refresh=True, roots=args.roots or None)
+        counts: dict[str, int] = {}
+        for e in entries:
+            counts[e.source] = counts.get(e.source, 0) + 1
+        print(f"{len(entries)} protocols indexed: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
+        return 0
+    entries = load_index()
+    if args.protocols_cmd == "show":
+        entry = find(entries, args.id)
+        if entry is None:
+            print(f"error: no protocol {args.id!r} in the index (try `fluentvibe protocols search ...`)",
+                  file=sys.stderr)
+            return 1
+        if args.json:
+            print(_json.dumps(asdict(entry), indent=2, ensure_ascii=False))
+            return 0
+        print(f"{entry.id}  [{entry.source}{', ' + entry.robot if entry.robot else ''}]  {entry.title}")
+        for label, value in (("Categories", ", ".join(entry.categories)), ("Description", entry.description),
+                             ("Pipettes", "; ".join(entry.pipettes)), ("Modules", "; ".join(entry.modules)),
+                             ("Labware", "; ".join(entry.labware))):
+            if value:
+                print(f"{label}: {value}")
+        if entry.steps:
+            print("Steps:")
+            for i, step in enumerate(entry.steps, 1):
+                print(f"  {i}. {step}")
+        print(f"Protocol: {entry.path}")
+        if entry.convertible:
+            print(f"Convert:  fluentvibe opentrons {entry.id} --profile <deck profile> -o <folder>")
+        return 0
+    found = search(entries, " ".join(args.words), source=args.source, robot=args.robot,
+                   convertible_only=args.convertible)
+    if args.json:
+        print(_json.dumps([asdict(e) for e in found[: args.limit]], indent=2, ensure_ascii=False))
+        return 0
+    for e in found[: args.limit]:
+        tag = e.source + (f", {e.robot}" if e.robot else "")
+        print(f"{e.id:<34} [{tag}] {e.title}")
+    more = len(found) - args.limit
+    print(f"-- {len(found)} found" + (f", {more} more (--limit)" if more > 0 else "") +
+          "; details: fluentvibe protocols show <id>")
+    return 0 if found else 1
+
+
 def _cmd_opentrons(args) -> int:
     """Opentrons protocol -> Bench Spec (Opentrons simulator) -> skeleton -> checks. No model."""
     import json as _json
 
     from .authoring.opentrons_import import convert_opentrons
 
+    if not args.protocol.exists():
+        from .protocol_index import find, load_index
+
+        entry = find(load_index(), str(args.protocol))
+        if entry is None or not entry.convertible:
+            print(f"error: {args.protocol} is neither a file/folder nor a convertible protocol in the index",
+                  file=sys.stderr)
+            return 1
+        args.protocol = Path(entry.path)
+
     summary = convert_opentrons(
-        args.protocol, args.profile, args.output, fc_check=args.fc_check, fc_by="human",
+        args.protocol, args.profile, args.output, faithful=not args.via_spec, review=args.review, fc_check=args.fc_check, fc_by="human",
         opentrons_python=args.opentrons_python,
         progress=lambda message: print(f"progress: {message}", flush=True),
     )

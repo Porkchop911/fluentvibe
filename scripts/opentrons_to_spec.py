@@ -141,6 +141,30 @@ def _ot2_hardware_file(out_dir: Path) -> Path:
     return path
 
 
+def _fields_defaults(folder: Path) -> dict:
+    """The protocol's own defaults from ``fields.json`` (the Opentrons Protocols
+    repo ships one per customisable protocol): ``default``, or a dropdown's
+    first option. Guessed values made protocols divide by zero, misread a CSV
+    or put two pipettes on one mount."""
+    path = folder / "fields.json"
+    if not path.exists():
+        return {}
+    try:
+        fields = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+    values = {}
+    for item in fields if isinstance(fields, list) else []:
+        name = item.get("name")
+        if not name:
+            continue
+        if "default" in item:
+            values[name] = item["default"]
+        elif item.get("options"):
+            values[name] = item["options"][0].get("value")
+    return values
+
+
 def _usage_defaults(source: str) -> dict:
     """Guess each get_values() parameter from how the protocol uses it.
 
@@ -224,7 +248,8 @@ def _simulate(protocol: Path, hardware_dir: Path | None = None):
     _MULTI_CHANNEL = bool(MULTI_CHANNEL.search(source))
     _RECEIVED.clear()
     if "get_values(" in source and "def get_values" not in source:
-        stub = _GET_VALUES_STUB.format(defaults={**_usage_defaults(source), **_commented_defaults(source)})
+        stub = _GET_VALUES_STUB.format(defaults={**_usage_defaults(source), **_commented_defaults(source),
+                                                 **_fields_defaults(protocol.parent)})
         # Keep `from __future__` imports first.
         lines = source.splitlines(keepends=True)
         head = [line for line in lines if line.startswith("from __future__")]
