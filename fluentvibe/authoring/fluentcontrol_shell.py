@@ -240,8 +240,15 @@ def validate_generated_xscr_via_shell(
                     close_before_open=False, close_after_read=False,
                 )
             except FluentControlShellError as exc:
-                result = open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=False)
-                result = replace(result, diagnostics=[f"Tree open failed; used exact file path: {exc}"])
+                tree_error = str(exc)
+                try:
+                    result = open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=False)
+                except FluentControlShellError as fallback:
+                    # Report both: the file dialog's error alone hid the real cause.
+                    raise FluentControlShellError(
+                        f"Could not open the shell: {tree_error} Opening it by file path failed too: {fallback}"
+                    ) from fallback
+                result = replace(result, diagnostics=[f"Tree open failed; used exact file path: {tree_error}"])
         finally:
             if by == "human":
                 _bring_to_foreground(fc_win)
@@ -439,25 +446,55 @@ def _pick_leftmost_shell_element(fc_win, script_name="shell"):
     return _navigate_tree_to_shell(fc_win, script_name)
 
 
-def _navigate_tree_to_shell(fc_win, script_name="shell"):
-    """Expand Scripts > Under_development until the script's item shows."""
-    for folder, child in (("Scripts", "Under_development"), ("Under_development", script_name)):
-        found = list(fc_win.descendants(title=folder))
-        if not found:
+def _ancestor(el, kinds: tuple[str, ...], depth: int = 4):
+    """``el`` or its nearest ancestor whose control type is in ``kinds``."""
+    for _ in range(depth + 1):
+        if el is None:
             return None
-        try:
-            found[0].expand()
-        except Exception:
-            _safe_double_click(found[0])
-        if not _until(lambda name=child: fc_win.descendants(title=name), 3.0):
-            return None
-    for el in fc_win.descendants(title=script_name, control_type="TreeItem"):
-        try:
-            el.rectangle()
+        if getattr(el.element_info, "control_type", "") in kinds:
             return el
-        except Exception:
-            continue
+        el = el.parent()
     return None
+
+
+def _navigate_tree_to_shell(fc_win, script_name="shell"):
+    """Make the script's tree item visible and return it.
+
+    FluentControl shows the folder labels as Text inside TreeViewItems (the
+    "Scripts" label on the left is a control-bar list entry, not a tree node).
+    The folder is expanded through its ExpandCollapse pattern: expanding is
+    idempotent, a double-click toggles and collapsed an already open folder."""
+    def visible(title):
+        return [el for el in fc_win.descendants(title=title) if el.is_visible()]
+
+    if not visible("Under_development"):
+        # The script library is not showing: pick "Scripts" in the control bar.
+        for label in visible("Scripts"):
+            item = _ancestor(label, ("ListItem",))
+            if item is not None:
+                _safe_click(item)
+                break
+        if not _until(lambda: visible("Under_development"), 3.0):
+            return None
+    for label in visible("Under_development"):
+        folder = _ancestor(label, ("TreeItem",))
+        if folder is None:
+            continue
+        try:
+            folder.expand()
+        except Exception:
+            # No ExpandCollapse pattern: a double-click only if it is collapsed.
+            try:
+                collapsed = folder.get_expand_state() == 0
+            except Exception:
+                collapsed = True
+            if collapsed:
+                folder.double_click_input()
+        break
+    shell = _until(lambda: visible(script_name), 3.0)
+    if not shell:
+        return None
+    return _ancestor(shell[0], ("TreeItem", "ListItem"))
 
 
 def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
@@ -691,7 +728,8 @@ def open_shell_and_read_infopad(
     mark = time.monotonic()
     shell_el = _pick_leftmost_shell_element(fc_win, script_name)
     if shell_el is None:
-        raise FluentControlShellError("Could not find a UI element titled 'shell' in FluentControl.")
+        raise FluentControlShellError(
+            f"Could not find the script {script_name!r} under Scripts > Under_development in FluentControl.")
     timings["find_shell_s"] = round(time.monotonic() - mark, 2)
 
     mark = time.monotonic()

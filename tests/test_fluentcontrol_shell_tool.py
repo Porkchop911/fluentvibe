@@ -334,3 +334,43 @@ def test_fluentcontrol_not_running_is_said_plainly(monkeypatch):
     monkeypatch.setitem(sys.modules, "pywinauto.timings", timings)
     with pytest.raises(shell_tools.FluentControlShellError, match="FluentControl is not running"):
         shell_tools._connect_fluent_window()
+
+
+def test_tree_navigation_expands_a_collapsed_folder_without_toggling(monkeypatch):
+    # FluentControl: folder labels are Text inside TreeViewItems; "Under_development"
+    # was collapsed, and double-clicking "Scripts" (a control-bar entry) never opened it.
+    from types import SimpleNamespace
+
+    state = {"expanded": False, "double_clicks": 0}
+
+    class El:
+        def __init__(self, kind, title="", parent=None):
+            self.element_info = SimpleNamespace(control_type=kind)
+            self.title, self._parent = title, parent
+        def parent(self):
+            return self._parent
+        def is_visible(self):
+            return True
+
+    class Folder(El):
+        def expand(self):
+            state["expanded"] = True
+        def double_click_input(self):
+            state["double_clicks"] += 1
+
+    folder = Folder("TreeItem", "Under_development")
+    folder_label = El("Text", "Under_development", folder)
+    shell_item = El("TreeItem", "shell")
+    shell_label = El("Text", "shell", shell_item)
+
+    class Window:
+        def descendants(self, title=None, **kwargs):
+            if title == "Under_development":
+                return [folder_label]
+            if title == "shell":
+                return [shell_label] if state["expanded"] else []
+            return []
+
+    monkeypatch.setattr(shell_tools, "_until", lambda predicate, timeout_s, interval_s=0.05: predicate())
+    assert shell_tools._navigate_tree_to_shell(Window(), "shell") is shell_item
+    assert state == {"expanded": True, "double_clicks": 0}
