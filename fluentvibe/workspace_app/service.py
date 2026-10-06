@@ -7,6 +7,7 @@ wrapper and tests exercise the same catalog/profile behavior.
 from __future__ import annotations
 
 import json
+import math
 import hashlib
 import html
 import os
@@ -440,6 +441,24 @@ def _run_job(job_id: str, handler: Any, payload: dict[str, Any]) -> None:
         job["status"] = "running"
         job["started_at"] = time.time()
     try:
+        if job["kind"] == "authoring-send":
+            progress = {"thinking": "", "content": "", "tools": [], "characters": 0}
+            with _JOB_LOCK:
+                job["progress"] = progress.copy()
+
+            def update_progress(delta):
+                with _JOB_LOCK:
+                    for key, value in delta.items():
+                        target = "thinking" if "reasoning" in key.lower() else "content" if key == "content" else None
+                        if target and isinstance(value, str):
+                            progress[target] = (progress[target] + value)[-20000:]
+                            progress["characters"] += len(value)
+                    for call in delta.get("tool_calls") or []:
+                        name = (call.get("function") or {}).get("name")
+                        if name and name not in progress["tools"]:
+                            progress["tools"] = (progress["tools"] + [name])[-20:]
+                    job["progress"] = {**progress, "tools": list(progress["tools"])}
+            payload = {**payload, "_progress_callback": update_progress}
         result = handler(payload)
     except Exception as exc:
         with _JOB_LOCK:
@@ -465,6 +484,7 @@ def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         "finished_at": job["finished_at"],
         "result": job["result"],
         "error": job["error"],
+        "progress": job.get("progress"),
     }
 
 
@@ -485,9 +505,16 @@ def _job_handlers() -> dict[str, Any]:
     return _JOB_HANDLERS
 
 
+def _authoring_timeout(payload: dict[str, Any]) -> float:
+    value = float(payload.get("request_timeout_s", 900))
+    if not math.isfinite(value) or not 1 <= value <= 7200:
+        raise ValueError("Model timeout must be between 1 and 7200 seconds")
+    return value
+
+
 def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
     from ..authoring import PromptAuthoringSession
-    from ..authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL
+    from ..authoring.lm_client import DEFAULT_LM_STUDIO_ENDPOINT, DEFAULT_LM_STUDIO_MODEL, LMStudioChatClient
     from ..authoring.profile import resolve_profile
 
     output_dir = _workbench_path(payload.get("output_dir"), "authored")
@@ -506,7 +533,10 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         profile = resolve_profile(profile_dir)
         workspace_name = profile.workspace_name
         workspace_guid = profile.workspace_guid
+    timeout = _authoring_timeout(payload)
+    web_client = LMStudioChatClient(endpoint=endpoint, model=model, request_timeout_s=timeout)
     session = PromptAuthoringSession(
+        client=web_client,
         output_dir=output_dir,
         retry_budget=int(payload.get("retry_budget") or 8),
         workspace_name=workspace_name,
@@ -516,12 +546,14 @@ def _job_authoring_session(payload: dict[str, Any]) -> dict[str, Any]:
         lab_scope=str(payload.get("lab_scope") or "skills"),
         profile_dir=profile_dir,
     )
+    session._web_client = web_client
     session_id = str(uuid.uuid4())
     with _JOB_LOCK:
         _SESSIONS[session_id] = session
     return {
         "ok": True,
         "session_id": session_id,
+        "request_timeout_s": timeout,
         "profile_name": profile_name or None,
         "output_dir": str(output_dir),
         "model_server": model_server,
@@ -535,14 +567,31 @@ def _job_authoring_send(payload: dict[str, Any]) -> dict[str, Any]:
     message = str(payload.get("message") or "").strip()
     if not session_id:
         raise ValueError("session_id is required")
-    if not message:
-        raise ValueError("message is required")
+    if not message and not payload.get("attachments"):
+        raise ValueError("message or attachments are required")
     with _JOB_LOCK:
         session = _SESSIONS.get(session_id)
     if session is None:
         raise ValueError(f"Authoring session not found: {session_id!r}")
-    result = session.send(message)
-    return {"ok": True, "session_id": session_id, "authoring": result.to_dict()}
+    from ..authoring.attachments import build_attachment_context, extract_uploaded_attachments
+
+    attachments = extract_uploaded_attachments(
+        payload.get("attachments"), output_dir=session.output_dir,
+        turn_index=len(getattr(session, "_user_turns", [])) + 1,
+    )
+    client = getattr(session, "_web_client", None)
+    if client is not None:
+        client.request_timeout_s = _authoring_timeout(payload)
+        client.progress_callback = payload.get("_progress_callback")
+    try:
+        result = session.send(build_attachment_context(message, attachments))
+    finally:
+        if client is not None:
+            client.progress_callback = None
+    return {
+        "ok": True, "session_id": session_id, "authoring": result.to_dict(),
+        "attachments": [item.to_dict() for item in attachments],
+    }
 
 
 def _job_simulate_source(payload: dict[str, Any]) -> dict[str, Any]:
@@ -663,7 +712,7 @@ def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
         source=str(payload.get("source") or "") or None,
         xscr_path=str(payload.get("xscr_path") or "") or None,
         shell_xscr=str(payload.get("shell_xscr") or "") or None,
-        restore_shell=bool(payload.get("restore_shell", True)),
+        restore_shell=bool(payload.get("restore_shell", False)),
         backup=bool(payload.get("backup", True)),
         open_direct=bool(payload.get("open_direct", False)),
     )

@@ -403,3 +403,187 @@ def test_save_profile_rejects_stale_workspace_source(tmp_path: Path) -> None:
         assert "Workspace file changed" in str(exc)
     else:
         raise AssertionError("stale workspace source was accepted")
+
+
+@pytest.mark.parametrize("message", ["Use the attached protocol", ""])
+def test_authoring_upload_reaches_model_and_is_saved(monkeypatch, tmp_path, message):
+    import base64
+    from types import SimpleNamespace
+
+    received = []
+    session = SimpleNamespace(
+        output_dir=tmp_path, _user_turns=[],
+        send=lambda text: received.append(text) or SimpleNamespace(to_dict=lambda: {"status": "success"}),
+    )
+    monkeypatch.setitem(service._SESSIONS, "attachment-test", session)
+    result = service._job_authoring_send({
+        "session_id": "attachment-test", "message": message,
+        "attachments": [{"name": "protocol.txt", "content_base64": base64.b64encode(
+            b"Mix 96 samples with 50 uL buffer.").decode()}],
+    })
+    assert "Mix 96 samples with 50 uL buffer." in received[0]
+    assert "Attached file: protocol.txt" in received[0]
+    if message:
+        assert received[0].startswith(message)
+    assert Path(result["attachments"][0]["stored_path"]).read_bytes() == b"Mix 96 samples with 50 uL buffer."
+
+
+def test_authoring_invalid_upload_does_not_call_model(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    received = []
+    monkeypatch.setitem(service._SESSIONS, "invalid-attachment-test", SimpleNamespace(
+        output_dir=tmp_path, _user_turns=[], send=lambda text: received.append(text),
+    ))
+    with pytest.raises(ValueError, match="valid base64"):
+        service._job_authoring_send({
+            "session_id": "invalid-attachment-test", "message": "Read this",
+            "attachments": [{"name": "protocol.txt", "content_base64": "!invalid!"}],
+        })
+    assert received == []
+
+
+def test_document_upload_controls_are_inside_authoring_panel():
+    from html.parser import HTMLParser
+
+    class Panels(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.stack = []
+            self.controls = {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            panel = attrs.get("id", "") if "panel" in attrs.get("class", "").split() else None
+            if attrs.get("id") in {"authorDocuments", "clearAuthorDocuments", "authorDocumentList"}:
+                self.controls[attrs["id"]] = next((p for _, p in reversed(self.stack) if p), None)
+            if tag not in {"input", "br", "hr", "img", "meta", "link"}:
+                self.stack.append((tag, panel))
+
+        def handle_endtag(self, tag):
+            for index in range(len(self.stack) - 1, -1, -1):
+                if self.stack[index][0] == tag:
+                    del self.stack[index:]
+                    break
+
+    parser = Panels()
+    parser.feed((Path(service.__file__).parent / "static" / "index.html").read_text(encoding="utf-8"))
+    assert parser.controls == {
+        "authorDocuments": "tab-author",
+        "clearAuthorDocuments": "tab-author",
+        "authorDocumentList": "tab-author",
+    }
+
+
+def test_job_polling_recovers_without_resubmitting():
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for frontend polling test")
+    html = (Path(service.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
+    api_code = html.split("    async function api(path, options) {", 1)[1].split("    async function post(", 1)[0]
+    poll_code = html.split("    async function pollJob(jobId, statusId, resultId, done) {", 1)[1].split("    const sleep =", 1)[0]
+    script = "async function api(path, options) {" + api_code + "async function pollJob(jobId, statusId, resultId, done) {" + poll_code
+    script += r"""
+const assert = require('node:assert/strict');
+let requests = [], statuses = [], completed = 0;
+const setStatus = (id, text) => statuses.push(text);
+const showJson = () => {};
+const sleep = async () => {};
+let replies = [new TypeError('Failed to fetch'), Object.assign(new Error('timeout'), {name:'TimeoutError'}),
+  {ok:true, job:{status:'running',kind:'authoring-send'}},
+  {ok:true, job:{status:'success',kind:'authoring-send',result:{ok:true}}}];
+global.fetch = async (path, options) => {
+  requests.push([path, options.method || 'GET']);
+  const reply = replies.shift();
+  if (reply instanceof Error) throw reply;
+  return {ok:true, json:async () => reply};
+};
+(async () => {
+  await pollJob('original-job', 'status', null, () => completed++);
+  assert.equal(completed, 1);
+  assert.equal(requests.length, 4);
+  assert(requests.every(([path, method]) => path === '/api/job?id=original-job' && method === 'GET'));
+  assert(statuses.some(text => text.includes('reconnecting')));
+  requests = [];
+  global.fetch = async () => {requests.push(1); return {ok:false,json:async()=>({ok:false,message:'Job not found'})};};
+  await assert.rejects(pollJob('missing-job','status',null), /Job not found/);
+  assert.equal(requests.length, 1);
+})().catch(err => {console.error(err); process.exitCode = 1;});
+"""
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("value", [0, -1, 7201, float("inf"), float("nan")])
+def test_authoring_timeout_rejects_invalid_values(value):
+    with pytest.raises(ValueError):
+        service._authoring_timeout({"request_timeout_s": value})
+
+
+def test_authoring_timeout_applies_to_reply(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    callback = lambda delta: None
+    client = SimpleNamespace(request_timeout_s=240, progress_callback=None)
+    def send(text):
+        assert client.request_timeout_s == 1200
+        assert client.progress_callback is callback
+        return SimpleNamespace(to_dict=lambda: {"status": "success"})
+    monkeypatch.setitem(service._SESSIONS, "timeout-test", SimpleNamespace(
+        output_dir=tmp_path, _web_client=client, send=send,
+    ))
+    service._job_authoring_send({"session_id": "timeout-test", "message": "confirm",
+        "request_timeout_s": 1200, "_progress_callback": callback})
+    assert client.progress_callback is None
+
+
+def test_authoring_stream_is_visible_before_completion(monkeypatch, tmp_path):
+    import threading
+    import urllib.request
+    from types import SimpleNamespace
+    from fluentvibe.authoring.lm_client import LMStudioChatClient
+
+    first_chunk = threading.Event()
+    release = threading.Event()
+    class Response:
+        headers = {"Content-Type": "text/event-stream"}
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def close(self): pass
+        def __iter__(self):
+            yield b'data: {"choices":[{"delta":{"reasoning_content":"Checking volumes"}}]}\n'
+            first_chunk.set()
+            assert release.wait(5)
+            yield b'data: {"choices":[{"delta":{"content":"Ready"},"finish_reason":"stop"}]}\n'
+            yield b'data: [DONE]\n'
+    def open_request(req, timeout):
+        assert timeout == 1200
+        return Response()
+    monkeypatch.setattr(urllib.request, "urlopen", open_request)
+    client = LMStudioChatClient(request_timeout_s=240)
+    def send(text):
+        result = client.complete(messages=[{"role":"user","content":text}], tools=[])
+        return SimpleNamespace(to_dict=lambda: {"status":"success", "text":result["content"]})
+    monkeypatch.setitem(service._SESSIONS, "stream-test", SimpleNamespace(
+        output_dir=tmp_path, _web_client=client, send=send,
+    ))
+    created = service.submit_job("authoring-send", {
+        "session_id":"stream-test", "message":"confirm", "request_timeout_s":1200,
+    })
+    job_id = created["job"]["id"]
+    try:
+        assert first_chunk.wait(5)
+        running = service.job_status(job_id)["job"]
+        assert running["status"] == "running"
+        assert running["progress"]["thinking"] == "Checking volumes"
+    finally:
+        release.set()
+    for _ in range(100):
+        finished = service.job_status(job_id)["job"]
+        if finished["status"] not in {"queued", "running"}: break
+        time.sleep(0.01)
+    assert finished["status"] == "success", finished
+    assert finished["progress"]["content"] == "Ready"
+    assert finished["progress"]["characters"] == len("Checking volumesReady")

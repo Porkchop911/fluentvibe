@@ -679,7 +679,9 @@
             <div class="section-title"><div><h2>Discuss this protocol</h2><p>Ask about its steps and intent using the selected XSCR as context.</p></div></div>
             <div class="model-server-picker"><label for="protocolModelServer">Model server</label><select id="protocolModelServer"><option value="configured">Configured local model</option><option value="strata">Strata · local test instance</option></select></div>
             <div id="protocolChatLog" class="discussion-log" role="log" aria-live="polite"><div class="empty-state">Select a protocol to start a focused discussion.</div></div>
-            <div class="author-composer"><textarea id="protocolQuestion" rows="2" placeholder="What does this protocol do?" disabled></textarea><button id="askProtocol" disabled>Ask</button></div>
+
+
+        <div class="author-composer"><textarea id="protocolQuestion" rows="2" placeholder="What does this protocol do?" disabled></textarea><button id="askProtocol" disabled>Ask</button></div>
             <div class="status" id="protocolChatStatus" aria-live="polite"></div>
           </section>
         </div>
@@ -704,6 +706,10 @@
               </select>
             </div>
             <div>
+              <label for="authorTimeout">Model timeout (seconds)</label>
+              <input id="authorTimeout" type="number" min="1" max="7200" value="900">
+            </div>
+            <div>
               <label for="authorRetry">Retry budget</label>
               <input id="authorRetry" type="number" min="1" value="8">
             </div>
@@ -725,12 +731,29 @@
         </div>
 
         <div class="author-chat" id="authorChat" role="log" aria-live="polite"></div>
+        <details id="authorLive" hidden open>
+          <summary>Live model output <span id="authorLiveCount"></span></summary>
+          <div class="small">Latest thinking and response text reported by the local model.</div>
+          <pre id="authorThinking" style="max-height:260px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+          <pre id="authorLiveContent" style="max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+          <div id="authorLiveTools" class="small"></div>
+        </details>
+
+        <div class="actions">
+          <label for="authorDocuments">Attach documents</label>
+          <input id="authorDocuments" type="file" multiple accept=".pdf,.txt,.md,.csv,.tsv,.json,.yaml,.yml,.py">
+          <button id="clearAuthorDocuments" class="secondary" type="button" hidden>Remove attachments</button>
+        </div>
+        <div id="authorDocumentList" class="small" aria-live="polite">PDF or text documents, up to 15 MB each.</div>
 
         <div class="author-composer">
           <textarea id="authorPrompt" rows="1" placeholder="Message the author…  (Enter to send, Shift+Enter for newline)" disabled></textarea>
           <button id="sendAuthor" disabled>Send</button>
         </div>
 
+        <div class="actions">
+          <button id="patchGeneratedShell" class="secondary" disabled>Patch shell &amp; inspect</button>
+        </div>
         <details class="author-extras">
           <summary>Generated code &amp; raw result</summary>
           <label for="generatedCode">Generated / best draft code</label>
@@ -800,17 +823,17 @@
     <div class="panel" id="tab-fc">
       <div class="wide-grid">
         <section>
-          <h2>FluentControl Gate</h2>
+          <h2>Inspect in FluentControl</h2>
           <label for="fcXscrPath">XSCR path</label>
           <input id="fcXscrPath" placeholder="D:\path\compiled.xscr">
           <label><input id="fcOpenDirect" type="checkbox" style="width:auto;min-height:auto"> open XSCR directly</label>
           <details><summary>Validation options</summary>
             <label for="fcShellPath">Optional shell XSCR path</label>
             <input id="fcShellPath" placeholder="Use the configured shell">
-            <label><input id="fcRestoreShell" type="checkbox" checked style="width:auto;min-height:auto"> Restore the shell after validation</label>
             <label><input id="fcBackupShell" type="checkbox" checked style="width:auto;min-height:auto"> Back up the shell before patching</label>
           </details>
-          <button id="fcValidate" class="secondary">Validate in FluentControl</button>
+          <button id="fcValidate" class="secondary">Patch shell &amp; inspect</button>
+          <p class="small">The patched script stays open in FluentControl for inspection.</p>
           <h3>Deploy</h3>
           <label for="deployObjectName">Optional object name</label>
           <input id="deployObjectName" placeholder="Protocol name in FluentControl">
@@ -842,6 +865,7 @@
       liquidClasses: [],
       profiles: [],
       authorSessionId: null,
+      generatedXscr: null,
       authorMessages: [],
       authorPending: false,
       protocols: [],
@@ -957,9 +981,23 @@
     }
 
     async function pollJob(jobId, statusId, resultId, done) {
+      let connectionFailures = 0;
       while (true) {
-        const data = await api(`/api/job?id=${encodeURIComponent(jobId)}`);
+        let data;
+        try {
+          data = await api(`/api/job?id=${encodeURIComponent(jobId)}`, {
+            signal: AbortSignal.timeout(15000)
+          });
+          connectionFailures = 0;
+        } catch (err) {
+          if (!(err instanceof TypeError) && !['AbortError', 'TimeoutError'].includes(err.name)) throw err;
+          connectionFailures += 1;
+          setStatus(statusId, 'Connection interrupted; reconnecting to your running job…');
+          await sleep(Math.min(1000 * connectionFailures, 5000));
+          continue;
+        }
         const job = data.job;
+        if (job.kind === 'authoring-send' && job.progress) renderAuthorProgress(job.progress);
         if (job.status === 'queued' || job.status === 'running') {
           setStatus(statusId, `${job.kind}: ${job.status}`);
           await sleep(750);
@@ -1085,6 +1123,11 @@
       });
       updateAuthorModelTarget();
       $('sendAuthor').addEventListener('click', sendAuthorMessage);
+      $('authorDocuments').addEventListener('change', renderAuthorDocuments);
+      $('clearAuthorDocuments').addEventListener('click', () => {
+        $('authorDocuments').value = '';
+        renderAuthorDocuments();
+      });
       $('authorPrompt').addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -1097,6 +1140,13 @@
       $('loadCatalogInfo').addEventListener('click', loadCatalogInfo);
       $('catalogRefresh').addEventListener('click', refreshCatalog);
       $('fcValidate').addEventListener('click', validateFc);
+      $('patchGeneratedShell').addEventListener('click', () => {
+        if (!state.generatedXscr) return;
+        $('fcXscrPath').value = state.generatedXscr;
+        $('fcOpenDirect').checked = false;
+        document.querySelector('[data-tab="fc"]').click();
+        validateFc();
+      });
       $('deployXscr').addEventListener('click', deployXscr);
     }
 
@@ -1288,6 +1338,7 @@
         state.authorMessages = [];
         renderAuthorChat();
         const payload = {
+          request_timeout_s: Number($('authorTimeout').value),
           profile_name: $('authorProfile').value,
           retry_budget: Number($('authorRetry').value || 8),
           model_server: $('authorModelServer').value,
@@ -1296,6 +1347,8 @@
         };
         await submitAndPoll('authoring-session', payload, 'authorStatus', 'authorResult', result => {
           state.authorSessionId = result.session_id;
+          state.generatedXscr = null;
+          $('patchGeneratedShell').disabled = true;
           $('sendAuthor').disabled = false;
           $('authorPrompt').disabled = false;
           pushAuthorMessage(
@@ -1313,9 +1366,46 @@
       }
     }
 
+    function renderAuthorProgress(progress) {
+      $('authorLive').hidden = false;
+      $('authorLiveCount').textContent = `· ${progress.characters || 0} characters received`;
+      for (const [id, text] of [['authorThinking', progress.thinking], ['authorLiveContent', progress.content]]) {
+        const el = $(id);
+        const follow = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        el.textContent = text || '';
+        if (follow) el.scrollTop = el.scrollHeight;
+      }
+      $('authorLiveTools').textContent = (progress.tools || []).length ? `Tools: ${progress.tools.join(', ')}` : '';
+    }
+
+    function renderAuthorDocuments() {
+      const files = Array.from($('authorDocuments').files);
+      $('authorDocumentList').textContent = files.length
+        ? files.map(file => `${file.name} (${(file.size / 1024).toFixed(0)} KB)`).join(', ')
+        : 'PDF or text documents, up to 15 MB each.';
+      $('clearAuthorDocuments').hidden = !files.length;
+    }
+
+    function encodeAuthorDocument(file) {
+      return new Promise((resolve, reject) => {
+        if (file.size > 15 * 1024 * 1024) {
+          reject(new Error(`${file.name} exceeds the 15 MB limit.`));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+        reader.onload = () => resolve({name: file.name, mime_type: file.type,
+          content_base64: String(reader.result).split(',')[1]});
+        reader.readAsDataURL(file);
+      });
+    }
+
     function setComposerBusy(busy) {
+      $('authorDocuments').disabled = busy;
+      $('clearAuthorDocuments').disabled = busy;
       $('sendAuthor').disabled = busy || !state.authorSessionId;
       $('authorPrompt').disabled = busy || !state.authorSessionId;
+      $('patchGeneratedShell').disabled = busy || !state.generatedXscr;
     }
 
     async function sendAuthorMessage() {
@@ -1324,20 +1414,25 @@
         return;
       }
       const message = $('authorPrompt').value.trim();
-      if (!message) {
-        setStatus('authorStatus', 'Type a message first.', 'error');
+      const files = Array.from($('authorDocuments').files);
+      if (!message && !files.length) {
+        setStatus('authorStatus', 'Type a message or attach a document first.', 'error');
         return;
       }
       setComposerBusy(true);
       try {
-        pushAuthorMessage('user', 'You', message);
+        $('authorLive').hidden = true;
+        const attachments = await Promise.all(files.map(encodeAuthorDocument));
+        pushAuthorMessage('user', 'You', [message, ...files.map(file => `Attached: ${file.name}`)].filter(Boolean).join('\n'));
         $('authorPrompt').value = '';
         state.authorPending = true;
         renderAuthorChat();
         await submitAndPoll('authoring-send', {
           session_id: state.authorSessionId,
-          message
+          message, attachments, request_timeout_s: Number($('authorTimeout').value)
         }, 'authorStatus', 'authorResult', result => {
+          $('authorDocuments').value = '';
+          renderAuthorDocuments();
           const authored = result.authoring || {};
           const summary = summarizeAuthoringResult(authored);
           state.authorPending = false;
@@ -1348,7 +1443,9 @@
             { tool_calls: authored.tool_calls || [] }
           );
           $('generatedCode').value = authored.generated_code || authored.best_draft_code || $('generatedCode').value;
-          if (authored.compiled_xscr) $('fcXscrPath').value = authored.compiled_xscr;
+          state.generatedXscr = authored.compiled_xscr || null;
+          $('patchGeneratedShell').disabled = !state.generatedXscr;
+          if (state.generatedXscr) $('fcXscrPath').value = state.generatedXscr;
         });
       } catch (err) {
         setStatus('authorStatus', err.message, 'error');
@@ -1609,16 +1706,21 @@
     }
 
     async function validateFc() {
+      $('fcValidate').disabled = true;
+      $('patchGeneratedShell').disabled = true;
       try {
         await submitAndPoll('fc-validate', {
           xscr_path: $('fcXscrPath').value,
           open_direct: $('fcOpenDirect').checked,
           shell_xscr: $('fcShellPath').value,
-          restore_shell: $('fcRestoreShell').checked,
+          restore_shell: false,
           backup: $('fcBackupShell').checked
         }, 'fcStatus', 'fcResult');
       } catch (err) {
         setStatus('fcStatus', err.message, 'error');
+      } finally {
+        $('fcValidate').disabled = false;
+        $('patchGeneratedShell').disabled = !state.generatedXscr;
       }
     }
 

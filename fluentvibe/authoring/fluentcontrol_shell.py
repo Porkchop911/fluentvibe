@@ -219,10 +219,10 @@ def validate_generated_xscr_via_shell(
             try:
                 result = open_shell_and_read_infopad(
                     process_id=process_id, script_name=script_name,
-                    close_before_open=False, close_after_read=True,
+                    close_before_open=False, close_after_read=restore_shell,
                 )
             except FluentControlShellError as exc:
-                result = open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=True)
+                result = open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=restore_shell)
                 result = replace(result, diagnostics=[f"Tree open failed; used exact file path: {exc}"])
             return replace(result, backup_path=str(backup_path) if backup_path else None)
         finally:
@@ -355,10 +355,29 @@ def _connect_fluent_window(process_id: Optional[int] = None):
 
 def _pick_leftmost_shell_element(fc_win, script_name="shell"):
     matches = []
-    for el in fc_win.descendants(title=script_name, control_type="TreeItem"):
+    # FluentControl's WPF control bar exposes script labels as Text inside a
+    # ListItem on some versions, rather than as standard TreeItems.
+    for el in fc_win.descendants(title=script_name):
         try:
-            rect = el.rectangle()
-            matches.append((rect.left, rect.top, el))
+            if not el.is_visible():
+                continue
+            target = el
+            for _ in range(4):
+                kind = getattr(target.element_info, "control_type", "")
+                if kind in ("TreeItem", "ListItem"):
+                    break
+                if kind in ("TabItem", "Window"):
+                    target = None
+                    break
+                target = target.parent()
+            else:
+                target = None
+            if target is None:
+                continue
+            rect = target.rectangle()
+            if rect.right <= rect.left or rect.bottom <= rect.top:
+                continue
+            matches.append((rect.left, rect.top, target))
         except Exception:
             continue
     matches.sort(key=lambda item: (item[0], item[1]))
@@ -495,30 +514,22 @@ def _click_infopad_tab(fc_win) -> bool:
 
 
 def _scan_error_lines_anywhere(fc_win, limit: int = 200) -> list[str]:
-    found: dict[int, str] = {}
-    leftovers: list[str] = []
+    found: list[str] = []
     try:
         for desc in fc_win.descendants():
             try:
-                text = (desc.window_text() or "").strip()
+                text = desc.window_text() or ""
             except Exception:
                 continue
-            if not text or not _ERR_LINE_RE.match(text):
-                continue
-            try:
-                number = int(text.split(":", 1)[0])
-                found.setdefault(number, text)
-            except Exception:
-                leftovers.append(text)
-            if len(found) + len(leftovers) >= limit:
-                break
-    except Exception:
-        return []
-    ordered = [found[key] for key in sorted(found)]
-    for line in leftovers:
-        if line not in ordered:
-            ordered.append(line)
-    return ordered[:limit]
+            for line in text.splitlines():
+                line = line.strip()
+                if _ERR_LINE_RE.match(line) and line not in found:
+                    found.append(line)
+                if len(found) >= limit:
+                    return found
+    except Exception as exc:
+        raise FluentControlShellError(f"Failed scanning validation errors: {exc}") from exc
+    return found
 
 
 def _infopad_context_lines(fc_win, limit: int) -> list[str]:
@@ -544,7 +555,32 @@ def _infopad_context_lines(fc_win, limit: int) -> list[str]:
                 break
     except Exception as exc:
         raise FluentControlShellError(f"Failed reading InfoPad: {exc}") from exc
+    if not found_infopad:
+        raise FluentControlShellError("InfoPad content could not be located")
     return lines
+
+
+def _read_infopad_validation(fc_win, limit: int) -> tuple[list[str], list[str]]:
+    lines: list[str] = []
+    for _ in range(3):
+        scan_errors = _scan_error_lines_anywhere(fc_win, limit)
+        try:
+            lines = _infopad_context_lines(fc_win, limit)
+        except FluentControlShellError:
+            if scan_errors:
+                return scan_errors, scan_errors
+            raise
+        errors = [line.strip() for text in lines for line in text.splitlines()
+                  if _ERR_LINE_RE.match(line.strip())]
+        errors = list(dict.fromkeys(errors + scan_errors))
+        if errors:
+            return lines, errors
+        time.sleep(0.4)
+    # Include this final read in the verdict, rather than only the sample.
+    lines = _infopad_context_lines(fc_win, limit)
+    errors = [line.strip() for text in lines for line in text.splitlines()
+              if _ERR_LINE_RE.match(line.strip())]
+    return lines, list(dict.fromkeys(errors + _scan_error_lines_anywhere(fc_win, limit)))
 
 
 def open_shell_and_read_infopad(
@@ -588,19 +624,24 @@ def open_shell_and_read_infopad(
         )
 
     if not _wait_for_script_tab(fc_win, script_name):
-        return UiResult(opened=False, infopad_lines=[], error_lines=[f"Script tab did not open: {script_name}"], load_failed=True, load_error_text=f"Script tab did not open: {script_name}", modal_dialogs=dialogs.texts)
+        # Selection/Invoke is not an open operation for every WPF control.
+        shell_el.double_click_input()
+        time.sleep(settle_seconds)
+        retry_dialogs = _dismiss_modal_dialogs(fc_win, timeout_s=3.0)
+        dialogs = DialogScanResult(
+            dialogs.texts + retry_dialogs.texts,
+            dialogs.checksum_dialog_seen or retry_dialogs.checksum_dialog_seen,
+            dialogs.load_failure_texts + retry_dialogs.load_failure_texts,
+        )
+        if dialogs.load_failure_texts or not _wait_for_script_tab(fc_win, script_name):
+            errors = dialogs.load_failure_texts or [f"Script tab did not open: {script_name}"]
+            return UiResult(opened=False, infopad_lines=[], error_lines=errors,
+                            load_failed=True, load_error_text="\n".join(errors),
+                            checksum_dialog_seen=dialogs.checksum_dialog_seen,
+                            modal_dialogs=dialogs.texts)
     if not _click_infopad_tab(fc_win):
         return UiResult(opened=True, infopad_lines=[], error_lines=["InfoPad could not be read"], modal_dialogs=dialogs.texts)
-    error_lines: list[str] = []
-    lines: list[str] = []
-    for _ in range(3):
-        lines = _infopad_context_lines(fc_win, infopad_line_limit)
-        error_lines = [line.strip() for text in lines for line in text.splitlines() if _ERR_LINE_RE.match(line.strip())]
-        if error_lines:
-            break
-        time.sleep(0.4)
-    if not error_lines:
-        lines = _infopad_context_lines(fc_win, infopad_line_limit)
+    lines, error_lines = _read_infopad_validation(fc_win, infopad_line_limit)
 
     if close_after_read:
         _close_shell_tab_if_open(fc_win, timeout_s=2.0, script_name=script_name)
@@ -693,16 +734,7 @@ def open_xscr_and_read_infopad(
         return UiResult(opened=False, infopad_lines=[], error_lines=[f"Script tab did not open: {script_name}"], load_failed=True, load_error_text=f"Script tab did not open: {script_name}", modal_dialogs=dialogs.texts)
     if not _click_infopad_tab(fc_win):
         return UiResult(opened=True, infopad_lines=[], error_lines=["InfoPad could not be read"], modal_dialogs=dialogs.texts)
-    error_lines: list[str] = []
-    lines: list[str] = []
-    for _ in range(3):
-        lines = _infopad_context_lines(fc_win, infopad_line_limit)
-        error_lines = [line.strip() for text in lines for line in text.splitlines() if _ERR_LINE_RE.match(line.strip())]
-        if error_lines:
-            break
-        time.sleep(0.4)
-    if not error_lines:
-        lines = _infopad_context_lines(fc_win, infopad_line_limit)
+    lines, error_lines = _read_infopad_validation(fc_win, infopad_line_limit)
 
     if close_after_read:
         _close_shell_tab_if_open(fc_win, timeout_s=2.0, script_name=script_name)

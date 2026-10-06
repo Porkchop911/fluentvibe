@@ -33,10 +33,12 @@ class LMStudioChatClient:
         endpoint: str = DEFAULT_LM_STUDIO_ENDPOINT,
         model: str = DEFAULT_LM_STUDIO_MODEL,
         trace_recorder: ModelTraceRecorder | None = None,
+        request_timeout_s: float = 240.0,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
         self.trace_recorder = trace_recorder
+        self.request_timeout_s = request_timeout_s
 
     def complete(
         self,
@@ -67,7 +69,7 @@ class LMStudioChatClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=None) as response:
+            with urllib.request.urlopen(req, timeout=self.request_timeout_s) as response:
                 content_type = response.headers.get("Content-Type", "")
                 if "text/event-stream" in content_type:
                     return self._read_stream(response)
@@ -122,6 +124,8 @@ class LMStudioChatClient:
             choice = (chunk.get("choices") or [{}])[0]
             finish_reason = choice.get("finish_reason") or finish_reason
             delta = choice.get("delta") or {}
+            if getattr(self, "progress_callback", None) is not None:
+                self.progress_callback(delta)
             if delta.get("content"):
                 content_parts.append(delta["content"])
             for key, value in _reasoning_fields(delta).items():
