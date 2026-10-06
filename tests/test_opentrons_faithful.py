@@ -166,3 +166,29 @@ def test_a_parked_tip_with_liquid_is_named_not_hidden(monkeypatch):
     parked = [u for u in conv.report["unconverted"] if u.startswith("parked tip")]
     assert parked and "60 ul" in parked[0]
     assert "operator prompt: Vortex the tubes." in conv.report["kept_pauses_and_waits"]
+
+
+def test_inventory_links_parts_variants_and_readme_links(tmp_path):
+    import csv
+
+    def lib(slug, title, readme_extra=""):
+        folder = tmp_path / "lib" / slug
+        folder.mkdir(parents=True)
+        (folder / "metadata.json").write_text(json.dumps({"name": title, "saved_protocol_file": "p.py"}), "utf-8")
+        (folder / "README.md").write_text(f"# {title}\n\nDoes things. {readme_extra}\n", encoding="utf-8")
+        (folder / "p.py").write_text("def run(ctx): pass\n", encoding="utf-8")
+
+    lib("0000025894", "Cell Lysis - Part 1", "[Part 2](https://library.opentrons.com/p/0000025894-2)")
+    lib("0000025894-2", "Cell Lysis - Part 2")
+    lib("bca", "BCA", "See https://library.opentrons.com/p/normalization too.")
+    lib("normalization", "Normalization")
+    lib("lonely", "Lonely")
+    entries = pi.build_index([tmp_path / "lib"])
+    related = pi.related_protocols(entries)
+    assert related["0000025894"] == ["0000025894-2"] and related["0000025894-2"] == ["0000025894"]
+    assert related["bca"] == ["normalization"] and related["lonely"] == []
+    out = tmp_path / "inventory.csv"
+    assert pi.export_csv(entries, out) == 5
+    rows = {r["id"]: r for r in csv.DictReader(out.open(encoding="utf-8-sig"))}
+    assert rows["bca"]["related_protocols"] == "normalization" and rows["bca"]["path"].endswith("p.py")
+    assert rows["lonely"]["description"].startswith("Does things")

@@ -274,3 +274,76 @@ def find(entries: list[ProtocolEntry], key: str) -> Optional[ProtocolEntry]:
         if e.id.lower() == f"git:{key_norm}":
             return e
     return None
+
+
+# --- CSV inventory -------------------------------------------------------------
+
+_LINK_ID_RE = re.compile(r"(?:protocols|develop\.protocols)\.opentrons\.com/protocol/([A-Za-z0-9_-]+)"
+                         r"|library\.opentrons\.com/p/([A-Za-z0-9_-]+)")
+_PART_RE = re.compile(r"\s*[-:(]?\s*\bpart\s*\d+\b.*$", re.I)
+
+
+def related_protocols(entries: list[ProtocolEntry]) -> dict[str, list[str]]:
+    """Per entry id: the other protocols it belongs with.
+
+    * protocols its README links to (``protocols.opentrons.com/protocol/<id>``,
+      ``library.opentrons.com/p/<slug>``), kept as ids found in the index;
+    * Part 1 / Part 2 / ... siblings (same title before "Part N", same source);
+    * slug variants (``0000025894`` and ``0000025894-2``; ``00222e`` and ``00222e-dd``)."""
+    by_id = {e.id: e for e in entries}
+    by_slug: dict[str, list[str]] = {}
+    for e in entries:
+        slug = e.id.split(":", 1)[-1]
+        by_slug.setdefault(slug, []).append(e.id)
+    related: dict[str, set[str]] = {e.id: set() for e in entries}
+
+    def link(a: str, b: str) -> None:
+        if a != b and a in related and b in related:
+            related[a].add(b)
+            related[b].add(a)
+
+    for e in entries:
+        if e.source not in ("library", "git"):
+            continue
+        readme = _read(Path(e.folder) / "README.md")
+        for git_id, lib_slug in _LINK_ID_RE.findall(readme):
+            target = git_id or lib_slug
+            for candidate in (f"git:{target}", target):
+                if candidate in by_id:
+                    link(e.id, candidate)
+                    break
+    parts: dict[tuple[str, str], list[str]] = {}
+    for e in entries:
+        if e.source in ("library", "git") and re.search(r"\bpart\s*\d+\b", e.title, re.I):
+            parts.setdefault((e.source, _PART_RE.sub("", e.title).strip().lower()), []).append(e.id)
+    for ids in parts.values():
+        for a in ids:
+            for b in ids:
+                link(a, b)
+    for slug, ids in by_slug.items():
+        base = re.sub(r"-(\d+|dd|seed|[a-z]{1,3})$", "", slug)
+        if base != slug:
+            for a in ids:
+                for b in by_slug.get(base, []):
+                    link(a, b)
+    return {k: sorted(v) for k, v in related.items()}
+
+
+def export_csv(entries: list[ProtocolEntry], path: Path, *, sources=("library", "git")) -> int:
+    """Write the inventory: id, source, title, robot, path, description,
+    related protocols (ids, ``;``-separated). Returns the rows written."""
+    import csv
+
+    related = related_protocols(entries)
+    rows = [e for e in entries if e.source in sources]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as fh:  # utf-8-sig: Excel reads umlauts and µ
+        writer = csv.writer(fh)
+        writer.writerow(["id", "source", "title", "robot", "path", "description", "related_protocols"])
+        for e in rows:
+            description = e.description or "; ".join(e.steps)
+            if e.categories:
+                description = f"[{' / '.join(e.categories)}] {description}"
+            writer.writerow([e.id, e.source, e.title, e.robot, e.path, description.strip(),
+                             "; ".join(related.get(e.id, []))])
+    return len(rows)

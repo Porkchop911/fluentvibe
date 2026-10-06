@@ -273,6 +273,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_pi_show = pi_sub.add_parser("show", help="one protocol: title, description, steps, labware, path")
     p_pi_show.add_argument("id", help="index id (0000025894, git:00222e, sdk:...) or the folder / .py path")
     p_pi_show.add_argument("--json", action="store_true")
+    p_pi_csv = pi_sub.add_parser("csv", help="write the Opentrons protocol inventory as CSV "
+                                              "(id, title, path, description, related protocols)")
+    p_pi_csv.add_argument("--output", "-o", type=Path, default=None,
+                          help="CSV file (default: build/opentrons_protocols.csv)")
+    p_pi_csv.add_argument("--with-sdk", action="store_true", help="also the SDK's protocols (mostly test fixtures)")
     p_pi_index = pi_sub.add_parser("index", help="(re)build the index (build/protocol_index.json)")
     p_pi_index.add_argument("roots", nargs="*", type=Path,
                             help="folders to index (default: FLUENTVIBE_PROTOCOL_ROOTS or D:/Opentron_protocols "
@@ -1092,6 +1097,14 @@ def _cmd_protocols(args) -> int:
         print(f"{len(entries)} protocols indexed: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
         return 0
     entries = load_index()
+    if args.protocols_cmd == "csv":
+        from .protocol_index import default_cache, export_csv
+
+        out = args.output or default_cache().with_name("opentrons_protocols.csv")
+        sources = ("library", "git", "sdk") if args.with_sdk else ("library", "git")
+        count = export_csv(entries, out, sources=sources)
+        print(f"{count} protocols -> {out}")
+        return 0
     if args.protocols_cmd == "show":
         entry = find(entries, args.id)
         if entry is None:
