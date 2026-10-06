@@ -410,7 +410,10 @@ def _connect_fluent_window(process_id: Optional[int] = None):
         raise FluentControlShellError(
             "FluentControl is not running (no window titled 'FluentControl'). "
             "Start FluentControl and log in, then try again.")
-    return window
+    # The resolved wrapper, not the search spec: every attribute of a spec
+    # (handle, process id, descendants) searched for the window again,
+    # about a second each, in every poll.
+    return window.wrapper_object()
 
 
 def _pick_leftmost_shell_element(fc_win, script_name="shell"):
@@ -509,20 +512,71 @@ def _navigate_tree_to_shell(fc_win, script_name="shell", folder_name="Under_deve
     return _ancestor(shell[0], ("TreeItem", "ListItem", "DataItem"))
 
 
-def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
+_DIALOG_BUTTONS = frozenset({"OK", "Yes", "No", "Cancel", "Abbrechen", "Ja", "Nein"})
+# Handles of FluentControl windows found to be panels (the non-modal
+# "TouchTools"), so each check does not search them again.
+_PANEL_HANDLES: set[int] = set()
+
+
+def _buttons(window, titles) -> list:
+    """The window's buttons titled one of ``titles``, in that order of titles.
+
+    Windows from ``Desktop().windows()`` are plain wrappers without
+    ``child_window``; the old ``dlg.child_window(...)`` could never click a
+    FluentControl dialog's button."""
+    found = {}
+    for button in window.descendants(control_type="Button"):
+        name = (button.window_text() or "").strip()
+        if name in titles and name not in found:
+            found[name] = button
+    return [found[t] for t in titles if t in found]
+
+
+def _is_dialog(window) -> bool:
+    """A modal window, a classic message box, or one with dialog buttons.
+
+    FluentControl keeps a non-modal "TouchTools" panel open all the time;
+    counting it as a dialog made every open wait out its full timeout and
+    every dialog scan read the panel's whole contents."""
+    if window.handle in _PANEL_HANDLES:
+        return False
+    try:
+        if window.iface_window.CurrentIsModal:
+            return True
+    except Exception:
+        pass
+    if getattr(window.element_info, "class_name", "") == "#32770":
+        return True
+    try:
+        if _buttons(window, tuple(_DIALOG_BUTTONS)):
+            return True
+    except Exception:
+        return False
+    _PANEL_HANDLES.add(window.handle)
+    return False
+
+
+def _fc_dialogs(fc_win) -> list:
+    """FluentControl's open dialogs (never another application's)."""
     from pywinauto import Desktop
 
+    process_id = fc_win.process_id()
+    return [dlg for dlg in Desktop(backend="uia").windows(process=process_id)
+            if dlg.handle != fc_win.handle and dlg.is_visible() and _is_dialog(dlg)]
+
+
+def _fc_dialog_open(fc_win) -> bool:
+    return bool(_fc_dialogs(fc_win))
+
+
+def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
     deadline = time.monotonic() + timeout_s
     seen = []
     failures = []
     checksum_seen = False
-    process_id = fc_win.process_id()
     while time.monotonic() < deadline:
         dismissed = False
-        # Only this FluentControl process; never dismiss another app's dialog.
-        for dlg in Desktop(backend="uia").windows(process=process_id):
-            if not dlg.is_visible() or dlg.handle == fc_win.handle:
-                continue
+        for dlg in _fc_dialogs(fc_win):
             text = " ".join((el.window_text() or "").strip() for el in dlg.descendants())
             if text and text not in seen:
                 seen.append(text)
@@ -531,15 +585,18 @@ def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
             if failed and text not in failures:
                 failures.append(text)
             if re.search(r"save.*changes|do you want to save", text, re.I):
-                # Do not discard unrelated unsaved user edits.
-                raise FluentControlShellError("FluentControl has unsaved changes; save or close that script before validating")
-            titles = ("Yes", "OK") if checksum else (("OK",) if failed else ())
-            for title in titles:
-                button = dlg.child_window(title=title, control_type="Button")
-                if button.exists(timeout=0.1):
+                # Never discard edits: Cancel keeps them and closes the question.
+                for button in _buttons(dlg, ("Cancel", "Abbrechen")):
                     _safe_click(button)
-                    dismissed = True
                     break
+                raise FluentControlShellError(
+                    "A FluentControl script has unsaved changes (it asked to save). Nothing was discarded: "
+                    "save or close that script in FluentControl, then try again.")
+            titles = ("Yes", "OK") if checksum else (("OK",) if failed else ())
+            for button in _buttons(dlg, titles):
+                _safe_click(button)
+                dismissed = True
+                break
         if not dismissed:
             break
         time.sleep(0.1)
@@ -552,15 +609,6 @@ def _script_tab(fc_win, script_name: str):
         if (tab.window_text() or "").strip().rstrip(" *") == script_name:
             return tab
     return None
-
-
-def _fc_dialog_open(fc_win) -> bool:
-    """A FluentControl window other than the main one is showing (a dialog)."""
-    from pywinauto import Desktop
-
-    process_id = fc_win.process_id()
-    return any(dlg.is_visible() and dlg.handle != fc_win.handle
-               for dlg in Desktop(backend="uia").windows(process=process_id))
 
 
 def _click_tab_close_button(tab) -> bool:
@@ -621,10 +669,10 @@ def _wait_for_script_tab(fc_win, script_name: str, timeout_s: float = 5.0) -> bo
 
 def _click_infopad_tab(fc_win) -> bool:
     try:
-        tab = fc_win.child_window(title_re=r"^Infopad$", control_type="TabItem")
-        if tab.exists(timeout=0.5):
-            _safe_click(tab)
-            return True
+        for tab in fc_win.descendants(control_type="TabItem"):
+            if (tab.window_text() or "").strip() == "Infopad":
+                _safe_click(tab)
+                return True
     except Exception:
         pass
     try:
@@ -746,8 +794,6 @@ def open_shell_and_read_infopad(
     script_name: str = "shell",
 ) -> UiResult:
     fc_win = _connect_fluent_window(process_id)
-    if not fc_win.exists(timeout=2):
-        raise FluentControlShellError("FluentControl window not found.")
 
     _bring_to_foreground(fc_win)
     if close_before_open:
@@ -801,14 +847,16 @@ def _try_open_xscr_via_file_dialog(fc_win, xscr_path: Path, timeout_s: float = 1
             try:
                 if not candidate.is_visible():
                     continue
-                button = candidate.child_window(title_re=r"^(Open|OK)$", class_name="Button")
-                edit = candidate.child_window(class_name="Edit")
-                if button.exists(timeout=0.1) and edit.exists(timeout=0.1):
+                # Windows from Desktop().windows() have no child_window(); the
+                # old lookup raised, was swallowed, and the dialog was "not found".
+                parts = _file_dialog_parts(candidate)
+                if parts is not None:
                     dialog = candidate
                     break
             except Exception:
                 continue
-        time.sleep(0.1)
+        if dialog is None:
+            time.sleep(0.1)
 
     if dialog is None:
         raise FluentControlShellError("Open file dialog not found after Ctrl+O.")
@@ -819,10 +867,21 @@ def _try_open_xscr_via_file_dialog(fc_win, xscr_path: Path, timeout_s: float = 1
         pass
 
     try:
-        dialog.child_window(class_name="Edit").set_edit_text(str(xscr_path))
-        _safe_click(dialog.child_window(title_re=r"^(Open|OK)$", class_name="Button"))
+        edit, button = parts
+        edit.set_edit_text(str(xscr_path))
+        _safe_click(button)
     except Exception as exc:
         raise FluentControlShellError(f"Failed to drive Open file dialog: {exc}") from exc
+
+
+def _file_dialog_parts(dialog):
+    """(file name edit, Open/OK button) of a classic file dialog, or None."""
+    edits = [c for c in dialog.descendants() if c.class_name() == "Edit"]
+    buttons = [c for c in dialog.descendants()
+               if c.class_name() == "Button" and (c.window_text() or "").replace("&", "").strip() in ("Open", "OK")]
+    if not edits or not buttons:
+        return None
+    return edits[0], buttons[0]
 
 
 def open_xscr_and_read_infopad(
@@ -838,8 +897,6 @@ def open_xscr_and_read_infopad(
         raise FluentControlShellError(f"XSCR not found: {xscr_path}")
 
     fc_win = _connect_fluent_window(process_id)
-    if not fc_win.exists(timeout=2):
-        raise FluentControlShellError("FluentControl window not found.")
 
     _bring_to_foreground(fc_win)
     root = ET.fromstring(read_xscr_text(xscr_path))
