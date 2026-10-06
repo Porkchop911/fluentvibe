@@ -736,15 +736,15 @@ _API_LOOKUPS: dict[str, dict[str, Any]] = {
     },
     "wt.mca96": {
         "object": "wt.mca96",
-        "note": "True 96-channel head: one aspirate/dispense/mix touches all 96 wells at once — no per-column loop. PASS DECLARED VARIABLES BY NAME (a string) for the volume and liquid_class (e.g. 'SUPERNATANT_ASPIRATE_UL', 'LIQUID_CLASS_SUPERNATANT'); passing the Python value bakes a literal into the protocol and leaves the FC variable unused.",
+        "note": "96-channel head: aspirate/dispense support columns=[...] (1-based whole plate columns), including shifted rectangular stamps. Omitting columns addresses the full plate; mix is full-plate. For left half to center on Plate96, aspirate columns 1-6 and dispense columns 4-9. PASS DECLARED VARIABLES BY NAME (a string) for volume and liquid_class.",
         "methods": [
             {"name": "mount_adapter", "signature": "mount_adapter(adapter=None)", "examples": ["head = wt.mca96", "head.mount_adapter()"]},
-            {"name": "pick_up", "signature": "pick_up(tip_box)", "examples": ["head.pick_up(tips)"]},
-            {"name": "aspirate", "signature": "aspirate(target, volume_ul, *, liquid_class)", "examples": ["head.aspirate(source, 'SUPERNATANT_ASPIRATE_UL', liquid_class='LIQUID_CLASS_SUPERNATANT')"]},
-            {"name": "dispense", "signature": "dispense(target, volume_ul, *, liquid_class)", "examples": ["head.dispense(dest, 'TRANSFER_VOLUME_UL', liquid_class='LIQUID_CLASS_ELUATE')"]},
+            {"name": "pick_up", "signature": "pick_up(tip_box, *, columns=None)", "examples": ["head.pick_up(tips, columns=[1,2,3,4,5,6])"]},
+            {"name": "aspirate", "signature": "aspirate(target, volume_ul, *, liquid_class, columns=None)", "examples": ["head.aspirate(source, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', columns=[1,2,3,4,5,6])"]},
+            {"name": "dispense", "signature": "dispense(target, volume_ul, *, liquid_class, columns=None)", "examples": ["head.dispense(dest, 'TARGET_VOLUME_UL', liquid_class='LIQUID_CLASS_TRANSFER', columns=[4,5,6,7,8,9])"]},
             {"name": "mix", "signature": "mix(target, volume_ul, *, cycles=10, liquid_class)", "examples": ["head.mix(plate, 'MIX_VOLUME_UL', cycles=10, liquid_class='LIQUID_CLASS_BEADS')"]},
             {"name": "empty_tips", "signature": "empty_tips(target, volume_ul, *, liquid_class='Empty Tip')", "examples": ["head.empty_tips(waste, 'SUPERNATANT_ASPIRATE_UL')"]},
-            {"name": "return_tips", "signature": "return_tips(tip_box=None)", "examples": ["head.return_tips(tips)"]},
+            {"name": "return_tips", "signature": "return_tips(tip_box=None, *, columns=None)", "examples": ["head.return_tips(tips, columns=[1,2,3,4,5,6])"]},
             {"name": "drop_adapter", "signature": "drop_adapter(adapter=None)", "examples": ["head.drop_adapter()"]},
         ],
         "forbidden_common_mistakes": ["get_tips", "drop_tips"],
@@ -2905,6 +2905,10 @@ class AuthoringToolRegistry:
                 return {"ok": False, "stage": "contract", "category": FailureCategory.PYTHON_BUILD_FAILURE.value, "message": contract_error}
             try:
                 wt = self.validator._load_protocol(path)
+                if not self._is_staged_subdraft(source):
+                    geometry_error = self.validator.check_transfer_geometry(wt, self.current_prompt)
+                    if geometry_error:
+                        return {"ok": False, "stage": "contract", "category": "intent_not_satisfied", "message": geometry_error}
                 wt.simulate(strict=strict)
             except Exception as exc:
                 report = getattr(locals().get("wt", None), "simulation_report", None)
@@ -2924,6 +2928,16 @@ class AuthoringToolRegistry:
                     "repair_hint": policy.guidance if policy.guidance else None,
                 }
             report = getattr(wt, "simulation_report", None)
+            if not self._is_staged_subdraft(source):
+                from .validator import _check_intent_against_final_labware
+
+                intent = self.validator.partial_stamp_intent(wt, self.current_prompt)
+                if intent is None and self.current_intent.is_specified():
+                    intent = self.current_intent
+                if intent is not None:
+                    intent_error = _check_intent_against_final_labware(intent, getattr(report, "final_labware", {}) or {})
+                    if intent_error:
+                        return {"ok": False, "stage": "strict_simulation", "category": "intent_not_satisfied", "message": intent_error}
         result: dict[str, Any] = {
             "ok": True,
             "stage": "strict_simulation",

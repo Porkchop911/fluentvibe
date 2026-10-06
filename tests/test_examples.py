@@ -126,8 +126,12 @@ def test_ampure_xp_cleanup_96_head_split() -> None:
 
     # Head assignment: LiHa only touches troughs; MCA96 only plates.
     from fluentvibe.ir.schema import (
-        AspirateStep, DispenseStep, LihaAspirateStep, LihaDispenseStep, Mca384MixStep,
+        AspirateStep,
+        DispenseStep,
+        LihaAspirateStep,
+        LihaDispenseStep,
         Mca384EmptyTipsStep,
+        Mca384MixStep,
     )
     troughs = {"BeadTrough", "EthanolTrough", "ElutionTrough"}
     liha_aspirate: set[str] = set()

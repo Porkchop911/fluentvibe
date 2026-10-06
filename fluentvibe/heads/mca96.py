@@ -76,6 +76,16 @@ class MCA96Head:
     def _label(self, labware: Union[Labware, str]) -> str:
         return labware.label if isinstance(labware, Labware) else labware
 
+    @staticmethod
+    def _columns(columns: Optional[Sequence[int]]) -> Optional[list[int]]:
+        if columns is None:
+            return None
+        selected = list(columns)
+        if (not selected or any(type(c) is not int or not 1 <= c <= 12 for c in selected)
+                or selected != sorted(set(selected))):
+            raise ValueError("MCA96 columns must be a nonempty, ascending list of unique integers from 1 to 12")
+        return selected
+
     def pick_up(
         self,
         tip_box: Union[Labware, str],
@@ -97,7 +107,7 @@ class MCA96Head:
         """
         step = PickUpTipsStep(labware_name=self._label(tip_box))
         if columns is not None:
-            step.columns = [int(c) for c in columns]
+            step.columns = self._columns(columns)
         self._wt._emit(step)
 
     def return_tips(
@@ -116,7 +126,7 @@ class MCA96Head:
         labware_name = self._label(tip_box) if tip_box is not None else None
         step = SetTipsBackStep(labware_name=labware_name)
         if columns is not None:
-            step.columns = [int(c) for c in columns]
+            step.columns = self._columns(columns)
         self._wt._emit(step)
 
     # ── Pipetting ───────────────────────────────────────────────────
@@ -142,7 +152,7 @@ class MCA96Head:
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
-            columns=list(columns) if columns is not None else None,
+            columns=self._columns(columns),
         ))
 
     def dispense(
@@ -157,7 +167,7 @@ class MCA96Head:
             labware_name=self._label(target),
             volume=volume_ul,
             liquid_class=liquid_class,
-            columns=list(columns) if columns is not None else None,
+            columns=self._columns(columns),
         ))
 
     def mix(

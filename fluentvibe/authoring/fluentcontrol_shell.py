@@ -11,9 +11,11 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import threading
 import time
+import uuid
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +37,8 @@ class UiResult:
     load_error_text: str = ""
     checksum_dialog_seen: bool = False
     modal_dialogs: list[str] | None = None
+    diagnostics: list[str] | None = None
+    backup_path: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -53,6 +57,8 @@ class UiResult:
             "modal_dialogs": (self.modal_dialogs or [])[:20],
             "xscr_path": str(xscr_path) if xscr_path else None,
             "shell_xscr": str(shell_xscr) if shell_xscr else None,
+            "diagnostics": self.diagnostics or [],
+            "backup_path": self.backup_path,
         }
 
 
@@ -64,6 +70,7 @@ class DialogScanResult:
 
 
 _REGION_RE = re.compile(r"<Comment>.*?</Payload>", re.DOTALL)
+_SHELL_LOCK = threading.RLock()
 _ERR_LINE_RE = re.compile(r"^\d{1,4}:\s+")
 _LOAD_FAILURE_RE = re.compile(
     r"(load operation.*failed|failed with exception|does not match the end tag|"
@@ -119,7 +126,7 @@ def precheck_xscr_file(path: Path) -> list[str]:
 
 def classify_dialog_text(text: str) -> tuple[bool, bool]:
     checksum = bool(re.search(r"(invalid checksum|checksum|VX_ESHRD_002_002)", text, re.IGNORECASE))
-    load_failure = bool(_LOAD_FAILURE_RE.search(text)) and not checksum
+    load_failure = bool(_LOAD_FAILURE_RE.search(text)) and bool(re.search(r"load operation|failed with exception|end tag|array index|application administrator", text, re.I))
     return checksum, load_failure
 
 
@@ -127,27 +134,42 @@ def patch_shell_xscr_from_generated(
     generated_xscr: Path,
     *,
     shell_xscr: Path = DEFAULT_SHELL_XSCR,
-    backup: bool = False,
-) -> None:
+    backup: bool = True,
+) -> Path | None:
     if not generated_xscr.exists():
         raise FluentControlShellError(f"Generated XSCR not found: {generated_xscr}")
     if not shell_xscr.exists():
         raise FluentControlShellError(f"Shell XSCR not found: {shell_xscr}")
+    if generated_xscr.resolve() == shell_xscr.resolve():
+        raise FluentControlShellError("Generated XSCR and shell must be different files")
 
     new_region = extract_comment_to_payload_region(read_xscr_text(generated_xscr))
     shell_text = read_xscr_text(shell_xscr)
     patched = replace_comment_to_payload_region(shell_text, new_region)
+    issues = precheck_xscr_text(patched)
+    if issues:
+        raise FluentControlShellError("Invalid patched shell: " + "; ".join(issues))
 
+    backup_path = None
     if backup:
         backup_root = Path(os.getenv("TECAN_SHELL_BACKUP_DIR") or Path(tempfile.gettempdir()) / "tecan_shell_backups")
         backup_root.mkdir(parents=True, exist_ok=True)
-        backup_path = backup_root / f"{shell_xscr.name}.bak_{time.strftime('%Y%m%d_%H%M%S')}"
-        try:
-            backup_path.write_text(shell_text, encoding="utf-8")
-        except Exception:
-            pass
+        backup_path = backup_root / f"{shell_xscr.name}.bak_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        backup_path.write_bytes(shell_xscr.read_bytes())
 
-    write_xscr_text(shell_xscr, patched)
+    from ..deployer import _checksum_rewrite_and_verify
+
+    with tempfile.NamedTemporaryFile(dir=shell_xscr.parent, suffix=".xscr", delete=False) as staging:
+        staging_path = Path(staging.name)
+    try:
+        write_xscr_text(staging_path, patched)
+        checksum = _checksum_rewrite_and_verify(staging_path)
+        if not checksum.get("is_valid"):
+            raise FluentControlShellError("Patched shell checksum verification failed")
+        os.replace(staging_path, shell_xscr)
+    finally:
+        staging_path.unlink(missing_ok=True)
+    return backup_path
 
 
 def validate_generated_xscr_via_shell(
@@ -180,23 +202,44 @@ def validate_generated_xscr_via_shell(
             modal_dialogs=[],
         )
 
-    original = read_xscr_text(shell_xscr) if restore_shell else None
-    try:
-        patch_shell_xscr_from_generated(generated_xscr, shell_xscr=shell_xscr, backup=backup)
+    with _SHELL_LOCK:
+        original = shell_xscr.read_bytes()
+        shell_root = ET.fromstring(original.decode("utf-8-sig"))
+        script_name = shell_root.findtext("./Payload/ObjectName") or "shell"
+        # Close the editor BEFORE changing its backing file. Otherwise closing
+        # a dirty tab can overwrite the new payload or reload cached content.
+        fc_win = _connect_fluent_window(process_id)
+        _close_shell_tab_if_open(fc_win, script_name=script_name)
+        backup_path = None
+        patched = False
         try:
-            return open_shell_and_read_infopad(
-                process_id=process_id,
-                close_before_open=True,
-                close_after_read=True,
-            )
-        except Exception:
-            return open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=True)
-    finally:
-        if restore_shell:
+            backup_path = patch_shell_xscr_from_generated(generated_xscr, shell_xscr=shell_xscr, backup=backup)
+            patched = True
             try:
-                write_xscr_text(shell_xscr, original or "")
-            except Exception:
-                pass
+                result = open_shell_and_read_infopad(
+                    process_id=process_id, script_name=script_name,
+                    close_before_open=False, close_after_read=True,
+                )
+            except FluentControlShellError as exc:
+                result = open_xscr_and_read_infopad(shell_xscr, process_id=process_id, close_after_read=True)
+                result = replace(result, diagnostics=[f"Tree open failed; used exact file path: {exc}"])
+            return replace(result, backup_path=str(backup_path) if backup_path else None)
+        finally:
+            if restore_shell and patched:
+                _close_shell_tab_if_open(fc_win, script_name=script_name)
+                _atomic_restore(shell_xscr, original)
+
+
+def _atomic_restore(path: Path, original: bytes) -> None:
+    with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".xscr", delete=False) as file:
+        file.write(original)
+        temporary = Path(file.name)
+    try:
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise FluentControlShellError(f"Could not restore shell {path}: {exc}") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def validate_xscr_direct(
@@ -254,17 +297,12 @@ def _postmessage_double_click(el) -> bool:
 
 def _bring_to_foreground(window) -> None:
     try:
-        import win32con
-        import win32gui
-
-        hwnd = window.handle
-        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
-        time.sleep(0.1)
-        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-        time.sleep(0.3)
+        window.set_focus()
     except Exception:
         try:
-            window.set_focus()
+            import win32gui
+
+            win32gui.SetForegroundWindow(window.handle)
         except Exception:
             pass
 
@@ -314,9 +352,9 @@ def _connect_fluent_window(process_id: Optional[int] = None):
     return app.window(title="FluentControl")
 
 
-def _pick_leftmost_shell_element(fc_win):
+def _pick_leftmost_shell_element(fc_win, script_name="shell"):
     matches = []
-    for el in fc_win.descendants(title="shell"):
+    for el in fc_win.descendants(title=script_name, control_type="TreeItem"):
         try:
             rect = el.rectangle()
             matches.append((rect.left, rect.top, el))
@@ -325,10 +363,10 @@ def _pick_leftmost_shell_element(fc_win):
     matches.sort(key=lambda item: (item[0], item[1]))
     if matches:
         return matches[0][2]
-    return _navigate_tree_to_shell(fc_win)
+    return _navigate_tree_to_shell(fc_win, script_name)
 
 
-def _navigate_tree_to_shell(fc_win):
+def _navigate_tree_to_shell(fc_win, script_name="shell"):
     try:
         for el in fc_win.descendants(title="Scripts"):
             try:
@@ -340,28 +378,17 @@ def _navigate_tree_to_shell(fc_win):
         else:
             return None
 
-        folders = fc_win.descendants(title="Under_development")
-        if not folders:
-            return None
-        try:
-            folders[0].expand()
-        except Exception:
-            # The Scripts folder list is a flat list; a long one hides the
-            # folder behind its scroll edge, where clicks miss. Scroll the list
-            # to the end, then click the folder for real.
+        for el in fc_win.descendants(title="Under_development"):
             try:
-                from pywinauto import mouse
-
-                rect = folders[0].rectangle()
-                mouse.scroll(coords=(rect.left + 20, rect.top - 60), wheel_dist=-10)
-                time.sleep(0.6)
-                folders = fc_win.descendants(title="Under_development") or folders
-                folders[0].click_input()
+                el.expand()
             except Exception:
-                _safe_double_click(folders[0])
-        time.sleep(1.0)
+                _safe_double_click(el)
+            time.sleep(0.3)
+            break
+        else:
+            return None
 
-        for el in fc_win.descendants(title="shell"):
+        for el in fc_win.descendants(title=script_name, control_type="TreeItem"):
             try:
                 el.rectangle()
                 return el
@@ -372,190 +399,84 @@ def _navigate_tree_to_shell(fc_win):
     return None
 
 
-def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0, *, embedded: bool = True) -> DialogScanResult:
+def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:
     from pywinauto import Desktop
 
     deadline = time.monotonic() + timeout_s
-    save_re = re.compile(r"save.*changes|do you want to save|save the changes", re.IGNORECASE)
-    seen_texts: list[str] = []
+    seen = []
+    failures = []
     checksum_seen = False
-    load_failures: list[str] = []
-
-    def _dialog_text(dlg) -> str:
-        parts = []
-        try:
-            for desc in dlg.descendants():
-                try:
-                    text = (desc.window_text() or "").strip()
-                except Exception:
-                    continue
-                if text:
-                    parts.append(text)
-        except Exception:
-            pass
-        return " ".join(parts)
-
-    try:
-        wrapper = fc_win.wrapper_object() if hasattr(fc_win, "wrapper_object") else fc_win
-        fc_pid = wrapper.process_id()
-        fc_handle = wrapper.handle
-    except Exception:
-        fc_pid = fc_handle = None
-
-    def _iter_dialog_windows():
-        # Only FluentControl's own top-level windows other than the main one:
-        # reading every desktop window's text (editors, browsers) took seconds.
-        windows = []
-        try:
-            windows.extend(Desktop(backend="uia").windows(process=fc_pid) if fc_pid else Desktop(backend="uia").windows())
-        except Exception:
-            pass
-        try:
-            windows.extend(Desktop(backend="win32").windows(class_name="#32770", process=fc_pid) if fc_pid
-                           else Desktop(backend="win32").windows(class_name="#32770"))
-        except Exception:
-            pass
-        return [w for w in windows if fc_handle is None or getattr(w, "handle", None) != fc_handle]
-
-    def _embedded_dialog_text() -> str:
-        # Dialogs FluentControl shows inside its main window are child
-        # Window elements; reading those instead of the whole tree (thousands
-        # of script-tree elements) keeps this check fast.
-        parts = []
-        try:
-            for child in fc_win.descendants(control_type="Window"):
-                text = _dialog_text(child)
-                if text:
-                    parts.append(text)
-        except Exception:
-            pass
-        return " ".join(parts)
-
+    process_id = fc_win.process_id()
     while time.monotonic() < deadline:
-        dismissed_any = False
-        for dlg in _iter_dialog_windows():
-            try:
-                if not dlg.is_visible():
-                    continue
-            except Exception:
+        dismissed = False
+        # Only this FluentControl process; never dismiss another app's dialog.
+        for dlg in Desktop(backend="uia").windows(process=process_id):
+            if not dlg.is_visible() or dlg.handle == fc_win.handle:
                 continue
-            text = _dialog_text(dlg)
-            if text and text not in seen_texts:
-                seen_texts.append(text)
-                checksum_hit, load_failure_hit = classify_dialog_text(text)
-                checksum_seen = checksum_seen or checksum_hit
-                if load_failure_hit and text not in load_failures:
-                    load_failures.append(text)
-
-            if save_re.search(text):
-                for btn_title in ("No", "Don't Save", "Dont Save", "Cancel"):
-                    try:
-                        btn = dlg.child_window(title=btn_title, control_type="Button")
-                        if btn.exists(timeout=0.2):
-                            _safe_click(btn)
-                            dismissed_any = True
-                            break
-                    except Exception:
-                        continue
-                if dismissed_any:
+            text = " ".join((el.window_text() or "").strip() for el in dlg.descendants())
+            if text and text not in seen:
+                seen.append(text)
+            checksum, failed = classify_dialog_text(text)
+            checksum_seen |= checksum
+            if failed and text not in failures:
+                failures.append(text)
+            if re.search(r"save.*changes|do you want to save", text, re.I):
+                # Do not discard unrelated unsaved user edits.
+                raise FluentControlShellError("FluentControl has unsaved changes; save or close that script before validating")
+            titles = ("Yes", "OK") if checksum else (("OK",) if failed else ())
+            for title in titles:
+                button = dlg.child_window(title=title, control_type="Button")
+                if button.exists(timeout=0.1):
+                    _safe_click(button)
+                    dismissed = True
                     break
-
-            if classify_dialog_text(text)[0]:
-                for btn_title in ("Yes", "OK"):
-                    try:
-                        btn = dlg.child_window(title=btn_title, control_type="Button")
-                        if btn.exists(timeout=0.2):
-                            _safe_click(btn)
-                            dismissed_any = True
-                            break
-                    except Exception:
-                        continue
-                if dismissed_any:
-                    break
-
-        if not dismissed_any:
-            try:
-                main_text = _embedded_dialog_text() if embedded else ""
-            except Exception:
-                main_text = ""
-            if main_text and main_text not in seen_texts:
-                seen_texts.append(main_text)
-                checksum_hit, load_failure_hit = classify_dialog_text(main_text)
-                checksum_seen = checksum_seen or checksum_hit
-                if load_failure_hit and main_text not in load_failures:
-                    load_failures.append(main_text)
-
-            if save_re.search(main_text):
-                for btn_title in ("No", "Don't Save", "Dont Save", "Cancel"):
-                    try:
-                        btn = fc_win.child_window(title=btn_title, control_type="Button")
-                        if btn.exists(timeout=0.2):
-                            _safe_click(btn)
-                            dismissed_any = True
-                            break
-                    except Exception:
-                        continue
-
-            if not dismissed_any and classify_dialog_text(main_text)[0]:
-                for btn_title in ("Yes", "OK"):
-                    try:
-                        btn = fc_win.child_window(title=btn_title, control_type="Button")
-                        if btn.exists(timeout=0.2):
-                            _safe_click(btn)
-                            dismissed_any = True
-                            break
-                    except Exception:
-                        continue
-
-        if not dismissed_any:
-            try:
-                btn = fc_win.child_window(title="OK", control_type="Button")
-                if btn.exists(timeout=0.2):
-                    _safe_click(btn.wrapper_object())
-                    dismissed_any = True
-            except Exception:
-                pass
-
-        if not dismissed_any:
+        if not dismissed:
             break
-        time.sleep(0.2)
-
-    return DialogScanResult(
-        texts=seen_texts,
-        checksum_dialog_seen=checksum_seen,
-        load_failure_texts=load_failures,
-    )
+        time.sleep(0.1)
+    return DialogScanResult(seen, checksum_seen, failures)
 
 
-def _close_shell_tab_if_open(fc_win, timeout_s: float = 2.0) -> bool:
+def _close_shell_tab_if_open(fc_win, timeout_s: float = 2.0, script_name: str = "shell") -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         try:
             for tab in fc_win.descendants(control_type="TabItem"):
-                if (tab.window_text() or "").strip() != "shell":
+                if (tab.window_text() or "").strip().rstrip(" *") != script_name:
                     continue
                 _safe_click(tab)
                 _bring_to_foreground(fc_win)
                 fc_win.type_keys("^{F4}")
                 time.sleep(0.2)
-                # Closing a changed tab asks "save changes?" in its own window.
-                _dismiss_modal_dialogs(fc_win, timeout_s=1.0, embedded=False)
+                _dismiss_modal_dialogs(fc_win, timeout_s=1.0)
+                if any((t.window_text() or "").strip().rstrip(" *") == script_name
+                       for t in fc_win.descendants(control_type="TabItem")):
+                    raise FluentControlShellError(f"Script tab did not close: {script_name}")
                 return True
+        except FluentControlShellError:
+            raise
         except Exception:
             pass
         time.sleep(0.1)
     return False
 
 
-def _click_infopad_tab(fc_win) -> None:
+def _wait_for_script_tab(fc_win, script_name: str, timeout_s: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        for tab in fc_win.descendants(control_type="TabItem"):
+            if (tab.window_text() or "").strip().rstrip(" *") == script_name:
+                return True
+        time.sleep(0.1)
+    return False
+
+
+def _click_infopad_tab(fc_win) -> bool:
     try:
-        # Two elements carry the name; the first is the one the tree scan
-        # below would click. A direct lookup avoids walking the whole tree.
-        tab = fc_win.child_window(title="Infopad", found_index=0)
+        tab = fc_win.child_window(title_re=r"^Infopad$", control_type="TabItem")
         if tab.exists(timeout=0.5):
             _safe_click(tab)
             time.sleep(0.2)
-            return
+            return True
     except Exception:
         pass
     try:
@@ -564,11 +485,12 @@ def _click_infopad_tab(fc_win) -> None:
                 if (desc.window_text() or "").strip() == "Infopad":
                     _safe_click(desc)
                     time.sleep(0.2)
-                    return
+                    return True
             except Exception:
                 continue
     except Exception:
         pass
+    return False
 
 
 def _scan_error_lines_anywhere(fc_win, limit: int = 200) -> list[str]:
@@ -631,7 +553,7 @@ def open_shell_and_read_infopad(
     infopad_line_limit: int = 200,
     close_before_open: bool = True,
     close_after_read: bool = False,
-    context_lines: bool = False,
+    script_name: str = "shell",
 ) -> UiResult:
     fc_win = _connect_fluent_window(process_id)
     if not fc_win.exists(timeout=2):
@@ -639,9 +561,9 @@ def open_shell_and_read_infopad(
 
     _bring_to_foreground(fc_win)
     if close_before_open:
-        _close_shell_tab_if_open(fc_win, timeout_s=2.0)
+        _close_shell_tab_if_open(fc_win, timeout_s=2.0, script_name=script_name)
 
-    shell_el = _pick_leftmost_shell_element(fc_win)
+    shell_el = _pick_leftmost_shell_element(fc_win, script_name)
     if shell_el is None:
         raise FluentControlShellError("Could not find a UI element titled 'shell' in FluentControl.")
 
@@ -664,20 +586,23 @@ def open_shell_and_read_infopad(
             modal_dialogs=dialogs.texts,
         )
 
-    _click_infopad_tab(fc_win)
+    if not _wait_for_script_tab(fc_win, script_name):
+        return UiResult(opened=False, infopad_lines=[], error_lines=[f"Script tab did not open: {script_name}"], load_failed=True, load_error_text=f"Script tab did not open: {script_name}", modal_dialogs=dialogs.texts)
+    if not _click_infopad_tab(fc_win):
+        return UiResult(opened=True, infopad_lines=[], error_lines=["InfoPad could not be read"], modal_dialogs=dialogs.texts)
     error_lines: list[str] = []
     lines: list[str] = []
     for _ in range(3):
-        error_lines = _scan_error_lines_anywhere(fc_win, limit=infopad_line_limit)
-        lines = list(error_lines)
+        lines = _infopad_context_lines(fc_win, infopad_line_limit)
+        error_lines = [line.strip() for text in lines for line in text.splitlines() if _ERR_LINE_RE.match(line.strip())]
         if error_lines:
             break
         time.sleep(0.4)
-    if not error_lines and context_lines:  # a sample for reports only; costs a tree scan
+    if not error_lines:
         lines = _infopad_context_lines(fc_win, infopad_line_limit)
 
     if close_after_read:
-        _close_shell_tab_if_open(fc_win, timeout_s=2.0)
+        _close_shell_tab_if_open(fc_win, timeout_s=2.0, script_name=script_name)
 
     return UiResult(
         opened=True,
@@ -699,7 +624,7 @@ def _try_open_xscr_via_file_dialog(fc_win, xscr_path: Path, timeout_s: float = 1
     dialog = None
     while time.monotonic() < deadline and dialog is None:
         try:
-            dialogs = Desktop(backend="win32").windows(class_name="#32770")
+            dialogs = Desktop(backend="win32").windows(class_name="#32770", process=fc_win.process_id())
         except Exception:
             dialogs = []
         for candidate in dialogs:
@@ -724,15 +649,8 @@ def _try_open_xscr_via_file_dialog(fc_win, xscr_path: Path, timeout_s: float = 1
         pass
 
     try:
-        dialog.type_keys(str(xscr_path), with_spaces=True)
-        dialog.type_keys("{ENTER}")
-        return
-    except Exception:
-        pass
-
-    try:
         dialog.child_window(class_name="Edit").set_edit_text(str(xscr_path))
-        dialog.child_window(title_re=r"^(Open|OK)$", class_name="Button").click()
+        _safe_click(dialog.child_window(title_re=r"^(Open|OK)$", class_name="Button"))
     except Exception as exc:
         raise FluentControlShellError(f"Failed to drive Open file dialog: {exc}") from exc
 
@@ -754,6 +672,8 @@ def open_xscr_and_read_infopad(
         raise FluentControlShellError("FluentControl window not found.")
 
     _bring_to_foreground(fc_win)
+    root = ET.fromstring(read_xscr_text(xscr_path))
+    script_name = root.findtext("./Payload/ObjectName") or xscr_path.stem
     _try_open_xscr_via_file_dialog(fc_win, xscr_path)
     time.sleep(settle_seconds)
     dialogs = _dismiss_modal_dialogs(fc_win, timeout_s=3.0)
@@ -768,12 +688,15 @@ def open_xscr_and_read_infopad(
             modal_dialogs=dialogs.texts,
         )
 
-    _click_infopad_tab(fc_win)
+    if not _wait_for_script_tab(fc_win, script_name):
+        return UiResult(opened=False, infopad_lines=[], error_lines=[f"Script tab did not open: {script_name}"], load_failed=True, load_error_text=f"Script tab did not open: {script_name}", modal_dialogs=dialogs.texts)
+    if not _click_infopad_tab(fc_win):
+        return UiResult(opened=True, infopad_lines=[], error_lines=["InfoPad could not be read"], modal_dialogs=dialogs.texts)
     error_lines: list[str] = []
     lines: list[str] = []
     for _ in range(3):
-        error_lines = _scan_error_lines_anywhere(fc_win, limit=infopad_line_limit)
-        lines = list(error_lines)
+        lines = _infopad_context_lines(fc_win, infopad_line_limit)
+        error_lines = [line.strip() for text in lines for line in text.splitlines() if _ERR_LINE_RE.match(line.strip())]
         if error_lines:
             break
         time.sleep(0.4)
@@ -781,11 +704,7 @@ def open_xscr_and_read_infopad(
         lines = _infopad_context_lines(fc_win, infopad_line_limit)
 
     if close_after_read:
-        try:
-            if xscr_path.resolve() == DEFAULT_SHELL_XSCR.resolve():
-                _close_shell_tab_if_open(fc_win, timeout_s=2.0)
-        except Exception:
-            pass
+        _close_shell_tab_if_open(fc_win, timeout_s=2.0, script_name=script_name)
 
     return UiResult(
         opened=True,

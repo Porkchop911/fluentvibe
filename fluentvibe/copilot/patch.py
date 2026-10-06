@@ -92,7 +92,7 @@ def _parts(code: str) -> list[tuple[tuple[int, int] | None, list[str]]]:
     for line in code.splitlines():
         m = _MARKER.match(line)
         if m or _ELLIPSIS.match(line):
-            if current and any(l.strip() for l in current):
+            if current and any(ln.strip() for ln in current):
                 parts.append((marked, current))
             current, marked = [], None
             if m:
@@ -100,16 +100,16 @@ def _parts(code: str) -> list[tuple[tuple[int, int] | None, list[str]]]:
                 marked = (a, int(m.group(2) or a))
             continue
         current.append(line)
-    if current and any(l.strip() for l in current):
+    if current and any(ln.strip() for ln in current):
         parts.append((marked, current))
     return parts
 
 
 def _reindent(part: list[str], indent: str) -> list[str]:
     """The part with its own common indentation replaced by ``indent``."""
-    body = [l for l in part if l.strip()]
-    common = min((len(l) - len(l.lstrip()) for l in body), default=0)
-    return [indent + l[common:] if l.strip() else "" for l in part]
+    body = [ln for ln in part if ln.strip()]
+    common = min((len(ln) - len(ln.lstrip()) for ln in body), default=0)
+    return [indent + ln[common:] if ln.strip() else "" for ln in part]
 
 
 def apply_chat_code(source: str, code: str, *, path: str = "<protocol>", start_line: int = 0,
@@ -130,9 +130,9 @@ def apply_chat_code(source: str, code: str, *, path: str = "<protocol>", start_l
         if single_unmarked and has_selection and start_line >= 1:
             replacements.append((start_line - 1, min(end_line, len(lines)) - 1, part, "the selection"))
             continue
-        first = next(l for l in part if l.strip())
+        first = next(ln for ln in part if ln.strip())
         key = _key(first)
-        hits = [i for i, l in enumerate(lines) if key is not None and _key(l) == key] if key else []
+        hits = [i for i, ln in enumerate(lines) if key is not None and _key(ln) == key] if key else []
         if len(hits) != 1:
             patch.unplaced.append(first.strip())
             continue
@@ -143,7 +143,7 @@ def apply_chat_code(source: str, code: str, *, path: str = "<protocol>", start_l
     kept: list[tuple[int, int, list[str], str]] = []
     for r in replacements:
         if kept and r[0] <= kept[-1][1]:
-            patch.unplaced.append(next(l for l in r[2] if l.strip()).strip())
+            patch.unplaced.append(next(ln for ln in r[2] if ln.strip()).strip())
             continue
         kept.append(r)
     new_lines = list(lines)

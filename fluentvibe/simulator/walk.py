@@ -570,7 +570,10 @@ class Simulator:
         if target is not None:
             tip_box = self._twin.get(target)
             if isinstance(tip_box, TipBox):
-                tip_box.add_columns(self._partial_box_columns(step, tip_box))
+                columns = self._partial_box_columns(step, tip_box)
+                if len(columns) * 8 != len(self._mca_tips):
+                    raise MissingTipsError("ReturnTips column count must match the mounted partial tip block; pass columns explicitly")
+                tip_box.add_columns(columns)
             self._contamination.on_return(target, self._mca_tips)
         self._mca_tips = []
         self._mca_tip_box_label = None
@@ -678,12 +681,17 @@ class Simulator:
         # Auto-parallel over wells: aspirate `volume` from each addressed well.
         wells = self._iter_aspirate_wells(target)
         if len(wells) == 1 and target.category == "trough":
-            pairs = [(wells[0], tip) for tip in self._mca_tips]
+            count = 8 * len(step.columns) if step.columns is not None else len(self._mca_tips)
+            if count > len(self._mca_tips):
+                raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
+            pairs = [(wells[0], tip) for tip in self._mca_tips[:count]]
             self._preflight_aspirates(target, pairs, volume)
             for well, tip in pairs:
                 self._aspirate_one(target, well, volume, tip)
             return
         wells = self._select_mca_columns(wells, getattr(step, "columns", None))
+        if len(wells) > len(self._mca_tips):
+            raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
         pairs = [(well, tip) for tip, well in zip(self._mca_tips, wells)]
         self._preflight_aspirates(target, pairs, volume)
         for well, tip in pairs:
@@ -707,6 +715,8 @@ class Simulator:
                 self._dispense_one(target, wells[0], volume, tip)
             return
         wells = self._select_mca_columns(wells, getattr(step, "columns", None))
+        if len(wells) > len(self._mca_tips):
+            raise MissingTipsError("Selected MCA wells exceed the mounted tip count")
         for tip, well in zip(self._mca_tips, wells):
             self._dispense_one(target, well, volume, tip)
 
@@ -1433,9 +1443,12 @@ class Simulator:
         Wells are column-major (A1..H1, A2..H2, …); a column is the trailing
         number of the well address. ``columns`` of ``None`` addresses every
         well (full-plate, current behavior)."""
-        if not columns:
+        if columns is None:
             return wells
         wanted = {int(c) for c in columns}
+        available = {int(''.join(ch for ch in well.address if ch.isdigit())) for well in wells}
+        if not columns or len(wanted) != len(columns) or not wanted <= available:
+            raise SimulationError("MCA column selection must contain unique columns present on the plate")
         selected = []
         for well in wells:
             addr = getattr(well, "address", "") or ""

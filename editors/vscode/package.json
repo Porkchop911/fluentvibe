@@ -61,6 +61,10 @@
       {
         "command": "fluentvibe.explainSelection",
         "title": "fluentvibe: Explain selection"
+      },
+      {
+        "command": "fluentvibe.explainProblem",
+        "title": "fluentvibe: Explain this problem"
       }
     ],
     "keybindings": [

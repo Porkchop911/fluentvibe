@@ -68,8 +68,15 @@ def _require_workspace(profile: dict) -> tuple[str, str]:
         pytest.skip("catalog index empty")
     name = profile["workspace"]["name"]
     guid = profile["workspace"]["guid"]
-    if resolve_workspace_by_guid(guid) is None and resolve_workspace_by_name(name) is None:
+    by_guid = resolve_workspace_by_guid(guid)
+    by_name = resolve_workspace_by_name(name)
+    if by_guid is None and by_name is None:
         pytest.skip(f"workspace {name!r} ({guid}) not installed in this catalog")
+    if by_guid is not None and by_guid.name != name:
+        pytest.skip(
+            f"saved profile is stale: GUID {guid!r} now names {by_guid.name!r}, "
+            f"rather than {name!r}; regenerate sat_1080_test before running this test"
+        )
     return name, guid
 
 

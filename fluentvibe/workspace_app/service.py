@@ -16,10 +16,12 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -891,10 +893,11 @@ def _job_decompile_xscr(payload: dict[str, Any]) -> dict[str, Any]:
         _protocol_path(str(payload["protocol_id"]))
         if payload.get("protocol_id") else _xscr_from_payload(payload)
     )
+    if not xscr.exists():
+        raise ValueError(f"XSCR file not found: {xscr}")
     proto = parse_xscr(xscr)
     source = emit_python(proto, source_xscr=str(xscr))
-    out_dir = WORKBENCH_BASE_DIR / "decompiled"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = _workbench_path(payload.get("output_dir"), "decompiled")
     output = out_dir / f"{xscr.stem}_decompiled.py"
     output.write_text(source, encoding="utf-8")
 
@@ -985,8 +988,8 @@ def _job_fc_validate(payload: dict[str, Any]) -> dict[str, Any]:
         source=source,
         xscr_path=xscr,
         shell_xscr=str(payload.get("shell_xscr") or "") or None,
-        restore_shell=bool(payload.get("restore_shell", False)),
-        backup=bool(payload.get("backup", False)),
+        restore_shell=bool(payload.get("restore_shell", True)),
+        backup=bool(payload.get("backup", True)),
         open_direct=bool(payload.get("open_direct", False)),
     )
     return {"ok": bool(result.get("ok")), "validation": result}
@@ -1046,7 +1049,8 @@ def _workbench_path(raw: Any, leaf: str) -> Path:
         path = Path(str(raw)).expanduser()
         path.mkdir(parents=True, exist_ok=True)
         return path
-    path = WORKBENCH_BASE_DIR / leaf
+    stamp = datetime.now(ZoneInfo("Europe/Vienna")).strftime("%Y%m%d-%H%M%S-%f")
+    path = WORKBENCH_BASE_DIR / leaf / f"{stamp}-{uuid.uuid4().hex[:8]}"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

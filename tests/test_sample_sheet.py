@@ -1,6 +1,10 @@
 """Per-sample normalisation from a sample sheet (CSV or chat)."""
 
-from fluentvibe.authoring.sample_sheet import normalisation, parse_concentrations, parse_sample_sheet
+from fluentvibe.authoring.sample_sheet import (
+    normalisation,
+    parse_concentrations,
+    parse_sample_sheet,
+)
 
 
 def test_sheets_in_common_shapes():

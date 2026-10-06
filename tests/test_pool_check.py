@@ -6,7 +6,11 @@ from __future__ import annotations
 import re
 
 from fluentvibe.authoring.requirements import (
-    _operations, _protocol_tokens, requirements_from_spec, skeleton_notes, verify_all,
+    _operations,
+    _protocol_tokens,
+    requirements_from_spec,
+    skeleton_notes,
+    verify_all,
 )
 from fluentvibe.authoring.skeleton import build_skeleton, load_deck
 from tests.test_skeleton import _spec, profile  # noqa: F401  (pytest fixture)

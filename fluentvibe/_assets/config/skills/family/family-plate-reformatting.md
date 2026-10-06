@@ -14,6 +14,7 @@ destination well) before choosing a block; the mapping is the protocol.
 | Mapping | Use |
 |---|---|
 | Same address, all 96 wells | `stamp` (MCA) |
+| Whole columns to other columns (e.g. left half 1-6 centred on 4-9) | MCA by hand with `columns=` (see head-mca96) |
 | Several copies of one plate (replicates) | one `stamp` per copy, a tip box per stamp unless the document allows reuse |
 | Same address, a different volume per well | `transfer_volumes` (FCA) |
 | Arbitrary well → well | FCA by hand, one pick per sample: `fca.aspirate(src, v, wells=["C5"], channels=[0])`, `fca.dispense(dst, v, wells=["A1"], channels=[0])`, fresh tips each |

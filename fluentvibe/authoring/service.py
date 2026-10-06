@@ -202,7 +202,7 @@ The final protocol is Python source only. It defines `def build_worktable() -> W
 
 Heads: the FCA (the 8-channel arm) is `wt.liha`; the MCA (96 channels at once) is `wt.mca96`; the RGA (gripper, moves labware) is `wt.gripper`. There is no `wt.fca`.
 
-When a protocol document is attached it is the binding source. Cover every stage it describes, in its order: on the deck where the deck allows it, otherwise as an operator step. Add no step and no reagent that neither the document nor the request contains, and do not substitute one reagent for another. Values the document leaves open are asked for (one question with proposals), or, when the user asked you to choose, chosen and listed as assumptions.
+When a protocol document is attached it is the binding source. Cover every stage it describes, in its order: on the deck where the deck allows it, otherwise as an operator step. Add no step and no reagent that neither the document nor the request contains, and do not substitute one reagent for another. Values the document leaves open are asked for (one question with proposals), or, when the user asked you to choose, chosen and listed as assumptions. A liquid class nobody specified is not an open value: use the profile's default liquid class and list it as an assumption.
 
 End your final message with the document steps you followed and every value you assumed.
 """
@@ -354,7 +354,7 @@ class PromptAuthoringService:
                 retry_budget=retry_budget,
                 registry=registry,
                 client=self._client,
-                system_prompt=SKILLS_SYSTEM_PROMPT if scope.mode == "skills" else SYSTEM_PROMPT,
+                system_prompt=system_prompt_for_scope(scope),
                 initial_messages=initial_messages,
                 validator=registry.validator,
                 concurrency=self._concurrency,
@@ -546,6 +546,31 @@ def _draft_pressure_message(calls: tuple[dict[str, Any], ...] | list[dict[str, A
             "any next repair."
         ),
     }
+
+
+def system_prompt_for_scope(scope) -> str:
+    """Expose one workflow matching the tools available in this scope."""
+    if scope.mode == "skills":
+        return SKILLS_SYSTEM_PROMPT
+    if not scope.enforces:
+        return SYSTEM_PROMPT
+    return """You author executable fluentvibe Python protocols using the authoritative
+lab-scope API, catalog, workspace and rules supplied in the next message.
+Write a complete def build_worktable() -> Worktable using
+Worktable.from_workspace(..., workspace_guid=..., auto_place=False).
+Declare variables and set simulator values before wt.group('Labware Placement').
+Pass declared volume and liquid-class variable names as strings to pipetting.
+Use the profile's default liquid class when none is requested, and state that
+assumption. Respect explicit user choices. Do not request a supplied default.
+Use simulate_python_draft on the complete source, repair failures, then call
+compile_and_simulate on that same source. Only report success after both pass.
+No grounding, planning or approval tools are available in this mode.
+If essential geometry is ambiguous, ask one focused question in plain text.
+If the provided API cannot represent the request, explain the limitation.
+Never replace a requested partial transfer with a whole-plate transfer.
+Return the validated Python source as the final protocol. Never use
+raw_xml_step or generic_step.
+"""
 
 
 def _missing_intent_axes(text: str) -> list[str]:

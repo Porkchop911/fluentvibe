@@ -2,8 +2,25 @@
 additions run as native column loops."""
 from __future__ import annotations
 
-from fluentvibe import FCA200Box, MagnetRack, MCA200Box, Plate96, Reagent, Trough25mL, Trough100mL, Worktable
-from fluentvibe.blocks import add_reagent, distribute_reagent, mix_wells, offdeck_step, release, remove_liquid, separate
+from fluentvibe import (
+    FCA200Box,
+    MagnetRack,
+    MCA200Box,
+    Plate96,
+    Reagent,
+    Trough25mL,
+    Trough100mL,
+    Worktable,
+)
+from fluentvibe.blocks import (
+    add_reagent,
+    distribute_reagent,
+    mix_wells,
+    offdeck_step,
+    release,
+    remove_liquid,
+    separate,
+)
 from fluentvibe.ir.schema import (
     DropHeadAdapterStep,
     GetHeadAdapterStep,

@@ -600,7 +600,6 @@ def test_do_this_protocol_from_the_request_is_checked_on_the_document_steps(prof
 def test_named_volumes_carry_a_change_through(profile, tmp_path):
     """Editing one per-well volume in the Python (e.g. with Ctrl+I) must not
     break the removals and mixes that depend on it."""
-    import re
 
     from fluentvibe.copilot.analyzer import analyze_source
 

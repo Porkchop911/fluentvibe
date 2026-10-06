@@ -9,6 +9,7 @@ always_on: false
 True 96-channel head: one aspirate/dispense/mix touches all 96 wells at once —
 no per-column loop. Prefer the blocks (`stamp`, `add_reagent`, `remove_liquid`,
 `mix_wells`); by hand, pass `wt.volume` values (see core-worktable-api).
+`columns=` on aspirate/dispense addresses whole columns; mix is always full-plate.
 
 ```python
 mca = wt.mca96
@@ -56,6 +57,24 @@ mca.dispense(plate,     REAGENT_UL, liquid_class="Water Free Single", columns=[1
 - **Do NOT** unroll columns with a Python `for` loop, and do NOT use a LiHa
   column loop when the MCA can address the columns in one call.
 - Omit `columns` entirely for a full-plate (all 12 columns) operation.
+
+## Shifted rectangular stamp between 96-well plates
+
+"Left half" = columns 1-6, all rows (48 wells); columns 7-12 are the right
+half. To move a column block to other columns, pick up and aspirate with the
+source columns and dispense with the destination columns (same count, same
+order). Example, left half centred on the destination (1→4 … 6→9):
+
+```python
+src_cols, dst_cols = [1, 2, 3, 4, 5, 6], [4, 5, 6, 7, 8, 9]
+mca.mount_adapter()
+mca.pick_up(tips, columns=src_cols)
+mca.aspirate(source, TRANSFER_UL, liquid_class="Water Free Single", columns=src_cols)
+mca.dispense(dest, TRANSFER_UL, liquid_class="Water Free Single", columns=dst_cols)
+mca.return_tips(tips, columns=src_cols)
+mca.drop_adapter()
+```
+Do not turn it into a whole-plate stamp or a LiHa loop; there is no `well_offset`.
 
 ## Partial-tip pickup & tip sorting
 

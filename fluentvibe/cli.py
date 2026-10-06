@@ -16,6 +16,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -47,6 +48,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_compile.add_argument("input", type=Path)
     p_compile.add_argument("--output", "-o", type=Path, default=None)
     p_compile.set_defaults(func=_cmd_compile)
+
+    p_fc = sub.add_parser("fc-open", help="compile and check a protocol in FluentControl")
+    p_fc.add_argument("input", type=Path)
+    p_fc.add_argument("--json", dest="as_json", action="store_true")
+    p_fc.add_argument("--profile", type=Path, default=None)
+    p_fc.add_argument("--workspace", default=None)
+    p_fc.add_argument("--workspace-guid", default=None)
+    p_fc.set_defaults(func=_cmd_fc_open)
 
     p_simulate = sub.add_parser("simulate", help="run the simulator and print snapshot summary")
     p_simulate.add_argument("input", type=Path)
@@ -188,6 +197,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_lookup_eval.add_argument("--endpoint", default=None)
     p_lookup_eval.set_defaults(func=_cmd_lookup_eval)
 
+    p_strata_eval = sub.add_parser("strata-eval", help="compare Strata models on authoring tool selection")
+    p_strata_eval.add_argument("--model", action="append", dest="models", help="model ID; repeat to compare models")
+    p_strata_eval.add_argument("--endpoint", default="http://127.0.0.1:8080/v1/chat/completions")
+    p_strata_eval.add_argument("--repeats", type=int, default=1)
+    p_strata_eval.add_argument("--output", type=Path, default=Path("build") / "strata_eval.json")
+    p_strata_eval.set_defaults(func=_cmd_strata_eval)
+
     p_render_trace = sub.add_parser(
         "render-trace",
         help="render a model trace JSONL file into a readable Markdown summary",
@@ -273,15 +289,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_replay.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir")
     p_replay.set_defaults(func=_cmd_replay)
 
-    p_fc_open = sub.add_parser(
-        "fc-open",
-        help="compile a draft and open it in FluentControl (shell script) for checking and editing",
-    )
-    p_fc_open.add_argument("draft", type=Path, help="fluentvibe Python protocol")
-    p_fc_open.add_argument("--profile", type=Path, default=None, help="workspace-app profile dir (deck rules)")
-    p_fc_open.add_argument("--json", action="store_true", help="print the InfoPad findings as JSON (for editors)")
-    p_fc_open.set_defaults(func=_cmd_fc_open)
-
     p_fc_pull = sub.add_parser(
         "fc-pull",
         help="list what was changed in FluentControl since fc-open, with the Python lines to change",
@@ -343,6 +350,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     p_workspace_app.add_argument("--port", type=int, default=8765)
     p_workspace_app.set_defaults(func=_cmd_workspace_app)
 
+
     p_deploy = sub.add_parser(
         "deploy",
         help="copy a compiled .xscr into the FluentControl UserSpecific datastore",
@@ -403,6 +411,48 @@ def _cmd_compile(args) -> int:
     wt.compile(output)
     print(f"Compiled {wt.name} -> {output}")
     return 0
+
+
+def _cmd_fc_open(args) -> int:
+    from .authoring.fluentcontrol_shell import validate_generated_xscr_via_shell
+
+    result = {"opened": False, "load_error": "", "findings": []}
+    try:
+        _activate_profile(args)
+        wt = _load_protocol(args.input)
+        wt.simulate(strict=True)
+        output = args.input.with_suffix(".xscr")
+        wt.compile(output)
+        ui = validate_generated_xscr_via_shell(output, restore_shell=True, backup=True)
+        result.update(ui.to_dict(xscr_path=output))
+        result["load_error"] = ui.load_error_text
+        if ui.load_failed:
+            result["opened"] = False
+        # fc-pull diffs FluentControl's saved script against this copy.
+        if output.exists():
+            shutil.copyfile(output, args.input.with_suffix(".fc-base.xscr"))
+        try:
+            from .authoring.fc_feedback import explain_infopad
+
+            result["findings"] = [f.to_dict() for f in explain_infopad(list(ui.error_lines or []), wt)]
+        except Exception:
+            result["findings"] = [
+                {"kind": "infopad", "message": message, "count": 1,
+                 "python_lines": [], "hint": "Review the FluentControl InfoPad; no Python line mapping is available."}
+                for message in ui.error_lines
+            ]
+    except Exception as exc:
+        result["load_error"] = str(exc)
+    if args.as_json:
+        print(json.dumps(result))
+    else:
+        print(result["load_error"] or ("FluentControl checked the protocol." if result["opened"] else "FluentControl could not open the protocol."))
+        for f in result["findings"]:
+            print(f"  [{f['kind']}] {f['message']} (lines {f['python_lines']}) -> {f['hint']}")
+        if result["opened"]:
+            print(f"Edit and save in FluentControl, then: fluentvibe fc-pull {args.input}")
+    # A handled validation failure is a structured result, not a CLI failure.
+    return 0 if args.as_json or result["opened"] else 1
 
 
 def _cmd_simulate(args) -> int:
@@ -906,6 +956,21 @@ def _cmd_lookup_eval(args) -> int:
     return 0
 
 
+def _cmd_strata_eval(args) -> int:
+    from .authoring.strata_eval import STRATA_MODEL, run_strata_eval
+
+    if args.repeats < 1:
+        print("--repeats must be positive", file=sys.stderr)
+        return 2
+    report = run_strata_eval(models=args.models or [STRATA_MODEL], endpoint=args.endpoint,
+                             repeats=args.repeats, output=args.output)
+    print(f"Wrote {args.output}")
+    for row in report["summary"]:
+        print(f"{row['model']}: {row['passed']}/{row['runs']} passed, {row['errors']} errors, "
+              f"required tool recall {row['mean_required_tool_recall']:.1%}")
+    return 0 if all(run["passed"] for run in report["runs"]) else 1
+
+
 def _cmd_render_trace(args) -> int:
     from .authoring.trace import render_model_trace_file
 
@@ -960,41 +1025,6 @@ def _fc_draft_worktable(draft: Path, profile: Path | None):
         os.environ[PROFILE_DIR_ENV] = str(profile)
     source = draft.read_text(encoding="utf-8")
     return source, build_worktable_from_source(source, str(draft.resolve()))
-
-
-def _cmd_fc_open(args) -> int:
-    from .authoring.fc_feedback import explain_infopad
-    from .authoring.fluentcontrol_shell import (
-        open_shell_and_read_infopad,
-        patch_shell_xscr_from_generated,
-    )
-
-    _source, wt = _fc_draft_worktable(args.draft, args.profile)
-    base = args.draft.with_suffix(".fc-base.xscr")
-    wt.compile(base)
-    patch_shell_xscr_from_generated(base)
-    ui = open_shell_and_read_infopad(close_before_open=True, close_after_read=False)
-    findings = explain_infopad(list(ui.error_lines or []), wt)
-    if getattr(args, "json", False):
-        import json as _json
-
-        print(_json.dumps({
-            "opened": bool(getattr(ui, "opened", True)) and not getattr(ui, "load_failed", False),
-            "load_error": getattr(ui, "load_error_text", "") or "",
-            "compiled": str(base),
-            "findings": [f.to_dict() for f in findings],
-        }))
-        return 0
-    print(f"Opened {args.draft.name} in FluentControl (script 'shell'); compiled copy: {base}")
-    if findings:
-        print(f"InfoPad: {len(findings)} finding(s):")
-        for f in findings:
-            d = f.to_dict()
-            print(f"  [{d['kind']}] {d['message']} (lines {d['python_lines']}) -> {d['hint']}")
-    else:
-        print("InfoPad: no errors.")
-    print(f"Edit and save in FluentControl, then: fluentvibe fc-pull {args.draft}")
-    return 0
 
 
 def _cmd_fc_pull(args) -> int:

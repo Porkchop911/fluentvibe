@@ -27,9 +27,6 @@ ocr = [
   "pytesseract>=0.3,<1",
   "Pillow>=10,<12",
 ]
-lsp = [
-  "pygls>=2,<3",
-]
 dev = [
   "build>=1,<2",
   "pytest>=8,<9",
@@ -41,6 +38,10 @@ dev = [
   "ruff>=0.6,<1",
   "mypy>=1.10,<3",
   "pygls>=2,<3",
+]
+lsp = [
+  "pygls>=2.0,<3",
+  "lsprotocol>=2023.0",
 ]
 
 [project.scripts]

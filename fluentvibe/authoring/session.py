@@ -37,10 +37,10 @@ from .models import (
     FailureCategory,
 )
 from .service import (
-    SYSTEM_PROMPT,
     PromptAuthoringService,
     _intent_axis_message,
     _missing_intent_axes,
+    system_prompt_for_scope,
 )
 from .tools import AuthoringToolRegistry
 from .trace import ModelTraceConfig, ModelTraceRecorder
@@ -113,13 +113,12 @@ class PromptAuthoringSession:
         self._registry.lab_scope = self._lab_scope
         self._validator = self._registry.validator
         self._helpers = PromptAuthoringService.__new__(PromptAuthoringService)
-        from .service import SKILLS_SYSTEM_PROMPT
-        base_prompt = SKILLS_SYSTEM_PROMPT if self._lab_scope.mode == "skills" else SYSTEM_PROMPT
-        self._messages: list[BaseMessage] = [SystemMessage(content=base_prompt)]
+        self._messages: list[BaseMessage] = [SystemMessage(content=system_prompt_for_scope(self._lab_scope))]
         # skills mode selects its context from the prompt, which isn't known
         # until the first send(); defer injection (see _inject_skill_context).
         # off/cheatsheet/enforce have static context, so inject it now.
         self._skill_msg_pending = self._lab_scope.mode == "skills"
+        self._loaded_skills: set[str] = set()
         if not self._skill_msg_pending:
             _scope_text = self._lab_scope.as_context_message()
             if _scope_text is not None:
@@ -157,20 +156,44 @@ class PromptAuthoringSession:
         return self._registry
 
     def _inject_skill_context(self, prompt: str) -> None:
-        """Select + inject the skills-mode context on the first turn.
+        """Select the skills-mode context on the first turn; on a correction,
+        add the skills it newly needs.
 
-        No-op unless skills mode is pending. Runs the LM pre-pass against the
-        first prompt and inserts the assembled context right after the system
-        prompt, mirroring where static cheatsheets land for the other modes.
-        """
-        if not self._skill_msg_pending:
+        Skills are only ever added: the first selection goes right after the
+        system prompt, later ones with the user's message. Replacing the first
+        context message would drop skills mid-repair and make the server
+        re-read the whole conversation (no prefix reuse)."""
+        if self._lab_scope.mode != "skills" or not self._lab_scope.skill_catalog:
             return
-        self._skill_msg_pending = False
-        from .lab_skills import build_initial_scope_message
+        latest = self._user_turns[-1].strip().lower().rstrip(".! ") if self._user_turns else ""
+        if not self._skill_msg_pending and latest in {
+            "yes", "approve", "approved", "looks good", "go ahead", "continue",
+            "confirmed", "confirm", "ok", "okay",
+        }:
+            return
+        from .lab_skills import additional_skills_message, assemble_context, select_skills
 
-        scope_text = build_initial_scope_message(self._lab_scope, prompt, self._client)
-        if scope_text is not None:
-            self._messages.insert(1, SystemMessage(content=scope_text))
+        names = select_skills(prompt, self._lab_scope.skill_catalog, self._client)
+        raw_client = getattr(self._client, "_legacy", self._client)
+        trace = getattr(raw_client, "trace_recorder", None)
+        if self._skill_msg_pending:
+            self._skill_msg_pending = False
+            self._loaded_skills = set(names)
+            if trace is not None:
+                trace.record("skill_selection", scope=self._lab_scope.mode, selected_skills=names)
+            scope_text = assemble_context(self._lab_scope, names)
+            if scope_text is not None:
+                self._messages.insert(1, SystemMessage(content=scope_text))
+            return
+        added = [n for n in names if n not in self._loaded_skills]
+        if not added:
+            return
+        self._loaded_skills.update(added)
+        if trace is not None:
+            trace.record("skill_selection", scope=self._lab_scope.mode, selected_skills=added, added=True)
+        extra = additional_skills_message(self._lab_scope, added)
+        if extra is not None:
+            self._messages.append(HumanMessage(content=extra))
 
     def send(self, user_text: str) -> AuthoringResult:
         text = user_text.strip()
@@ -181,10 +204,10 @@ class PromptAuthoringSession:
 
         if not self._user_turns:
             self._original_prompt = text
-            self._inject_skill_context(text)
         self._user_turns.append(text)
         self._trace.start_turn(len(self._user_turns))
         history_text = "\n".join(self._user_turns)
+        self._inject_skill_context(history_text)
         self._registry.set_authoring_context(
             original_prompt=self._original_prompt,
             latest_user_text=text,
@@ -211,7 +234,7 @@ class PromptAuthoringSession:
         # Inject the intent-axis nudge AT MOST ONCE per session. The check
         # runs against the union of every prior user message so a volume
         # mentioned in turn 1 still counts when turn 3 only says "yes".
-        if not self._intent_nudge_added and not self._registry.current_intent.is_specified():
+        if not self._lab_scope.enforces and not self._intent_nudge_added and not self._registry.current_intent.is_specified():
             missing_axes = _missing_intent_axes(history_text)
             if missing_axes:
                 self._messages.append(_to_lc_message(_intent_axis_message(missing_axes)))

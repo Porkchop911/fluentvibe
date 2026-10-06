@@ -7,8 +7,9 @@ tagged skill files (``_assets/config/skills/*.md``) split along three axes —
 request, plus a small ``always_on`` core.
 
 Selection is an LM pre-pass: one tool-free ``.invoke`` returns the skill names
-to load. Any failure degrades to "load everything", so ``skills`` mode can
-never do worse than the ``enforce`` monolith.
+to load. Parse/transport failures load all skills; explicit head requirements
+and a missing family are also supplemented deterministically. Loading all
+skills preserves capability coverage, but may add irrelevant context.
 
 This module owns discovery, selection, and assembly. ``lab_scope.load_lab_scope``
 calls :func:`discover_skills` to populate the catalog; ``service``/``session``
@@ -296,7 +297,8 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
         listing = "\n".join(
             f"- {s.name} [{s.axis}]: {s.description}" for s in optional
         )
-        response = client.invoke(
+        invoke = getattr(client, "invoke_without_tools", client.invoke)
+        response = invoke(
             [
                 SystemMessage(content=_SELECTION_SYSTEM),
                 HumanMessage(
@@ -322,10 +324,27 @@ def select_skills(prompt: str, catalog: tuple[Skill, ...], client) -> list[str]:
         # Safe fallback: load everything. Triggers/cross-refs are redundant.
         return _order_names(always | optional_names, catalog)
 
-    # Deterministic augmentation on top of the LM's picks.
-    chosen |= _select_when_hits(optional, prompt)
+    # Deterministic augmentation on top of the LM's picks: configured triggers,
+    # a head or worklist the request names, and a family if none was picked.
+    chosen |= _select_when_hits(optional, prompt) | (_named_capabilities(prompt) & optional_names)
+    if not any(s.axis == "family" and s.name in chosen for s in optional):
+        chosen |= {"family-simple-transfer"} & optional_names
     selected = _expand_cross_references(always | chosen, catalog)
     return _order_names(selected, catalog)
+
+
+
+def _named_capabilities(prompt: str) -> set[str]:
+    """Skills for a head or worklist the request names explicitly."""
+    low = (prompt or "").lower()
+    names = set()
+    if re.search(r"mca(?:96|384)?", low):
+        names.add("head-mca96")
+    if re.search(r"(?:liha|fca)", low):
+        names.add("head-liha")
+    if "worklist" in low:
+        names.add("api-worklists")
+    return names
 
 
 _OP_SKILLS: dict[str, tuple[str, ...]] = {
@@ -404,6 +423,17 @@ def _profile_labware_class_table(scope: LabScope) -> str | None:
     )
 
 
+def additional_skills_message(scope: LabScope, names: list[str]) -> str | None:
+    """Bodies of skills added after the first turn (a correction needs a skill
+    the first selection left out). Sent with the user's message, so the
+    context already sent stays unchanged."""
+    by_name = {s.name: s for s in scope.skill_catalog}
+    bodies = [by_name[n].body for n in names if n in by_name]
+    if not bodies:
+        return None
+    return "Additional lab skills for this request:\n\n" + _BODY_SEP.join(bodies)
+
+
 def build_initial_scope_message(scope: LabScope, prompt: str, client) -> str | None:
     """The context system-message text for this run.
 
@@ -415,4 +445,9 @@ def build_initial_scope_message(scope: LabScope, prompt: str, client) -> str | N
         return scope.as_context_message()
     if not scope.skill_catalog:
         return None
-    return assemble_context(scope, select_skills(prompt, scope.skill_catalog, client))
+    names = select_skills(prompt, scope.skill_catalog, client)
+    raw_client = getattr(client, "_legacy", client)
+    trace = getattr(raw_client, "trace_recorder", None)
+    if trace is not None:
+        trace.record("skill_selection", scope=scope.mode, selected_skills=names)
+    return assemble_context(scope, names)

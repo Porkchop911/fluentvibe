@@ -3,6 +3,11 @@
 This guide is for reviewers evaluating whether fluentvibe's model fits real
 FluentControl workflows.
 
+Start with a small protocol, inspect its simulated state, and compare the
+generated FluentControl steps with your intended method. This gives a concrete
+way to assess the project's core benefit: readable, repeatable protocol
+authoring with feedback before instrument validation.
+
 ## Setup
 
 ```bash
@@ -20,6 +25,9 @@ Without one, those tests should skip or use offline fallbacks.
 - `docs/simulator.md` for physical invariant checks and snapshots.
 - `docs/decompile.md` for `.xscr` to Python recovery.
 - `docs/catalog.md` for install-backed labware and workspace lookup.
+- `docs/workspace-app.md` for the integrated local workbench.
+- `docs/partial-mca-authoring.md` for explicit column mapping and its current
+  verification boundaries.
 
 ## Useful feedback
 

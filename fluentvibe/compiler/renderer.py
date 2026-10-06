@@ -33,7 +33,6 @@ from ..ir.schema import (
 )
 
 
-
 def _fc_prompt_text(text: str) -> str:
     """User-prompt text as FluentControl accepts it. Some parenthesised text
     makes the prompt fail at run time ("Unhandled exception in script
@@ -154,6 +153,7 @@ class Renderer:
         self.templates = self._load_templates()
         self.labware_reference = self._load_labware_reference()
         self._current_adapter_config: Optional[Dict] = None  # Tracks adapter state during rendering
+        self._mounted_mca_columns = None
         self._labware_types: Dict[str, str] = {}  # label -> labware_type mapping for tip type lookup
         self._labware_placements: Dict[tuple[str, int], str] = {}  # (location, position) -> label
 
@@ -223,6 +223,7 @@ class Renderer:
         """
         # Reset state for this render
         self._current_adapter_config = None
+        self._mounted_mca_columns = None
         self._labware_types = {}
         self._labware_placements = {}
 
@@ -741,6 +742,19 @@ class Renderer:
         if not columns:
             return xml
         cols = sorted({int(c) for c in columns})
+        # First/LastTip select the mounted tips, while Column positions that
+        # same block on the plate. Changing First/LastTip for a shifted stamp
+        # selects different (empty) channels rather than moving the block.
+        shift = 0
+        stype = self._step_type_name(step)
+        mounted = self._mounted_mca_columns
+        if stype in {"aspirate", "dispense"} and mounted is not None:
+            if len(cols) != len(mounted):
+                raise RenderError("MCA plate selection must match the mounted partial tip count")
+            shift = cols[0] - mounted[0]
+            if cols != [c + shift for c in mounted]:
+                raise RenderError("MCA partial tips can only map to a translated column pattern")
+            cols = mounted
         first, last = cols[0], cols[-1]
         contiguous = cols == list(range(first, last + 1))
         xml = re.sub(
@@ -762,6 +776,8 @@ class Renderer:
                 lambda _: replacement,
                 xml, count=1, flags=re.DOTALL,
             )
+        if shift:
+            xml = re.sub(r"<Column>.*?</Column>", f"<Column>{shift}</Column>", xml, count=1, flags=re.DOTALL)
         return xml
 
     def _post_process_step_xml(self, xml: str, step: Step, params: dict) -> str:
@@ -771,6 +787,11 @@ class Renderer:
 
         if stype in {"aspirate", "dispense", "pick_up_tips", "set_tips_back", "mca384_mix"}:
             xml = self._post_process_partial_columns_xml(xml, step)
+            if stype == "pick_up_tips":
+                columns = getattr(step, "columns", None)
+                self._mounted_mca_columns = list(columns) if columns is not None else None
+            elif stype == "set_tips_back":
+                self._mounted_mca_columns = None
 
         if stype in {"export_variable", "import_variable"}:
             xml = re.sub(

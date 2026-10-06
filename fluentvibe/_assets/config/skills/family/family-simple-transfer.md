@@ -13,6 +13,7 @@ The destination plate with the requested volume in the requested wells. Nothing 
 | Move | Use |
 |---|---|
 | Plate → plate, every well to the same address | `stamp` (MCA, one aspirate/dispense for all 96) |
+| Plate → plate, some whole columns (shifted or not) | MCA with `columns=` (see head-mca96) |
 | Trough → every well of a plate | `distribute_reagent` (FCA; reagent) or `add_reagent` (MCA; cheap bulk liquid from an SBS reservoir) |
 | Some wells, or a different volume per well | `transfer_volumes` / `distribute_volumes` (FCA, fresh tips per sample) |
 

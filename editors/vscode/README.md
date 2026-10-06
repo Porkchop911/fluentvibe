@@ -1,26 +1,24 @@
-# fluentvibe — VS Code extension
+# fluentvibe for VS Code
 
-Live diagnostics for fluentvibe protocol authoring. As you open or save a
-protocol `.py`, the extension surfaces **build errors** (syntax, bad import,
-unknown method) and **simulator failures** (insufficient volume, missing
-tips/adapter, overdraw, occupied slot, …) as squiggles on the exact authoring
-line, each with a repair hint.
+Author and inspect FluentControl protocols with Python source, simulator
+feedback, protocol discussion, and a FluentControl handoff in one editor.
+The extension includes document-based drafting, inline edits, replay, and
+mapped diagnostics for supported checks.
 
-It is a thin LSP client: it launches `python -m fluentvibe lsp`, which runs the
-headless analyzer (`fluentvibe/copilot`) in an isolated subprocess per file. All
-the analysis logic lives in Python — see `docs/copilot-design.md` in the
-fluentvibe repository.
+## Setup
 
-## Prerequisites
-
-Install fluentvibe with the language-server extra into the Python interpreter you
-want the extension to use:
+Install fluentvibe into the interpreter the extension will use:
 
 ```bash
 python -m pip install -e ".[lsp]"
 ```
 
-## Develop / run locally
+Set `fluentvibe.pythonPath` to that interpreter. A local FluentControl catalog
+supports installation-backed lookups; assisted drafting and editing need a
+reachable model endpoint. Configure model settings in the extension and ensure
+its Python language-server environment uses the intended endpoint and profile.
+
+## Build locally
 
 ```bash
 cd editors/vscode
@@ -28,37 +26,23 @@ npm install
 npm run compile
 ```
 
-Then press **F5** in VS Code (with this folder open) to launch an Extension
-Development Host. Open a fluentvibe protocol `.py` and save it to see diagnostics.
+The extension entry point is `out/extension.js`, compiled from `src/`. Package
+with your normal VS Code extension tooling, or launch an Extension Development
+Host targeting this folder.
 
-## Settings
+## Review workflow
 
-- `fluentvibe.pythonPath` — interpreter used to launch the server (default
-  `python`). Point this at the venv where you installed fluentvibe.
-- `fluentvibe.enable` — turn the language server on/off.
+Open a fluentvibe protocol that defines `build_worktable()`. Diagnostics help
+locate build and modeled simulation errors. Completion, signatures, hover, and
+quick fixes support direct Python authoring. Use the Chat panel or document
+workflow for assisted drafting, and Ctrl+I for a selected-code edit.
 
-## Features (current)
+Inspect the resulting source, requirements, and replay before handing the
+compiled artifact to FluentControl. Missing, stale, or unavailable checks do
+not establish a pass. Replay shows the modeled protocol; FluentControl context
+checks and physical method validation remain separate steps. Review suggested
+edits before accepting them.
 
-All deterministic features (diagnostics, completion, signature help, hover) are
-pure analysis — no LLM, no cloud. Only the optional Ctrl+I inline edit uses a model.
-
-- **Live diagnostics** as you type (debounced): build errors + simulator failures
-  (bad catalog name, overdraw, missing tips/adapter, occupied slot, typos) on the
-  exact line, with repair hints.
-- **Quick-fixes** (lightbulb 💡): e.g. pipetting before mounting the adapter →
-  one-click insert of `head.mount_adapter()`.
-- **Autocomplete**: real FluentControl catalog names inside `catalog="..."`, and
-  the fluentvibe API after `head.` / `wt.` / `gripper.` etc.
-- **Signature help**: type `head.aspirate(` and see the parameters
-  (`target, volume_ul, *, liquid_class, columns=None`), with the current argument
-  highlighted.
-- **Hover**: hover a method to see its signature and docstring.
-- **Inline edit (Ctrl+I)**: select lines, describe a change ("add a return-tips
-  step", "use 200 uL tips"), and the model rewrites them — re-validated by the
-  simulator, with a warning if the edit introduces an error. Needs a reachable
-  LM endpoint (set `fluentvibe.pythonPath` to an interpreter whose
-  `FLUENTVIBE_LM_ENDPOINT` points at your model).
-- The server only touches files that import `fluentvibe` and define
-  `build_worktable()`, so ordinary Python files are left alone.
-
-Planned: live-as-you-type diagnostics, an "explain error" hover.
+The analyzer runs protocol Python in a subprocess. Use protocols you trust.
+Deterministic analysis does not need a model; optional assisted features send
+context to the configured endpoint.
