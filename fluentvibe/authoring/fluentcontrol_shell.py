@@ -457,44 +457,56 @@ def _ancestor(el, kinds: tuple[str, ...], depth: int = 4):
     return None
 
 
-def _navigate_tree_to_shell(fc_win, script_name="shell"):
-    """Make the script's tree item visible and return it.
+def _navigate_tree_to_shell(fc_win, script_name="shell", folder_name="Under_development"):
+    """Make the script's entry visible and return it.
 
-    FluentControl shows the folder labels as Text inside TreeViewItems (the
-    "Scripts" label on the left is a control-bar list entry, not a tree node).
-    The folder is expanded through its ExpandCollapse pattern: expanding is
-    idempotent, a double-click toggles and collapsed an already open folder."""
+    FluentControl shows the script folders in two ways, both seen on this
+    machine: as a folder filter in the control bar (a list: All, Local, ...,
+    Under_development) next to a script list that only builds the rows
+    scrolled into view, and as a tree of TreeViewItems. Either way the folder
+    is opened idempotently (select the filter entry / expand the tree item);
+    a double-click toggles and closed an already open folder."""
     def visible(title):
         return [el for el in fc_win.descendants(title=title) if el.is_visible()]
 
-    if not visible("Under_development"):
+    if not visible(folder_name):
         # The script library is not showing: pick "Scripts" in the control bar.
         for label in visible("Scripts"):
             item = _ancestor(label, ("ListItem",))
             if item is not None:
                 _safe_click(item)
                 break
-        if not _until(lambda: visible("Under_development"), 3.0):
+        if not _until(lambda: visible(folder_name), 3.0):
             return None
-    for label in visible("Under_development"):
-        folder = _ancestor(label, ("TreeItem",))
-        if folder is None:
+    for label in visible(folder_name):
+        # The exact folder only ("Under_development\NP" is another entry).
+        if (label.window_text() or "").strip() != folder_name:
             continue
-        try:
-            folder.expand()
-        except Exception:
-            # No ExpandCollapse pattern: a double-click only if it is collapsed.
+        entry = _ancestor(label, ("TreeItem", "ListItem"))
+        if entry is None:
+            continue
+        if entry.element_info.control_type == "ListItem":
             try:
-                collapsed = folder.get_expand_state() == 0
+                entry.select()
             except Exception:
-                collapsed = True
-            if collapsed:
-                folder.double_click_input()
-        break
-    shell = _until(lambda: visible(script_name), 3.0)
+                _safe_click(entry)
+        else:
+            try:
+                entry.expand()
+            except Exception:
+                # No ExpandCollapse pattern: a double-click only if it is collapsed.
+                try:
+                    collapsed = entry.get_expand_state() == 0
+                except Exception:
+                    collapsed = True
+                if collapsed:
+                    entry.double_click_input()
+        if _until(lambda: visible(script_name), 3.0):
+            break
+    shell = visible(script_name)
     if not shell:
         return None
-    return _ancestor(shell[0], ("TreeItem", "ListItem"))
+    return _ancestor(shell[0], ("TreeItem", "ListItem", "DataItem"))
 
 
 def _dismiss_modal_dialogs(fc_win, timeout_s: float = 3.0) -> DialogScanResult:

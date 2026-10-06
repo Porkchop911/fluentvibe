@@ -351,6 +351,8 @@ def test_tree_navigation_expands_a_collapsed_folder_without_toggling(monkeypatch
             return self._parent
         def is_visible(self):
             return True
+        def window_text(self):
+            return self.title
 
     class Folder(El):
         def expand(self):
