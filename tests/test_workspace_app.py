@@ -598,3 +598,38 @@ def test_authoring_session_temperature_defaults_to_0_8_and_follows_the_page(tmp_
     assert settings["temperature"] == 0.3
     with pytest.raises(ValueError, match="between 0 and 2"):
         service._job_authoring_session({"temperature": 5})
+
+
+def test_opentrons_convert_job_takes_an_upload_and_returns_the_code(tmp_path: Path, monkeypatch) -> None:
+    import base64
+
+    from fluentvibe.authoring import opentrons_import
+
+    seen = {}
+
+    def convert(protocol, profile, output, **kwargs):
+        seen.update(protocol=Path(protocol), profile=Path(profile), output=Path(output), **kwargs)
+        draft = Path(output) / "draft.py"
+        draft.write_text("def build_worktable():\n    pass\n", encoding="utf-8")
+        return {"stage": "done", "error": None, "draft": str(draft), "steps": ["transfer"], "todo_steps": 0}
+
+    monkeypatch.setattr(opentrons_import, "convert_opentrons", convert)
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path)
+    monkeypatch.setattr(service, "_profile_dir", lambda name: tmp_path / "profiles" / name)
+    upload = {"name": "ot_protocol.py", "content_base64": base64.b64encode(b"metadata = {}\n").decode()}
+    result = service._job_opentrons_convert({"profile_name": "deck", "protocol_upload": upload, "fc_check": True})
+    assert result["ok"] and result["source"].startswith("def build_worktable")
+    assert seen["protocol"].read_bytes() == b"metadata = {}\n"
+    assert seen["protocol"].parent.name.startswith("opentrons-")
+    assert seen["fc_check"] is True and seen["fc_by"] == "human"
+
+
+def test_opentrons_convert_job_refuses_what_it_cannot_use(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(service, "WORKBENCH_BASE_DIR", tmp_path)
+    with pytest.raises(ValueError, match="deck profile"):
+        service._job_opentrons_convert({"protocol_path": "x.py"})
+    with pytest.raises(ValueError, match="not found"):
+        service._job_opentrons_convert({"profile_name": "deck", "protocol_path": str(tmp_path / "missing.py")})
+    with pytest.raises(ValueError, match=r"not an Opentrons protocol"):
+        service._job_opentrons_convert({"profile_name": "deck",
+                                        "protocol_upload": {"name": "notes.txt", "content_base64": "eA=="}})

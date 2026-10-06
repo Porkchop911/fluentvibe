@@ -553,6 +553,7 @@ def _job_handlers() -> dict[str, Any]:
             "deploy-xscr": _job_deploy_xscr,
             "author-spec": _job_author_spec,
             "replay-source": _job_replay_source,
+            "opentrons-convert": _job_opentrons_convert,
         }
     return _JOB_HANDLERS
 
@@ -846,6 +847,54 @@ def _job_compile_source(payload: dict[str, Any]) -> dict[str, Any]:
     source = _source_from_payload(payload)
     result = registry.compile_and_simulate(source)
     return {"ok": bool(result.get("ok")), "validation": result, "tool_calls": registry.calls}
+
+
+def _job_opentrons_convert(payload: dict[str, Any]) -> dict[str, Any]:
+    """An Opentrons protocol (uploaded .py, or a path to the .py or its
+    folder) converted for a deck profile, without a model; optionally
+    inspected in FluentControl (as a human inspection: it stays in front)."""
+    from ..authoring.opentrons_import import convert_opentrons
+
+    profile_name = str(payload.get("profile_name") or "").strip()
+    if not profile_name:
+        raise ValueError("choose a deck profile first")
+    profile_dir = _profile_dir(profile_name)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    output_dir = WORKBENCH_BASE_DIR / "authored" / f"opentrons-{stamp}"
+    if output_dir.exists():
+        output_dir = WORKBENCH_BASE_DIR / "authored" / f"opentrons-{stamp}-{uuid.uuid4().hex[:4]}"
+    upload = payload.get("protocol_upload")
+    if isinstance(upload, dict) and upload.get("content_base64"):
+        import base64
+
+        name = Path(str(upload.get("name") or "protocol.py")).name
+        if not name.lower().endswith(".py"):
+            raise ValueError(f"{name} is not an Opentrons protocol (.py)")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        protocol = output_dir / name
+        protocol.write_bytes(base64.b64decode(upload["content_base64"]))
+    else:
+        raw = _clean_path(payload.get("protocol_path"))
+        if not raw:
+            raise ValueError("attach an Opentrons protocol (.py) or give its path")
+        protocol = Path(raw).expanduser()
+        if not protocol.exists():
+            raise ValueError(f"Opentrons protocol not found: {protocol}")
+    summary = convert_opentrons(
+        protocol, profile_dir, output_dir, fc_check=bool(payload.get("fc_check")), fc_by="human",
+        progress=lambda message: _job_progress(payload, message),
+    )
+
+    def text(key: str) -> str | None:
+        path = summary.get(key)
+        return Path(path).read_text(encoding="utf-8") if path and Path(path).exists() else None
+
+    return {
+        "ok": summary.get("stage") == "done" and summary.get("fc_ok") is not False,
+        "summary": summary,
+        "source": text("draft"),
+        "spec_markdown": text("spec_md"),
+    }
 
 
 def _clean_path(value: Any) -> str:

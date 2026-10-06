@@ -580,6 +580,12 @@
       white-space: pre-wrap; max-height: 9em; overflow: hidden; display: flex; flex-direction: column-reverse; }
     .fp-asklist li { margin: 4px 0; }
     .author-attachbar #authorReplay { width: auto; margin-left: auto; }
+    .ot-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+    .ot-fields .fp-field { flex: 1 1 260px; min-width: 0; }
+    .ot-check { display: inline-flex; align-items: center; gap: 6px; margin: 8px 12px 8px 0; }
+    .ot-check input { width: auto; min-height: auto; }
+    #otConvert { width: auto; }
+    .ot-steps { margin: 6px 0 6px 18px; padding: 0; }
     .fp-steps { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 6px; max-width: 760px; }
     .fp-steps li { display: grid; grid-template-columns: 26px 220px 1fr; align-items: center; padding: 8px 10px;
       border: 1px solid var(--line, #d0d7de); border-radius: 8px; background: #fff; font-size: 14px; }
@@ -911,7 +917,25 @@
           <button id="authorReplay" class="secondary" disabled>Show replay</button>
         </div>
 
-        <details class="author-extras">
+        <details class="author-extras" id="otPanel">
+          <summary>Convert an Opentrons protocol (no model)</summary>
+          <p class="small">The Opentrons protocol runs in the Opentrons simulator; its steps become a protocol for the
+            deck profile above, which is compiled and simulated. About 10 s; nothing is sent to a model.</p>
+          <div class="ot-fields">
+            <div class="fp-field">
+              <label for="otFile">Opentrons protocol (.py)</label>
+              <input id="otFile" type="file" accept=".py,text/x-python">
+            </div>
+            <div class="fp-field">
+              <label for="otPath">or its path (the .py or its folder)</label>
+              <input id="otPath" placeholder="D:\Opentron_protocols\0000025894">
+            </div>
+          </div>
+          <label class="ot-check"><input type="checkbox" id="otFcCheck"> open it in FluentControl afterwards (InfoPad check)</label>
+          <button id="otConvert" class="secondary">Convert</button>
+        </details>
+
+        <details class="author-extras" id="authorCodePanel">
           <summary>Generated code &amp; raw result</summary>
           <label for="generatedCode">Generated / best draft code</label>
           <textarea id="generatedCode"></textarea>
@@ -1284,8 +1308,64 @@
       return sendAuthorMessage();
     }
 
+    // Opentrons protocol -> protocol for the chosen deck (no model): the result
+    // lands in the chat with the steps read, the verdicts, the code and the
+    // FluentControl and replay buttons.
+    function opentronsResultHtml(result) {
+      const s = (result && result.summary) || {};
+      const steps = (s.steps || []).map(op => `<li>${escapeHtml(op)}</li>`).join('');
+      const lines = [];
+      lines.push(`<div>Source: ${escapeHtml(s.protocol || '')}</div>`);
+      if (steps) lines.push(`<div>Steps read from the Opentrons run:</div><ol class="ot-steps">${steps}</ol>`);
+      if (s.stage === 'done') {
+        lines.push(`<div>Compiled and simulated on this deck${s.todo_steps ? ` · <b>${s.todo_steps} step(s) left as TODO</b> (not convertible)` : ' · no TODO steps'}.</div>`);
+      } else {
+        lines.push(`<div><b>Stopped at ${escapeHtml(s.stage || '?')}:</b> ${escapeHtml(s.error || 'unknown error')}</div>`);
+      }
+      if (s.fc_ok === true) lines.push('<div>FluentControl: InfoPad clean.</div>');
+      if (s.fc_ok === false) lines.push(`<div><b>FluentControl found problems:</b></div><ul>${(s.fc_findings || []).map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>`);
+      if (s.fc_ok == null && s.fc_message) lines.push(`<div>FluentControl: ${escapeHtml(s.fc_message)}</div>`);
+      lines.push(`<div class="small">Folder: ${escapeHtml(s.output_dir || '')}</div>`);
+      if (s.xscr) lines.push(`<div><button class="secondary" data-open-fc="${escapeHtml(s.xscr)}">Check in FluentControl</button></div>`);
+      return lines.join('');
+    }
+
+    async function convertOpentrons() {
+      const profile = $('authorProfile').value;
+      if (!profile) { setStatus('authorStatus', 'Choose a deck profile first.', 'error'); return; }
+      const file = $('otFile').files && $('otFile').files[0];
+      const path = $('otPath').value.trim();
+      if (!file && !path) { setStatus('authorStatus', 'Attach an Opentrons protocol (.py) or give its path.', 'error'); return; }
+      const payload = { profile_name: profile, fc_check: $('otFcCheck').checked };
+      if (file) payload.protocol_upload = { name: file.name, content_base64: await readFileAsBase64(file) };
+      else payload.protocol_path = path;
+      pushAuthorMessage('user', 'You', `Convert the Opentrons protocol ${file ? file.name : path}`);
+      $('otConvert').disabled = true;
+      try {
+        const job = await submitAndPoll('opentrons-convert', payload, 'authorStatus', 'authorResult');
+        const result = job && job.result;
+        if (!result) {
+          pushAuthorMessage('error', 'Opentrons conversion failed', (job && job.error && job.error.message) || 'no result');
+          return;
+        }
+        pushAuthorMessage(result.ok ? 'model' : 'model warn', result.ok ? 'Opentrons protocol converted' : 'Opentrons conversion: please look', null);
+        state.authorMessages[state.authorMessages.length - 1].html = opentronsResultHtml(result);
+        renderAuthorChat();
+        if (result.source) {
+          $('generatedCode').value = result.source;
+          $('authorReplay').disabled = false;
+          $('authorCodePanel').open = true;
+        }
+      } catch (err) {
+        if (!err.stopped) pushAuthorMessage('error', 'Opentrons conversion failed', String(err.message || err));
+      } finally {
+        $('otConvert').disabled = false;
+      }
+    }
+
     function bindAuthor() {
       $('sendAuthor').addEventListener('click', sendFromComposer);
+      $('otConvert').addEventListener('click', convertOpentrons);
       // Enter is a new line (a half-typed answer must never go out by accident);
       // Ctrl+Enter / Cmd+Enter sends.
       $('authorPrompt').addEventListener('keydown', (e) => {
