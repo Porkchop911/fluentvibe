@@ -107,19 +107,26 @@ def _drop_air_gap_aspirates(events: list[dict]) -> list[dict]:
     gap's aspirate is dropped (the air gap stays, so the dispense that carries
     the air is known); an air gap that is dispensed again is dropped with its
     dispense."""
+    def next_step(j: int) -> int:
+        while j < len(events) and events[j]["kind"] in ("other", "comment", "delay"):
+            j += 1
+        return j
+
+    def holds(j: int, kind: str, volume: float) -> bool:
+        return (j < len(events) and events[j]["kind"] == kind
+                and abs(float(events[j].get("volume") or 0) - volume) < 1e-6)
+
     skip: set[int] = set()
     for i, e in enumerate(events):
         if e["kind"] != "air_gap":
             continue
         air = float(e.get("volume") or 0)
-        j = i + 1
-        while j < len(events) and events[j]["kind"] in ("other", "comment", "delay"):
-            j += 1
-        if j < len(events) and abs(float(events[j].get("volume") or 0) - air) < 1e-6:
-            if events[j]["kind"] == "aspirate":
-                skip.add(j)
-            elif events[j]["kind"] == "dispense":
-                skip.update((i, j))
+        j = next_step(i + 1)
+        if holds(j, "aspirate", air):
+            skip.add(j)  # the air drawn
+            j = next_step(j + 1)
+        if holds(j, "dispense", air):
+            skip.update((i, j))  # ... and given out again: the air gap moved no liquid
     return [e for k, e in enumerate(events) if k not in skip]
 
 
