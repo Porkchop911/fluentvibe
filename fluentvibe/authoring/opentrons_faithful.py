@@ -31,6 +31,7 @@ PLATE96_CAPACITY_UL = 350.0      # 96_ABgene_SuperPlate_Thermo_AB2800
 PLATE384_CAPACITY_UL = 29.0      # 384 Well LowVol LoBase
 TROUGH_SMALL_UL, TROUGH_LARGE_UL = 25000.0, 100000.0
 SBS_SMALL_UL = 55000.0           # "60ml SBS MCA96", as resolver._SBS_SMALL_MAX_UL
+TIP_HEADROOM = 0.9              # fill a tip to at most 90 % of its volume
 STOCK_MARGIN = 1.1               # source wells: what is drawn, +10 % ...
 STOCK_EXTRA_UL = 20.0            # ... + 20 ul, so the last draw is not short
 
@@ -89,6 +90,42 @@ def _well_budget(trace: dict) -> tuple[dict, dict, dict]:
     need = {k: -v for k, v in lowest.items() if v < -1e-9}
     content = {k: need.get(k, 0.0) + peak[k] for k in running}
     return need, content, dict(running)
+
+
+MULTI_LIQUID_CLASS = "Water Free Multi"
+
+
+def _multi_dispense_events(events) -> set[int]:
+    """ids of the aspirates and dispenses of multi-dispense runs: what one load
+    of the tip (aspirates since the last dispense) gives out in more than one
+    dispense. FluentControl corrects every dispense by the liquid class, so a
+    single-dispense class reported "Missing in Tip ... Aspiration volume must be
+    at least dispense volume"; its multi-dispense class plans for that."""
+    ids: set[int] = set()
+    run: list[int] = []
+    dispenses = 0
+    after_dispense = False
+
+    def close() -> None:
+        if dispenses > 1:
+            ids.update(run)
+
+    for e in events:
+        kind = e["kind"]
+        if kind == "aspirate":
+            if after_dispense:  # a new load of the tip starts a new run
+                close()
+                run, dispenses, after_dispense = [], 0, False
+            run.append(id(e))
+        elif kind == "dispense":
+            run.append(id(e))
+            dispenses += 1
+            after_dispense = True
+        elif kind in ("pick_up_tip", "drop_tip", "return_tip"):
+            close()
+            run, dispenses, after_dispense = [], 0, False
+    close()
+    return ids
 
 
 def _liquid_moves(events):
@@ -218,7 +255,9 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             max_load = max(max_load, load)
         elif e["kind"] in ("dispense", "drop_tip", "return_tip", "pick_up_tip"):
             load = 0.0 if e["kind"] != "dispense" else max(0.0, load - float(e.get("volume") or 0))
-    tip_catalog, tip_class = (("FCA, 1000ul SBS", "FCA1000Box") if max_load > 200
+    # Headroom: FluentControl's liquid class draws a few ul more per aspirate
+    # ("Too much in Tip: 3.26 ul ... use larger tip" for 100 + 100 ul in a 200 ul tip).
+    tip_catalog, tip_class = (("FCA, 1000ul SBS", "FCA1000Box") if max_load > 200 * TIP_HEADROOM
                               else ("FCA, 200ul SBS", "FCA200Box"))
     tips = add("FcaTips", "tips", tip_catalog, tip_class, take(nests, "the FCA tips"))
 
@@ -274,6 +313,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
     have_tips = False
     tip_load = 0.0                # what the current tip holds (per channel)
     liquid = {id(ev): volume for ev, volume in _liquid_moves(trace["events"])}  # air gaps taken out
+    multi = _multi_dispense_events(trace["events"])
 
     def group(title: str) -> None:
         name = title
@@ -339,7 +379,8 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                 c = by_label[label]
                 wells = [w for _, w in pairs]
                 channels = [ch for ch, _ in pairs]
-                lines.append(f"    fca.{kind}({c.var}, {volume:g}, liquid_class={lc!r}, "
+                event_lc = MULTI_LIQUID_CLASS if id(e) in multi else lc
+                lines.append(f"    fca.{kind}({c.var}, {volume:g}, liquid_class={event_lc!r}, "
                              f"wells={wells!r}, channels={channels!r})")
             change = volume
             tip_load = max(0.0, tip_load + (change if kind == "aspirate" else -change))

@@ -218,3 +218,15 @@ def test_air_gap_is_not_liquid_and_the_waste_chute_is_the_waste(monkeypatch):
     wt.simulate(strict=True)  # was: "tip holds 25 ul but 30 ul requested"
     fidelity = volume_fidelity(trace, conv, wt.simulation_report.final_labware)
     assert fidelity["wells_matching"] == fidelity["wells_checked"], fidelity
+
+
+def test_multi_dispense_runs_use_the_multi_liquid_class():
+    # FluentControl: "Missing in Tip ... Aspiration volume must be at least dispense
+    # volume" when one aspirate fed several dispenses with "Water Free Single".
+    from fluentvibe.authoring.opentrons_faithful import _multi_dispense_events
+
+    events = [{"kind": "pick_up_tip"}, {"kind": "aspirate"}, {"kind": "dispense"}, {"kind": "dispense"},
+              {"kind": "dispense"}, {"kind": "aspirate"}, {"kind": "dispense"}, {"kind": "drop_tip"},
+              {"kind": "aspirate"}, {"kind": "aspirate"}, {"kind": "dispense"}]
+    multi = _multi_dispense_events(events)
+    assert [i for i, e in enumerate(events) if id(e) in multi] == [1, 2, 3, 4]
