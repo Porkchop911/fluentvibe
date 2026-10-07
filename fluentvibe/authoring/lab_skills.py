@@ -404,7 +404,20 @@ def assemble_context(scope: LabScope, names: list[str]) -> str | None:
     # which declares the workflow once and then drafts the whole protocol in one
     # pass (per-group staging is shelved — see graph._should_stage) — use the
     # skills header.
-    return context_header(scope.enforces, skills=True) + _BODY_SEP.join(pieces)
+    header = context_header(scope.enforces, skills=True)
+    if "task-opentrons-conversion" in names:
+        header += _OPENTRONS_HEADER
+    return header + _BODY_SEP.join(pieces)
+
+
+# Added to the skills header when an Opentrons protocol is converted (graph.py
+# binds these tools only for such requests).
+_OPENTRONS_HEADER = (
+    "For this Opentrons protocol you also have `opentrons_search`, `opentrons_convert`, `read_draft` and "
+    "`opentrons_check_fidelity`. Call `opentrons_convert` first, before `declare_protocol_workflow`: the "
+    "Opentrons protocol already defines its volumes, layout and steps - read them from the conversion, never "
+    "ask the user for them." + "\n" * 2
+)
 
 
 def _profile_labware_class_table(scope: LabScope) -> str | None:

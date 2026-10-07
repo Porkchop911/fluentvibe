@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
 import subprocess
 import sys
 import time
@@ -105,6 +106,8 @@ def main() -> int:
     ap.add_argument("--rerun", default="",
                     help="comma-separated outcomes to run again: stages (gate, deck, convert, trace, crash) "
                          "or 'mismatch' (done, but not every well matches); the newest result counts")
+    ap.add_argument("--recheck-matching", type=int, default=0,
+                    help="also run this many protocols again (random, fixed seed) whose wells all matched")
     args = ap.parse_args()
 
     from fluentvibe.protocol_index import load_index, related_protocols
@@ -123,11 +126,14 @@ def main() -> int:
     started = time.monotonic()
     new = 0
     rerun = {x.strip() for x in args.rerun.split(",") if x.strip()}
+    matching = sorted(i for i, r in done.items() if r.get("stage") == "done"
+                      and (r.get("fidelity") or {}).get("wells_matching") == (r.get("fidelity") or {}).get("wells_checked"))
+    recheck = set(random.Random(0).sample(matching, min(args.recheck_matching, len(matching))))
 
     def again(row: dict) -> bool:
         f = row.get("fidelity") or {}
         mismatch = row.get("stage") == "done" and f.get("wells_matching") != f.get("wells_checked")
-        return row.get("stage") in rerun or ("mismatch" in rerun and mismatch)
+        return row.get("stage") in rerun or ("mismatch" in rerun and mismatch) or row["id"] in recheck
 
     for e in entries:
         if e.id in done and not again(done[e.id]):

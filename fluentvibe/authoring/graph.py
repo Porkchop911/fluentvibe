@@ -106,6 +106,11 @@ class GraphState(TypedDict, total=False):
 
 # ── Public API ───────────────────────────────────────────────────────
 
+def _mentions_opentrons(prompt: str | None) -> bool:
+    """A request about an Opentrons protocol gets the converter tools."""
+    return bool(re.search(r"opentrons|(?<![a-z])(ot-?2|flex)(?![a-z])|git:[0-9a-f]{6}", prompt or "", re.I))
+
+
 def build_authoring_graph(
     *,
     registry: AuthoringToolRegistry,
@@ -138,6 +143,9 @@ def build_authoring_graph(
     if _scope is not None and _scope.allowed_tools() is not None:
         from .tools import tool_definitions
         allowed = _scope.allowed_tools() or frozenset()
+        if _mentions_opentrons(registry.original_prompt):
+            from .opentrons_tools import OPENTRONS_TOOLS
+            allowed = allowed | OPENTRONS_TOOLS
         _denied = frozenset(
             d["function"]["name"] for d in tool_definitions()
         ) - allowed
@@ -1515,6 +1523,8 @@ def _request_says_choose_yourself(registry: AuthoringToolRegistry) -> bool:
 
 
 def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistry) -> Any:
+    from .opentrons_tools import OPENTRONS_TOOLS
+
     """A client bound to ``declare_protocol_workflow`` (plus ``lookup_api``), for skills mode.
 
     Other modes ground through lookup tools before they declare, so they keep
@@ -1531,6 +1541,8 @@ def _plan_only_client(client: Any, lc_tools: Any, registry: AuthoringToolRegistr
         # ask_user belongs here too: open protocol numbers are settled before
         # the plan (skill core-clarify-open-parameters), not invented in it.
         if getattr(t, "name", None) in {"declare_protocol_workflow", "lookup_api", "ask_user"}
+        # An Opentrons protocol is converted (and read) before its workflow is declared.
+        or getattr(t, "name", None) in OPENTRONS_TOOLS
     ]
     if not any(getattr(t, "name", None) == "declare_protocol_workflow" for t in plan_tools):
         return None

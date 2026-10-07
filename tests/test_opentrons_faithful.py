@@ -304,3 +304,54 @@ def test_the_air_gap_aspirate_after_an_air_gap_is_air():
               {"kind": "aspirate", "volume": 10.0}]
     kept = _drop_air_gap_aspirates(events)
     assert [e["kind"] for e in kept] == ["aspirate", "dispense", "air_gap", "aspirate"]
+
+
+# --- the converter as model tools (opentrons_tools.py) --------------------------
+
+def test_opentrons_tools_only_for_opentrons_requests():
+    from fluentvibe.authoring.graph import _mentions_opentrons
+
+    assert _mentions_opentrons("Convert the Opentrons protocol bradford_protein_assay")
+    assert _mentions_opentrons("convert git:0045f1 to this deck")
+    assert _mentions_opentrons("an OT-2 script") and _mentions_opentrons("this Flex protocol")
+    assert not _mentions_opentrons("normalize DNA to 10 ng/ul with flexible volumes")
+
+
+def test_opentrons_header_only_with_the_conversion_skill():
+    from fluentvibe.authoring.lab_skills import _OPENTRONS_HEADER
+
+    assert "opentrons_convert" in _OPENTRONS_HEADER and "never" in _OPENTRONS_HEADER
+
+
+def test_fidelity_check_needs_a_conversion_first():
+    from fluentvibe.authoring.opentrons_tools import opentrons_check_fidelity, read_draft
+
+    class Registry:
+        opentrons_conversion = None
+        last_draft_source = "line one\nline two\nline three"
+
+    assert opentrons_check_fidelity(Registry())["category"] == "no_conversion"
+    chunk = read_draft(Registry(), start=2, count=1)
+    assert chunk["text"] == "2: line two" and chunk["total_lines"] == 3
+
+
+def test_opentrons_tools_are_registered(tmp_path):
+    from fluentvibe.authoring.opentrons_tools import OPENTRONS_TOOLS
+    from fluentvibe.authoring.tools import AuthoringToolRegistry, tool_definitions
+
+    defined = {d["function"]["name"] for d in tool_definitions()}
+    assert OPENTRONS_TOOLS <= defined
+    assert OPENTRONS_TOOLS <= set(AuthoringToolRegistry(output_dir=tmp_path).functions())
+
+
+def test_compile_refuses_a_conversion_whose_wells_no_longer_match(tmp_path, monkeypatch):
+    from fluentvibe.authoring import opentrons_tools
+    from fluentvibe.authoring.tools import AuthoringToolRegistry
+
+    monkeypatch.setattr(opentrons_tools, "opentrons_check_fidelity", lambda registry, source: {
+        "ok": False, "wells_checked": 8, "wells_matching": 7, "mismatches": ["Plate A1: Opentrons +50.0 ul"]})
+    registry = AuthoringToolRegistry(output_dir=tmp_path)
+    registry.opentrons_conversion = ({}, object())
+    result = registry.compile_and_simulate("anything")
+    assert result["success"] is False and result["category"] == "opentrons_fidelity"
+    assert "7/8 wells" in result["failure_message"] and "Plate A1" in result["failure_message"]

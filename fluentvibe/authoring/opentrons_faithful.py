@@ -31,6 +31,8 @@ from typing import Any
 
 PLATE96_CAPACITY_UL = 350.0      # 96_ABgene_SuperPlate_Thermo_AB2800
 PLATE384_CAPACITY_UL = 29.0      # 384 Well LowVol LoBase
+# "96 Deep Well 2ml" on a 61 mm plate nest: FluentControl InfoPad clean with 1.5 ml in a well.
+DEEP96_CATALOG, DEEP96_CAPACITY_UL = "96 Deep Well 2ml", 1900.0
 TROUGH_SMALL_UL, TROUGH_LARGE_UL = 25000.0, 100000.0
 SBS_SMALL_UL = 55000.0           # "60ml SBS MCA96", as resolver._SBS_SMALL_MAX_UL
 TIP_HEADROOM = 0.9              # fill a tip to at most 90 % of its volume
@@ -370,6 +372,12 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             for w in wells:
                 mapping[f"{lw}|{w}"] = (c.label, w)
             continue
+        if n == 96 and info.get("rows") == 8 and peak <= DEEP96_CAPACITY_UL:
+            # A deep-well plate stays one plate (one trough per well used up the deck).
+            c = add(_short(display), "deep96", DEEP96_CATALOG, "Plate96Deep", take(nests, display))
+            for w in wells:
+                mapping[f"{lw}|{w}"] = (c.label, w)
+            continue
         if n == 384 and peak <= PLATE384_CAPACITY_UL:
             c = add(_short(display), "plate384", "384 Well LowVol LoBase", "Plate384", take(nests, display))
             for w in wells:
@@ -451,7 +459,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
         target = mapping.get(f"{lw}|{w}")
         if target is None or by_label[target[0]].kind == "waste":
             continue
-        cap = {"plate96": PLATE96_CAPACITY_UL, "tubeplate": PLATE96_CAPACITY_UL,
+        cap = {"plate96": PLATE96_CAPACITY_UL, "tubeplate": PLATE96_CAPACITY_UL, "deep96": DEEP96_CAPACITY_UL,
                "plate384": PLATE384_CAPACITY_UL}.get(by_label[target[0]].kind)
         fill = amount * STOCK_MARGIN + STOCK_EXTRA_UL
         if cap is not None:
@@ -571,7 +579,7 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
                 continue
             if e.get("channels", 1) > 8:
                 target = by_label[mapping[f"{e['labware']}|{e['wells'][0]}"][0]]
-                whole_plate = target.kind == "plate96" and len(set(e["wells"])) == 96
+                whole_plate = target.kind in ("plate96", "deep96") and len(set(e["wells"])) == 96
                 # The waste is a 300 ml SBS reservoir: the MCA can empty into it (waste chute).
                 into_waste = target.kind == "waste" and kind == "dispense"
                 if not (whole_plate or target.kind == "sbs" or into_waste) or not mca_boxes:
@@ -680,7 +688,10 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
         "    wt.group('Labware Placement')",
     ]
     for c in containers:
-        head.append(f"    {c.var} = wt.place({c.python_class}({c.label!r}, catalog={c.catalog!r}), "
+        # The catalog's deep-well definition has no well volume (only its shape): the
+        # simulator would fall back to 1000 ul; FluentControl accepts 1.5 ml in a well.
+        capacity = f", max_well_volume_ul={DEEP96_CAPACITY_UL:g}" if c.kind == "deep96" else ""
+        head.append(f"    {c.var} = wt.place({c.python_class}({c.label!r}, catalog={c.catalog!r}{capacity}), "
                     f"{c.site[0]!r}, {c.site[1]})")
     for (label, well), volume in sorted(fills.items()):
         c = by_label[label]

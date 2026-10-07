@@ -1096,6 +1096,29 @@ def tool_definitions() -> list[dict[str, Any]]:
             "backup": {"type": "boolean", "description": "Create a shell backup before patching. Default true."},
             "open_direct": {"type": "boolean", "description": "Open xscr directly instead of patching shell. Default false."},
         }, required=()),
+        _tool("opentrons_search",
+              "Find Opentrons protocols in the local library (about 1,100, OT-2 and Flex) by words: "
+              "assay, kit, technique, labware. Returns ids, titles, steps and related protocols.", {
+            "query": {"type": "string", "description": "Words that must all occur, e.g. 'bradford protein'."},
+            "limit": {"type": "integer", "description": "At most this many protocols (default 8)."},
+        }, required=("query",)),
+        _tool("opentrons_convert",
+              "Run the deterministic Opentrons converter: it simulates the Opentrons protocol and writes it well "
+              "by well for this deck. Returns how many wells end with the Opentrons volumes, the steps it could not "
+              "convert (modules, magnet, gripper moves), the lines left as TODO or operator prompts, and loads the "
+              "draft for read_draft / edit_draft / opentrons_check_fidelity.", {
+            "protocol": {"type": "string", "description": "An id from opentrons_search, or a protocol path."},
+        }),
+        _tool("read_draft",
+              "Read lines of the current draft (numbered), up to 200 at a time.", {
+            "start": {"type": "integer", "description": "First line (1-based, default 1)."},
+            "count": {"type": "integer", "description": "How many lines (default 120, at most 200)."},
+        }, required=()),
+        _tool("opentrons_check_fidelity",
+              "Simulate the draft and compare every well with the Opentrons run (net volume per well). Use after "
+              "every rewrite of a converted protocol; keep the converter's container labels and wells.", {
+            "source": {"type": "string", "description": "The full draft; omit to check the current draft."},
+        }, required=()),
     ]
 
 
@@ -1182,6 +1205,7 @@ class AuthoringToolRegistry:
         self.functional_group_plan_approved: bool = False
         self.pending_approval_kind: str | None = None
         self._grounding_cache: dict[tuple[str, Any], dict[str, Any]] = {}
+        self.opentrons_conversion: tuple[dict, Any] | None = None  # (trace, Conversion)
         self._lock = threading.RLock()
         # Set by session/service after the registry is constructed so
         # `ground_in_parallel` has an LM client to fan subagents out with.
@@ -1480,7 +1504,28 @@ class AuthoringToolRegistry:
             "validate_fluentcontrol_shell": self.validate_fluentcontrol_shell,
             "check_in_fluentcontrol": self.check_in_fluentcontrol,
             "pull_fluentcontrol_edits": self.pull_fluentcontrol_edits,
+            "opentrons_search": self.opentrons_search,
+            "opentrons_convert": self.opentrons_convert,
+            "read_draft": self.read_draft,
+            "opentrons_check_fidelity": self.opentrons_check_fidelity,
         }
+
+    # Opentrons protocols (opentrons_tools.py; skill task-opentrons-conversion).
+    def opentrons_search(self, query: str, limit: int = 8) -> dict[str, Any]:
+        from .opentrons_tools import opentrons_search
+        return opentrons_search(query, limit)
+
+    def opentrons_convert(self, protocol: str) -> dict[str, Any]:
+        from .opentrons_tools import opentrons_convert
+        return opentrons_convert(self, protocol)
+
+    def read_draft(self, start: int = 1, count: int = 120) -> dict[str, Any]:
+        from .opentrons_tools import read_draft
+        return read_draft(self, start, count)
+
+    def opentrons_check_fidelity(self, source: str | None = None) -> dict[str, Any]:
+        from .opentrons_tools import opentrons_check_fidelity
+        return opentrons_check_fidelity(self, source)
 
     def ask_user(self, question: str, axes: list[str] | None = None) -> dict[str, Any]:
         cleaned = (question or "").strip()
@@ -2976,6 +3021,24 @@ class AuthoringToolRegistry:
         return result
 
     def compile_and_simulate(self, source: str) -> dict[str, Any]:
+        if self.opentrons_conversion is not None:
+            # A converted Opentrons protocol is only done while every well still
+            # ends with the Opentrons volume (the model may skip the check).
+            from .opentrons_tools import opentrons_check_fidelity
+
+            fidelity = opentrons_check_fidelity(self, source)
+            if not fidelity.get("ok"):
+                return {
+                    "success": False,
+                    "category": "opentrons_fidelity",
+                    "failure_message": (
+                        "The draft no longer matches the Opentrons run: "
+                        f"{fidelity.get('wells_matching')}/{fidelity.get('wells_checked')} wells. "
+                        + "; ".join(fidelity.get("mismatches") or [fidelity.get("message") or ""])[:900]
+                        + " Fix these wells (or undo the last rewrite) before compiling."
+                    ),
+                    "fidelity": fidelity,
+                }
         self._compile_attempt += 1
         profile_classes = dict(getattr(self.lab_scope, "labware_classes", {}) or {})
         source, class_rewrites = _autoground_labware_classes(source, profile_classes)
