@@ -14,9 +14,11 @@ pauses and waits. Opentrons labware becomes deck labware:
 * liquid poured into the Opentrons trash goes to the deck's waste.
 
 Pipetting is done with the FCA (8 channels); an Opentrons 8-channel move keeps
-its channel-to-well layout. What cannot be converted (96-channel moves,
-module programs, magnet, gripper moves) is kept as an operator step or a
-comment and listed in the report. :func:`volume_fidelity` compares what each
+its channel-to-well layout. Opentrons 96-channel moves go to the MCA96 (the
+whole plate at once; a one-well reservoir it draws from becomes an SBS
+reservoir, as the MCA cannot work in a slim trough). What cannot be converted
+(other 96-channel moves, module programs, magnet, gripper moves) is kept as an
+operator step or a comment and listed in the report. :func:`volume_fidelity` compares what each
 well received or gave in the Opentrons run with the fluentvibe simulation.
 """
 
@@ -197,6 +199,14 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
     tube_cursor = 0
     tube_wells = [f"{r}{c}" for c in range(1, 13) for r in "ABCDEFGH"]
 
+    mca_labware = {e["labware"] for e in trace["events"]
+                   if e["kind"] in ("aspirate", "dispense") and (e.get("channels") or 1) >= 96 and e.get("labware")}
+    fca_used = any(e["kind"] in ("aspirate", "dispense") and (e.get("channels") or 1) < 96 and e.get("labware")
+                   for e in trace["events"])
+    mca_pickups = sum(1 for e in trace["events"] if e["kind"] == "pick_up_tip" and (e.get("channels") or 1) >= 96)
+    # Plate nests the tip boxes need later: one for the FCA tips, one MCA box at least.
+    reserve = int(fca_used) + int(bool(mca_labware))
+
     for lw, wells in used_wells.items():
         info = labware.get(lw, {})
         display = info.get("display") or lw
@@ -219,6 +229,18 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             for w in wells:
                 mapping[f"{lw}|{w}"] = (c.label, w)
             continue
+        if lw in mca_labware and n == 1:
+            # The MCA96 draws from it: an SBS reservoir (the 96 tips do not fit a slim trough).
+            amount = content[(lw, wells[0])]
+            if amount <= SBS_SMALL_UL and len(nests) > reserve:
+                c = add(f"{_short(display)[:24]}_SBS", "sbs", deck.reservoir_small, "Trough100mL",
+                        take(nests, display))
+            else:
+                c = add(f"{_short(display)[:24]}_SBS", "sbs", deck.reservoir_large, "Trough25mL",
+                        take(large, display))
+            mapping[f"{lw}|{wells[0]}"] = (c.label, "A1")
+            notes.append(f"{display} {wells[0]} -> {c.label} (SBS reservoir for the MCA96)")
+            continue
         for w in wells:
             amount = content[(lw, w)]
             if amount <= PLATE96_CAPACITY_UL:
@@ -233,7 +255,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
                                 else (deck.slim_large, "Trough100mL"))
                 c = add(f"{_short(display)[:22]}_{w}", "trough", catalog, cls, take(troughs, f"{display} {w}"))
                 mapping[f"{lw}|{w}"] = (c.label, "A1")
-            elif amount <= SBS_SMALL_UL and len(nests) > 1:
+            elif amount <= SBS_SMALL_UL and len(nests) > reserve:
                 # Trough slots used up: a 60 ml SBS reservoir on a free plate nest (it
                 # connects to the 61 mm nest; the skeleton builder places it there too).
                 # One nest stays free for the tip box.
@@ -259,7 +281,20 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
     # ("Too much in Tip: 3.26 ul ... use larger tip" for 100 + 100 ul in a 200 ul tip).
     tip_catalog, tip_class = (("FCA, 1000ul SBS", "FCA1000Box") if max_load > 200 * TIP_HEADROOM
                               else ("FCA, 200ul SBS", "FCA200Box"))
-    tips = add("FcaTips", "tips", tip_catalog, tip_class, take(nests, "the FCA tips"))
+    tips = add("FcaTips", "tips", tip_catalog, tip_class, take(nests, "the FCA tips")) if fca_used else None
+    mca_boxes: list[Container] = []
+    if mca_labware:
+        mca_load = max((float(e.get("volume") or 0) for e in trace["events"]
+                        if e["kind"] == "aspirate" and (e.get("channels") or 1) >= 96), default=0.0)
+        box_catalog, box_class = (("MCA96, 100ul, Box", "MCA100Box") if mca_load <= 100 * TIP_HEADROOM else
+                                  ("MCA96, 200ul, Box", "MCA200Box") if mca_load <= 200 * TIP_HEADROOM else
+                                  ("MCA96, 500ul, Box", "MCA500Box"))
+        # One box per Opentrons pick-up while plate nests last; then boxes are reused.
+        for i in range(max(1, min(mca_pickups, len(nests)))):
+            mca_boxes.append(add(f"McaTips{i + 1}", "mcatips", box_catalog, box_class, take(nests, "MCA tips")))
+        if mca_pickups > len(mca_boxes):
+            notes.append(f"{mca_pickups} MCA tip pick-ups but {len(mca_boxes)} MCA tip box(es) fit the deck: "
+                         f"tips are returned and used again")
 
     fills: dict[tuple[str, str], float] = {}
     by_label = {c.label: c for c in containers}
@@ -274,7 +309,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             fill = min(fill, cap - max(0.0, content[(lw, w)] - amount))
         fills[target] = round(fill, 2)
 
-    source, unconverted, kept = _write(trace, containers, mapping, fills, tips, lc, deck)
+    source, unconverted, kept = _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck)
     picks = sum(1 for e in trace["events"] if e["kind"] == "pick_up_tip")
     report = {
         "labware": {lw: labware.get(lw, {}).get("display", lw) for lw in used_wells},
@@ -284,7 +319,8 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
         "unconverted": unconverted,
         "kept_pauses_and_waits": kept,
         "tip_pickups": picks,
-        "fca_tips_used": picks * 8,
+        "fca_tips_used": (picks - mca_pickups) * 8,
+        "mca_tip_boxes": len(mca_boxes),
         "max_tip_load_ul": round(max_load, 1),
     }
     return Conversion(source=source, mapping=mapping, fills=fills, report=report)
@@ -304,7 +340,7 @@ def _section_title(text: str) -> str | None:
     return title
 
 
-def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list[str]]:
+def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tuple[str, list[str], list[str]]:
     by_label = {c.label: c for c in containers}
     lines: list[str] = []
     unconverted: list[str] = []
@@ -312,6 +348,9 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
     groups: set[str] = set()
     have_tips = False
     tip_load = 0.0                # what the current tip holds (per channel)
+    mca_adapter = mca_tips = False
+    mca_load = 0.0
+    mca_next = 0                  # next MCA tip box to pick up from
     liquid = {id(ev): volume for ev, volume in _liquid_moves(trace["events"])}  # air gaps taken out
     multi = _multi_dispense_events(trace["events"])
 
@@ -331,7 +370,26 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
             if title:
                 group(title)
             continue
+        is_mca = (e.get("channels") or 1) >= 96
+        if kind == "pick_up_tip" and is_mca:
+            if not mca_adapter:
+                lines.append("    mca.mount_adapter()")
+                mca_adapter = True
+            if mca_tips:
+                lines.append("    mca.return_tips()")
+            box = mca_boxes[mca_next % len(mca_boxes)]
+            mca_next += 1
+            lines.append(f"    mca.pick_up({box.var})")
+            mca_tips, mca_load = True, 0.0
+            continue
+        if kind in ("drop_tip", "return_tip") and is_mca:
+            if mca_tips:
+                lines.append("    mca.return_tips()")
+            mca_tips, mca_load = False, 0.0
+            continue
         if kind == "pick_up_tip":
+            if tips is None:  # the FCA never pipettes in this protocol
+                continue
             if have_tips:
                 lines.append("    fca.drop_tips()")
             lines.append(f"    fca.get_tips({tips.var})")
@@ -355,8 +413,29 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                 lines.append(f"    # NOT CONVERTED: {e['text'][:90]!r}")
                 continue
             if e.get("channels", 1) > 8:
-                unconverted.append(f"96-channel {kind}: {e['text'][:80]}")
-                lines.append(f"    wt.add_comment({('TODO 96-channel: ' + e['text'][:120])!r})")
+                target = by_label[mapping[f"{e['labware']}|{e['wells'][0]}"][0]]
+                whole_plate = target.kind == "plate96" and len(set(e["wells"])) == 96
+                if not (whole_plate or target.kind == "sbs") or not mca_boxes:
+                    unconverted.append(f"96-channel {kind}: {e['text'][:80]}")
+                    lines.append(f"    wt.add_comment({('TODO 96-channel: ' + e['text'][:120])!r})")
+                    continue
+                if not mca_tips:  # the Opentrons pipette had tips already
+                    if not mca_adapter:
+                        lines.append("    mca.mount_adapter()")
+                        mca_adapter = True
+                    lines.append(f"    mca.pick_up({mca_boxes[mca_next % len(mca_boxes)].var})")
+                    mca_next += 1
+                    mca_tips = True
+                volume = liquid.get(id(e), float(e["volume"] or 0))
+                if kind == "dispense" and volume > mca_load + 0.5:
+                    unconverted.append(f"dispense of {volume:g} ul but the MCA tips hold {mca_load:g} ul: "
+                                       f"{e['text'][:70]}")
+                    volume = mca_load
+                if volume <= 0:
+                    continue
+                event_lc = MULTI_LIQUID_CLASS if id(e) in multi else lc
+                lines.append(f"    mca.{kind}({target.var}, {volume:g}, liquid_class={event_lc!r})")
+                mca_load = max(0.0, mca_load + (volume if kind == "aspirate" else -volume))
                 continue
             if not have_tips:
                 lines.append(f"    fca.get_tips({tips.var})  # the Opentrons pipette had a tip already")
@@ -398,6 +477,10 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
             lines.append(f"    wt.user_prompt({('Opentrons ' + kind + ' step: ' + e['text'][:160])!r})")
     if have_tips:
         lines.append("    fca.drop_tips()")
+    if mca_tips:
+        lines.append("    mca.return_tips()")
+    if mca_adapter:
+        lines.append("    mca.drop_adapter()")
 
     used_classes = sorted({c.python_class for c in containers})
     run_id = re.sub(r"[^0-9a-z_]+", "_", str(trace.get("name", "opentrons")).lower()).strip("_")[:40] or "opentrons"
@@ -420,6 +503,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
         f"        protocol_name={str(trace.get('name', 'Opentrons protocol'))[:60]!r},",
         "    )",
         "    fca = wt.liha",
+        "    mca = wt.mca96",
         # The authoring gate: Variables first (at least one declared), then placement.
         f"    wt.declare_variable('RunId', {run_id!r})",
         f"    wt.set_sim_value('RunId', {run_id!r})",
@@ -431,7 +515,7 @@ def _write(trace, containers, mapping, fills, tips, lc, deck) -> tuple[str, list
                     f"{c.site[0]!r}, {c.site[1]})")
     for (label, well), volume in sorted(fills.items()):
         c = by_label[label]
-        if c.kind in ("trough",):
+        if c.kind in ("trough", "sbs"):
             head.append(f"    {c.var}.fill_all(Reagent({(label + ' stock')!r}), {volume:g})")
         else:
             head.append(f"    {c.var}.fill_wells([{well!r}], Reagent({(label + ' ' + well + ' stock')!r}), {volume:g})")

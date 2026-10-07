@@ -230,3 +230,36 @@ def test_multi_dispense_runs_use_the_multi_liquid_class():
               {"kind": "aspirate"}, {"kind": "aspirate"}, {"kind": "dispense"}]
     multi = _multi_dispense_events(events)
     assert [i for i, e in enumerate(events) if id(e) in multi] == [1, 2, 3, 4]
+
+
+def test_96_channel_moves_go_to_the_mca(monkeypatch, tmp_path):
+    # pcr_amp_uminn, evotips, 00d445: every move was a 96-channel one and stayed a
+    # TODO comment, so 0 wells matched; Strata called them "not faithful".
+    if not (PROFILE / "workspace_profile.json").exists():
+        pytest.skip("no 1080_Dev profile on this machine")
+    from fluentvibe.authoring.eval_rubric import build_worktable_from_source
+    from fluentvibe.authoring.profile import PROFILE_DIR_ENV
+    from fluentvibe.authoring.skeleton import load_deck
+
+    monkeypatch.setenv(PROFILE_DIR_ENV, str(PROFILE))
+    plate_wells = [f"{r}{c}" for c in range(1, 13) for r in "ABCDEFGH"]
+    plate = {"load_name": "nest_96_wellplate", "display": "PCR plate", "slot": "1", "wells": plate_wells,
+             "rows": 8, "columns": 12, "capacity_ul": 200.0, "is_tiprack": False}
+    reservoir = {"load_name": "nest_1_reservoir_195ml", "display": "Master mix reservoir", "slot": "2",
+                 "wells": ["A1"], "rows": 1, "columns": 1, "capacity_ul": 195000.0, "is_tiprack": False}
+    trace = {"protocol": "x.py", "name": "96ch", "labware": {"1:plate": plate, "2:res": reservoir}, "events": [
+        {"kind": "pick_up_tip", "channels": 96, "text": "Picking up tip"},
+        {"kind": "aspirate", "labware": "2:res", "wells": ["A1"] * 96, "volume": 20.0, "channels": 96, "text": ""},
+        {"kind": "dispense", "labware": "1:plate", "wells": plate_wells, "volume": 20.0, "channels": 96, "text": ""},
+        {"kind": "drop_tip", "channels": 96, "text": "Dropping tip"},
+    ]}
+    conv = convert_trace(trace, load_deck(PROFILE))
+    assert "mca.mount_adapter()" in conv.source and "mca.dispense(" in conv.source
+    assert "TODO 96-channel" not in conv.source
+    sbs = [c for c in conv.report["containers"] if c["kind"] == "sbs"]
+    assert sbs and "SBS" in sbs[0]["catalog"]  # the MCA cannot draw from a slim trough
+    assert not any(c["kind"] == "tips" for c in conv.report["containers"])  # no FCA box: the FCA never pipettes
+    wt = build_worktable_from_source(conv.source, "mca.py")
+    wt.simulate(strict=True)
+    fidelity = volume_fidelity(trace, conv, wt.simulation_report.final_labware)
+    assert fidelity["wells_checked"] == 97 and fidelity["wells_matching"] == 97, fidelity

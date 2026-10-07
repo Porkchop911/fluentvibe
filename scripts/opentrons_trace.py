@@ -124,6 +124,8 @@ def trace(protocol: Path, hardware_dir: Path) -> dict:
         elif text.lower().startswith("air gap"):
             kind = "air_gap"  # air drawn into the tip; the next dispense includes it
         event: dict = {"kind": kind, "text": text[:300]}
+        if kind in ("pick_up_tip", "drop_tip", "return_tip") and payload.get("instrument") is not None:
+            event["channels"] = _channels(payload["instrument"])  # which pipette: 96-channel -> MCA
         if kind in ("aspirate", "dispense"):
             location = payload.get("location")
             well = getattr(location, "labware", None)
