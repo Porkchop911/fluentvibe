@@ -579,7 +579,7 @@ def convert(protocol_dir: Path, hardware_dir: Path | None = None) -> dict:
             heading = re.sub(r"^(adding|add|dispensing|dispense|transferring|transfer)\s+", "", heading, flags=re.I)
             name = heading if heading and len(heading) <= 60 and not heading.lower().startswith("step") else source
             rid = f"R{len(reagents) + 1}"
-            kind = "ethanol" if re.search(r"ethanol|etoh", name + source, re.I) else                 "water" if re.search(r"water|h2o", name + source, re.I) else None
+            kind = "ethanol" if re.search(r"ethanol|etoh", name + source, re.I) else                 "water" if re.search(r"\bwater\b|h2o", name + source, re.I) else None
             reagents.append({"id": rid, "name": f"{name} ({source})", "role": "reagent", "liquid_type": kind})
             by_source[source] = rid
         step["reagent"] = by_source[source]

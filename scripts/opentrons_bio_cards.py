@@ -116,8 +116,10 @@ def _line(key: tuple, n: int) -> str:
     times = f"{n}x " if n > 1 else ""
     if key[0] in ("aspirate", "dispense"):
         _, label, vol, ch = key
-        head = f" ({ch}-ch)" if ch and ch > 1 else ""
-        return f"{times}{key[0]} {vol:g} ul {'from' if key[0] == 'aspirate' else 'into'} {label}{head}"
+        # Per tip: an 8-channel aspirate of 750 ul is 750 ul in each of 8 tips (a
+        # load that is dispensed in parts), not 750 ul per well.
+        head = f" ({ch} tips at once)" if ch and ch > 1 else ""
+        return f"{times}{key[0]} {vol:g} ul per tip {'from' if key[0] == 'aspirate' else 'into'} {label}{head}"
     if key[0] == "mix":
         return f"{times}mix {key[1]}x {key[2]} ul"
     return f"{times}{key[0]}: {key[1]}"

@@ -36,7 +36,8 @@ SKILLS = REPO / "fluentvibe" / "_assets" / "config" / "skills" / "family"
 EXTRACT_PROMPT = """You are a molecular biologist and biochemist reading what a liquid-handling robot did.
 You get one Opentrons protocol as a card: its title, description, labware with the labels the author gave,
 and the run, step by step as the robot executed it ("4x [ ... ]" = the bracketed steps four times; volumes
-in ul; "8-ch" = 8 channels at once; waits, temperatures, shaking, magnet and operator pauses as logged).
+in ul per tip: one aspirate is often a load dispensed in parts, the volume a well receives is what is dispensed
+into it; "8 tips at once" = an 8-channel move into 8 wells; waits, temperatures, shaking, magnet and operator pauses as logged).
 
 Say what the protocol does biologically. Use only what the card shows or what follows from the named kit or
 assay with certainty; mark anything else as inferred. Answer with ONE JSON object, nothing else:
@@ -120,9 +121,13 @@ def extract(args) -> int:
         t0 = time.monotonic()
         row = {"id": card["id"], "title": card["title"]}
         try:
-            message = client.complete(messages=[{"role": "system", "content": system},
-                                                {"role": "user", "content": json.dumps(card, ensure_ascii=False)}],
-                                      tools=[])
+            messages = [{"role": "system", "content": system},
+                        {"role": "user", "content": json.dumps(card, ensure_ascii=False)}]
+            try:
+                message = client.complete(messages=messages, tools=[])
+            except Exception:  # noqa: BLE001 - the model server restarts after a crash: once more
+                time.sleep(60)
+                message = client.complete(messages=messages, tools=[])
             data = _json(message.get("content") or "")
             row.update(data if data else {"error": "unreadable", "raw": (message.get("content") or "")[:1500]})
         except Exception as exc:  # noqa: BLE001 - recorded, the next card goes on

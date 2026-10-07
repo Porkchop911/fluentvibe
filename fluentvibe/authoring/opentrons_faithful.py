@@ -299,10 +299,20 @@ def _liquid_moves(events):
             yield e, volume
 
 
+_PIPETTE_MOVE = re.compile(r"^Moving to (?:[A-P]\d+ of |\d+\s*$|(?:trash|waste)(?![a-z]))", re.I)
+
+
+def _without_pipette_moves(events: list[dict]) -> list[dict]:
+    """A pipette moving over a well ("Moving to A1 of NEST 96 Deep Well Plate on
+    Magnetic Block") is no step on the Fluent; the tracer may have taken one over
+    the magnet block for a magnet step."""
+    return [e for e in events if not _PIPETTE_MOVE.match(e.get("text", ""))]
+
+
 def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conversion:
     """Write the protocol for ``trace`` on ``deck`` (``skeleton.load_deck``)."""
     lc = liquid_class or deck.liquid_class
-    trace = {**trace, "events": _drop_air_gap_aspirates(trace["events"])}
+    trace = {**trace, "events": _without_pipette_moves(_drop_air_gap_aspirates(trace["events"]))}
     need, content, net = _well_budget(trace)
     labware = trace["labware"]
     used_wells: dict[str, list[str]] = defaultdict(list)
@@ -499,7 +509,114 @@ def _section_title(text: str) -> str | None:
     title = re.sub(r"^[\s\-=*#_]+|[\s\-=*#_]+$", "", text).strip()
     if not title or len(title) > 80 or title.lower().startswith(("latching", "unlatching", "opening", "closing")):
         return None
+    # Bookkeeping the Opentrons script prints for itself: tip racks, running volume totals.
+    if re.search(r"tip ?rack|ul tp(?![a-z])|^\W*\d|^(?:ready|done|start|end)\W*$", title, re.I):
+        return None
     return title
+
+
+SHORT_DELAY_S = 10.0     # shorter Opentrons delays (after an aspirate, before a blow-out) are liquid handling
+
+
+def _stage_titles(trace: dict, mapping: dict, by_label: dict) -> dict[int, str]:
+    """Event index -> group title, where a functional step begins.
+
+    A step is a run of tip cycles (pick-up to drop) that move liquid between the
+    same labware in the same way: "Add WASH BUFFER to SAMPLE PLATE", "Mix SAMPLE
+    PLATE", "Remove supernatant from SAMPLE PLATE". Operator, device and gripper
+    steps, pauses and long waits are steps of their own; a section comment in the
+    Opentrons protocol names the step that follows it."""
+    events = trace["events"]
+    labware = trace.get("labware", {})
+
+    def name(lw: str) -> str:
+        info = labware.get(lw) or {}
+        return (str(info.get("display") or "").strip() or str(info.get("load_name") or "").strip()
+                or lw.split(":")[-1] or "labware")[:40]
+
+    def is_waste(e: dict) -> bool:
+        target = mapping.get(f"{e.get('labware')}|{(e.get('wells') or ['A1'])[0]}")
+        return target is not None and by_label[target[0]].kind == "waste"
+
+    def signature(indices: list[int]) -> tuple:
+        src, dst, waste = [], [], False
+        for i in indices:
+            e = events[i]
+            if e["kind"] == "aspirate":
+                if name(e["labware"]) not in src:
+                    src.append(name(e["labware"]))
+            elif is_waste(e):
+                waste = True
+            elif name(e["labware"]) not in dst:
+                dst.append(name(e["labware"]))
+        moved_to = [d for d in dst if d not in src]
+        if not moved_to and not waste:
+            return ("Mix", tuple(dst or src))
+        if not moved_to:
+            return ("Remove liquid from", tuple(src))
+        sources = [x for x in src if x not in moved_to] or src
+        return ("Add", tuple(sources), tuple(moved_to))
+
+    def title(sig: tuple) -> str:
+        def names(xs):
+            return " + ".join(xs) if len(xs) <= 2 else f"{xs[0]} + {len(xs) - 1} more"
+        if sig[0] == "Add":
+            # No aspirate in the cycle: the tip came loaded from the step before.
+            return f"Add {names(sig[1])} to {names(sig[2])}" if sig[1] else f"Dispense into {names(sig[2])}"
+        return f"{sig[0]} {names(sig[1])}"
+
+    titles: dict[int, str] = {}
+    current: tuple | None = None       # signature of the running step
+    pending: str | None = None         # a section comment's title for the next step
+    cycle: list[int] = []
+    cycle_start: int | None = None
+    operator_run = False
+
+    def close_cycle() -> None:
+        nonlocal current, pending, cycle, cycle_start
+        if cycle:
+            sig = signature(cycle)
+            if pending is not None:
+                titles[cycle_start] = pending
+                pending, current = None, sig
+            elif sig != current:
+                titles[cycle_start] = title(sig)
+                current = sig
+        cycle, cycle_start = [], None
+
+    for i, e in enumerate(events):
+        kind = e["kind"]
+        if kind == "pick_up_tip":
+            close_cycle()
+            cycle_start = i
+            operator_run = False
+        elif kind in ("aspirate", "dispense") and e.get("labware"):
+            if cycle_start is None:
+                cycle_start = i
+            cycle.append(i)
+            operator_run = False
+        elif kind in ("drop_tip", "return_tip"):
+            close_cycle()
+        elif kind == "comment":
+            section = _section_title(e.get("text", ""))
+            if section:
+                close_cycle()
+                pending, current = section, None
+        elif kind in ("pause", "device", "magnet", "move") or (
+                kind == "delay" and float(e.get("seconds") or 0) >= 30):
+            close_cycle()
+            current = None
+            if pending is not None:
+                titles[i], pending = pending, None
+            elif kind == "pause":
+                titles[i] = "Operator: " + str(e.get("message") or e.get("text"))[:60]
+            elif kind == "delay":
+                titles[i] = f"Wait {float(e.get('seconds') or 0) / 60:.3g} min"
+            elif not operator_run:
+                titles[i] = "Off-deck / device: " + e.get("text", "")[:60]
+            operator_run = kind != "pause" and kind != "delay"
+    close_cycle()
+    return titles
 
 
 def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tuple[str, list[str], list[str]]:
@@ -526,13 +643,14 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
         groups.add(name)
         lines.append(f"    wt.group({name!r})")
 
-    group("Opentrons run")
-    for e in trace["events"]:
+    titles = _stage_titles(trace, mapping, by_label)
+    if 0 not in titles:
+        group("Opentrons run")
+    for index, e in enumerate(trace["events"]):
         kind = e["kind"]
+        if index in titles:
+            group(titles[index])
         if kind == "comment":
-            title = _section_title(e["text"])
-            if title:
-                group(title)
             continue
         is_mca = (e.get("channels") or 1) >= 96
         if kind == "pick_up_tip" and is_mca:
@@ -646,7 +764,7 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
             kept.append(f"operator prompt: {message[:120]}")
         elif kind == "delay":
             seconds = float(e.get("seconds") or 0)
-            if seconds >= 1:
+            if seconds >= SHORT_DELAY_S:
                 lines.append(f"    wt.wait(duration_seconds={seconds:g})")
                 kept.append(f"wait {seconds:g} s")
         elif kind in ("device", "magnet", "move"):

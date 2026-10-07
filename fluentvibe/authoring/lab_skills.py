@@ -338,9 +338,9 @@ def _named_capabilities(prompt: str) -> set[str]:
     """Skills for a head or worklist the request names explicitly."""
     low = (prompt or "").lower()
     names = set()
-    if re.search(r"mca(?:96|384)?", low):
+    if re.search(r"\bmca(?:96|384)?\b", low):
         names.add("head-mca96")
-    if re.search(r"(?:liha|fca)", low):
+    if re.search(r"\b(?:liha|fca)\b", low):
         names.add("head-liha")
     if "worklist" in low:
         names.add("api-worklists")

@@ -355,3 +355,31 @@ def test_compile_refuses_a_conversion_whose_wells_no_longer_match(tmp_path, monk
     result = registry.compile_and_simulate("anything")
     assert result["success"] is False and result["category"] == "opentrons_fidelity"
     assert "7/8 wells" in result["failure_message"] and "Plate A1" in result["failure_message"]
+
+
+def test_steps_become_named_groups():
+    from types import SimpleNamespace
+
+    from fluentvibe.authoring.opentrons_faithful import _section_title, _stage_titles, _without_pipette_moves
+
+    lw = {"r": {"display": "BUFFER"}, "p": {"display": "SAMPLE PLATE"}, "t": {"display": "Trash"}}
+    def move(kind, lab, well="A1"):
+        return {"kind": kind, "labware": lab, "wells": [well], "volume": 50, "text": kind}
+    events = [
+        {"kind": "pick_up_tip", "text": ""}, move("aspirate", "r"), move("dispense", "p"), {"kind": "drop_tip", "text": ""},
+        {"kind": "pick_up_tip", "text": ""}, move("aspirate", "r"), move("dispense", "p", "A2"), {"kind": "drop_tip", "text": ""},
+        {"kind": "delay", "seconds": 300, "text": "Delaying"},
+        {"kind": "pick_up_tip", "text": ""}, move("aspirate", "p"), move("dispense", "p"), {"kind": "drop_tip", "text": ""},
+        {"kind": "comment", "text": "> Removing Supernatant"},
+        {"kind": "pick_up_tip", "text": ""}, move("aspirate", "p"), move("dispense", "t"), {"kind": "drop_tip", "text": ""},
+    ]
+    by_label = {"BUF": SimpleNamespace(kind="trough"), "PLATE": SimpleNamespace(kind="plate96"),
+                "Waste": SimpleNamespace(kind="waste")}
+    mapping = {"r|A1": ("BUF", "A1"), "p|A1": ("PLATE", "A1"), "p|A2": ("PLATE", "A2"), "t|A1": ("Waste", "A1")}
+    titles = list(_stage_titles({"events": events, "labware": lw}, mapping, by_label).values())
+    # two cycles of the same move are one step; the comment names the step after it
+    assert titles == ["Add BUFFER to SAMPLE PLATE", "Wait 5 min", "Mix SAMPLE PLATE", "> Removing Supernatant"]
+    assert _section_title("Adding tiprack_200_1") is None and _section_title("Adding 2720.0ul tp 2720.0") is None
+    assert _without_pipette_moves([{"text": "Moving to A1 of Plate on Magnetic Block"}, {"text": "Moving to 11"},
+                                   {"text": "Moving plate to slot D1 with gripper"}]) == [
+        {"text": "Moving plate to slot D1 with gripper"}]
