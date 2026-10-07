@@ -77,8 +77,55 @@ class DoesNotFit(ValueError):
     """The Opentrons labware needs more deck sites than the profile has."""
 
 
+def _max_tip_load(events: list[dict], *, mca: bool) -> float:
+    """The most liquid one tip holds at once: aspirates add up until dispensed
+    (several aspirates before one dispense load the tip further). ``mca``: the
+    96-channel pipette's moves, else the others."""
+    load = peak = 0.0
+    for e in events:
+        if mca != ((e.get("channels") or 1) >= 96):
+            continue
+        kind = e["kind"]
+        if kind == "aspirate":
+            load += float(e.get("volume") or 0)
+            peak = max(peak, load)
+        elif kind == "dispense":
+            load = max(0.0, load - float(e.get("volume") or 0))
+        elif kind in ("pick_up_tip", "drop_tip", "return_tip"):
+            load = 0.0
+    return peak
+
+
+def _drop_air_gap_aspirates(events: list[dict]) -> list[dict]:
+    """The events without the air an air gap moves.
+
+    Newer Opentrons API levels log an air gap as "Air gap of 10 uL" followed by
+    a plain step: "Aspirating 10.0 uL from A10 of the plate" (air drawn above the
+    well; taken as liquid it drew 10 ul out of the well and overfilled the tip:
+    210 ul in a 200 ul tip), or, when distributing, "Dispensing 20.0 uL" of the
+    air before the liquid (it hid the multi-dispense run behind it). The air
+    gap's aspirate is dropped (the air gap stays, so the dispense that carries
+    the air is known); an air gap that is dispensed again is dropped with its
+    dispense."""
+    skip: set[int] = set()
+    for i, e in enumerate(events):
+        if e["kind"] != "air_gap":
+            continue
+        air = float(e.get("volume") or 0)
+        j = i + 1
+        while j < len(events) and events[j]["kind"] in ("other", "comment", "delay"):
+            j += 1
+        if j < len(events) and abs(float(events[j].get("volume") or 0) - air) < 1e-6:
+            if events[j]["kind"] == "aspirate":
+                skip.add(j)
+            elif events[j]["kind"] == "dispense":
+                skip.update((i, j))
+    return [e for k, e in enumerate(events) if k not in skip]
+
+
 def _well_budget(trace: dict) -> tuple[dict, dict, dict]:
     """Per (lwkey, well): initial stock needed, peak content, net change."""
+    trace = {**trace, "events": _drop_air_gap_aspirates(trace["events"])}
     running: dict[tuple[str, str], float] = defaultdict(float)
     lowest: dict[tuple[str, str], float] = defaultdict(float)
     peak: dict[tuple[str, str], float] = defaultdict(float)
@@ -95,6 +142,97 @@ def _well_budget(trace: dict) -> tuple[dict, dict, dict]:
 
 
 MULTI_LIQUID_CLASS = "Water Free Multi"
+EMPTY_LIQUID_CLASS = "Empty Tip"
+
+
+# FluentControl, 1000 ul FCA tips: a single 804 ul transfer was 13.6 ul "Too much in
+# Plunger", a 600 ul multi-dispense load 59 ul: the liquid class adds air and excess.
+SPLIT_ABOVE = 0.75               # a single transfer above 75 % of the tip volume is split
+
+
+def _split_large_transfers(events: list[dict], limit_ul: float) -> list[dict]:
+    """An FCA aspirate followed directly by a dispense of the same volume, above
+    ``limit_ul``, becomes several equal smaller pairs between the same wells.
+    FluentControl's liquid class draws air and extra volume on top: 900 ul in a
+    1000 ul tip gave "Too much in Tip: 0.25 ul ... use larger tip". The volume
+    each well gives and gets stays the same."""
+    out: list[dict] = []
+    i = 0
+    while i < len(events):
+        e = events[i]
+        nxt = events[i + 1] if i + 1 < len(events) else None
+        if (e["kind"] == "aspirate" and nxt is not None and nxt["kind"] == "dispense"
+                and (e.get("channels") or 1) <= 8 and (nxt.get("channels") or 1) <= 8
+                and e.get("volume") and nxt.get("volume") and abs(e["volume"] - nxt["volume"]) < 1e-6
+                and e["volume"] > limit_ul):
+            parts = int(-(-e["volume"] // limit_ul))
+            share = round(e["volume"] / parts, 3)
+            for _ in range(parts):
+                out.append({**e, "volume": share})
+                out.append({**nxt, "volume": share})
+            i += 2
+            continue
+        out.append(e)
+        i += 1
+    return out
+
+
+MULTI_LOAD_LIMIT = 0.4          # a multi-dispense load above 40 % of the tip volume is cut up
+_PASS_THROUGH = ("delay", "other", "comment")
+
+
+def _split_multi_runs(events: list[dict], limit_ul: float) -> list[dict]:
+    """A multi-dispense run (aspirates from one well, then several dispenses)
+    whose load is above ``limit_ul`` becomes several smaller runs: each aspirates
+    what its dispenses need, the last one also the run's surplus. FluentControl's
+    multi-dispense class adds conditioning and excess volume: 540 + 20 ul in a
+    1000 ul tip gave "Too much in Plunger: 61.49 ul ... use multiple pipetting
+    steps". Same wells, volumes and order."""
+    out: list[dict] = []
+    i = 0
+    n = len(events)
+    while i < n:
+        if events[i]["kind"] != "aspirate" or (events[i].get("channels") or 1) > 8:
+            out.append(events[i])
+            i += 1
+            continue
+        # Aspirate phase, then dispense phase (waits/comments may sit in between).
+        j = i
+        aspirates, head = [], []
+        while j < n and (events[j]["kind"] == "aspirate" or events[j]["kind"] in _PASS_THROUGH):
+            (aspirates if events[j]["kind"] == "aspirate" else head).append(events[j])
+            j += 1
+        dispense_phase = []
+        while j < n and (events[j]["kind"] == "dispense" or events[j]["kind"] in _PASS_THROUGH):
+            dispense_phase.append(events[j])
+            j += 1
+        dispenses = [e for e in dispense_phase if e["kind"] == "dispense"]
+        load = sum(float(a.get("volume") or 0) for a in aspirates)
+        same_source = len({(a.get("labware"), tuple(a.get("wells") or [])) for a in aspirates}) == 1
+        if (len(dispenses) < 2 or load <= limit_ul or not same_source
+                or any(float(d.get("volume") or 0) > limit_ul for d in dispenses)):
+            out.extend(events[i:j])
+            i = j
+            continue
+        surplus = max(0.0, load - sum(float(d.get("volume") or 0) for d in dispenses))
+        out.extend(head)
+        chunk: list[dict] = []
+        chunk_sum = 0.0
+        chunks: list[tuple[list[dict], float]] = []
+        for e in dispense_phase:
+            volume = float(e.get("volume") or 0) if e["kind"] == "dispense" else 0.0
+            if e["kind"] == "dispense" and chunk and chunk_sum + volume > limit_ul:
+                chunks.append((chunk, chunk_sum))
+                chunk, chunk_sum = [], 0.0
+            chunk.append(e)
+            chunk_sum += volume
+        chunks.append((chunk, chunk_sum))
+        for k, (items, total) in enumerate(chunks):
+            extra = surplus if k == len(chunks) - 1 else 0.0
+            out.append({**aspirates[0], "volume": round(total + extra, 3)})
+            out.extend(items)
+        i = j
+    return out
 
 
 def _multi_dispense_events(events) -> set[int]:
@@ -155,6 +293,7 @@ def _liquid_moves(events):
 def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conversion:
     """Write the protocol for ``trace`` on ``deck`` (``skeleton.load_deck``)."""
     lc = liquid_class or deck.liquid_class
+    trace = {**trace, "events": _drop_air_gap_aspirates(trace["events"])}
     need, content, net = _well_budget(trace)
     labware = trace["labware"]
     used_wells: dict[str, list[str]] = defaultdict(list)
@@ -268,6 +407,10 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
                 mapping[f"{lw}|{w}"] = (c.label, "A1")
             notes.append(f"{display} {w} -> {mapping[f'{lw}|{w}'][0]} {mapping[f'{lw}|{w}'][1]}")
 
+    # Multi-dispense leaves the liquid class's excess in the tip: a waste to empty it into.
+    if waste is None and _multi_dispense_events(trace["events"]) and large:
+        waste = add("Waste", "waste", deck.reservoir_large, "Trough25mL", take(large, "the waste"))
+
     # Tips: the largest volume one channel holds before it dispenses.
     max_load = 0.0
     load = 0.0
@@ -284,8 +427,7 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
     tips = add("FcaTips", "tips", tip_catalog, tip_class, take(nests, "the FCA tips")) if fca_used else None
     mca_boxes: list[Container] = []
     if mca_labware:
-        mca_load = max((float(e.get("volume") or 0) for e in trace["events"]
-                        if e["kind"] == "aspirate" and (e.get("channels") or 1) >= 96), default=0.0)
+        mca_load = _max_tip_load(trace["events"], mca=True)
         box_catalog, box_class = (("MCA96, 100ul, Box", "MCA100Box") if mca_load <= 100 * TIP_HEADROOM else
                                   ("MCA96, 200ul, Box", "MCA200Box") if mca_load <= 200 * TIP_HEADROOM else
                                   ("MCA96, 500ul, Box", "MCA500Box"))
@@ -309,6 +451,11 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
             fill = min(fill, cap - max(0.0, content[(lw, w)] - amount))
         fills[target] = round(fill, 2)
 
+    if tips is not None:
+        # FCA transfers near the tip's volume are split (the liquid class adds air and extra).
+        capacity = 1000.0 if tips.python_class == "FCA1000Box" else 200.0
+        events = _split_large_transfers(trace["events"], capacity * SPLIT_ABOVE)
+        trace = {**trace, "events": _split_multi_runs(events, capacity * MULTI_LOAD_LIMIT)}
     source, unconverted, kept = _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck)
     picks = sum(1 for e in trace["events"] if e["kind"] == "pick_up_tip")
     report = {
@@ -348,6 +495,8 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
     groups: set[str] = set()
     have_tips = False
     tip_load = 0.0                # what the current tip holds (per channel)
+    waste_c = next((c for c in containers if c.kind == "waste"), None)
+    excess_in_tip = False         # a multi-dispense run left its excess in the FCA tip
     mca_adapter = mca_tips = False
     mca_load = 0.0
     mca_next = 0                  # next MCA tip box to pick up from
@@ -407,6 +556,7 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
                 lines.append("    fca.drop_tips()")
             have_tips = False
             tip_load = 0.0
+            excess_in_tip = False
         elif kind in ("aspirate", "dispense"):
             if e.get("unresolved") or not e.get("labware"):
                 unconverted.append(f"{kind} with no well: {e['text'][:80]}")
@@ -415,7 +565,9 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
             if e.get("channels", 1) > 8:
                 target = by_label[mapping[f"{e['labware']}|{e['wells'][0]}"][0]]
                 whole_plate = target.kind == "plate96" and len(set(e["wells"])) == 96
-                if not (whole_plate or target.kind == "sbs") or not mca_boxes:
+                # The waste is a 300 ml SBS reservoir: the MCA can empty into it (waste chute).
+                into_waste = target.kind == "waste" and kind == "dispense"
+                if not (whole_plate or target.kind == "sbs" or into_waste) or not mca_boxes:
                     unconverted.append(f"96-channel {kind}: {e['text'][:80]}")
                     lines.append(f"    wt.add_comment({('TODO 96-channel: ' + e['text'][:120])!r})")
                     continue
@@ -433,13 +585,21 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
                     volume = mca_load
                 if volume <= 0:
                     continue
-                event_lc = MULTI_LIQUID_CLASS if id(e) in multi else lc
-                lines.append(f"    mca.{kind}({target.var}, {volume:g}, liquid_class={event_lc!r})")
+                # No multi-dispense class for the MCA: "Water Free Multi" has no MCA96 subclass
+                # (FluentControl: 'Liquid subclass missing for "MCA384 1" with "MCA96 DiTi 200ul"').
+                lines.append(f"    mca.{kind}({target.var}, {volume:g}, liquid_class={lc!r})")
                 mca_load = max(0.0, mca_load + (volume if kind == "aspirate" else -volume))
                 continue
             if not have_tips:
                 lines.append(f"    fca.get_tips({tips.var})  # the Opentrons pipette had a tip already")
                 have_tips = True
+            if kind == "aspirate" and excess_in_tip:
+                # FluentControl keeps the multi-dispense excess in the tip; aspirating
+                # on top overfilled the plunger ("Too much in Plunger: 1.48 ul").
+                if waste_c is not None:
+                    lines.append(f"    fca.empty_tips({waste_c.var}, liquid_class={EMPTY_LIQUID_CLASS!r})")
+                    tip_load = 0.0
+                excess_in_tip = False
             per_target: dict[str, list[tuple[int, str]]] = defaultdict(list)
             for channel, well in enumerate(e["wells"]):
                 label, fv_well = mapping[f"{e['labware']}|{well}"]
@@ -461,6 +621,8 @@ def _write(trace, containers, mapping, fills, tips, mca_boxes, lc, deck) -> tupl
                 event_lc = MULTI_LIQUID_CLASS if id(e) in multi else lc
                 lines.append(f"    fca.{kind}({c.var}, {volume:g}, liquid_class={event_lc!r}, "
                              f"wells={wells!r}, channels={channels!r})")
+            if kind == "dispense" and id(e) in multi:
+                excess_in_tip = True
             change = volume
             tip_load = max(0.0, tip_load + (change if kind == "aspirate" else -change))
         elif kind == "pause":

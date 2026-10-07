@@ -263,3 +263,44 @@ def test_96_channel_moves_go_to_the_mca(monkeypatch, tmp_path):
     wt.simulate(strict=True)
     fidelity = volume_fidelity(trace, conv, wt.simulation_report.final_labware)
     assert fidelity["wells_checked"] == 97 and fidelity["wells_matching"] == 97, fidelity
+
+
+def test_transfers_near_the_tip_volume_are_split():
+    # FluentControl: "Too much in Tip: 0.25 ul ... use larger tip" for 900 ul in a 1000 ul tip.
+    from fluentvibe.authoring.opentrons_faithful import _split_large_transfers
+
+    events = [{"kind": "aspirate", "volume": 900.0, "channels": 1}, {"kind": "dispense", "volume": 900.0, "channels": 1},
+              {"kind": "aspirate", "volume": 100.0, "channels": 1}, {"kind": "dispense", "volume": 100.0, "channels": 1}]
+    split = _split_large_transfers(events, 850.0)
+    assert [(e["kind"], e["volume"]) for e in split] == [
+        ("aspirate", 450.0), ("dispense", 450.0), ("aspirate", 450.0), ("dispense", 450.0),
+        ("aspirate", 100.0), ("dispense", 100.0)]
+
+
+def test_large_multi_dispense_runs_are_cut_up():
+    # FluentControl: "Too much in Plunger: 61.49 ul ... use multiple pipetting steps"
+    # for aspirate 540 + 20 ul, then 3 x 180 ul with the multi-dispense class.
+    from fluentvibe.authoring.opentrons_faithful import _split_multi_runs
+
+    src = {"labware": "r", "wells": ["A1"] * 8, "channels": 8}
+    events = [{"kind": "aspirate", "volume": 540.0, **src}, {"kind": "delay", "seconds": 2},
+              {"kind": "aspirate", "volume": 20.0, **src}]
+    for col in (4, 5, 6):
+        events += [{"kind": "dispense", "volume": 180.0, "labware": "p", "wells": [f"A{col}"], "channels": 8},
+                   {"kind": "delay", "seconds": 2}]
+    split = _split_multi_runs(events, 500.0)
+    loads = [e["volume"] for e in split if e["kind"] == "aspirate"]
+    assert loads == [360.0, 200.0]  # the surplus (20 ul) goes with the last part
+    assert [e["wells"] for e in split if e["kind"] == "dispense"] == [["A4"], ["A5"], ["A6"]]
+
+
+def test_the_air_gap_aspirate_after_an_air_gap_is_air():
+    # Newer Opentrons API levels log "Air gap of 10 uL" and then "Aspirating 10 uL
+    # from A10 of the plate" as two steps; taken as liquid it overfilled a tip.
+    from fluentvibe.authoring.opentrons_faithful import _drop_air_gap_aspirates
+
+    events = [{"kind": "aspirate", "volume": 20.0}, {"kind": "dispense", "volume": 20.0},
+              {"kind": "air_gap", "volume": 10.0}, {"kind": "aspirate", "volume": 10.0},
+              {"kind": "aspirate", "volume": 10.0}]
+    kept = _drop_air_gap_aspirates(events)
+    assert [e["kind"] for e in kept] == ["aspirate", "dispense", "air_gap", "aspirate"]
