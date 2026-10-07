@@ -30,6 +30,7 @@ from typing import Any
 PLATE96_CAPACITY_UL = 350.0      # 96_ABgene_SuperPlate_Thermo_AB2800
 PLATE384_CAPACITY_UL = 29.0      # 384 Well LowVol LoBase
 TROUGH_SMALL_UL, TROUGH_LARGE_UL = 25000.0, 100000.0
+SBS_SMALL_UL = 55000.0           # "60ml SBS MCA96", as resolver._SBS_SMALL_MAX_UL
 STOCK_MARGIN = 1.1               # source wells: what is drawn, +10 % ...
 STOCK_EXTRA_UL = 20.0            # ... + 20 ul, so the last draw is not short
 
@@ -194,6 +195,13 @@ def convert_trace(trace: dict, deck, *, liquid_class: str | None = None) -> Conv
                 catalog, cls = ((deck.slim_small, "Trough25mL") if amount <= TROUGH_SMALL_UL * 0.9
                                 else (deck.slim_large, "Trough100mL"))
                 c = add(f"{_short(display)[:22]}_{w}", "trough", catalog, cls, take(troughs, f"{display} {w}"))
+                mapping[f"{lw}|{w}"] = (c.label, "A1")
+            elif amount <= SBS_SMALL_UL and len(nests) > 1:
+                # Trough slots used up: a 60 ml SBS reservoir on a free plate nest (it
+                # connects to the 61 mm nest; the skeleton builder places it there too).
+                # One nest stays free for the tip box.
+                c = add(f"{_short(display)[:22]}_{w}", "trough", deck.reservoir_small, "Trough100mL",
+                        take(nests, f"{display} {w}"))
                 mapping[f"{lw}|{w}"] = (c.label, "A1")
             else:
                 c = add(f"{_short(display)[:22]}_{w}", "trough", deck.reservoir_large, "Trough25mL",

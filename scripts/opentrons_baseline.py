@@ -37,6 +37,13 @@ print("BASELINE " + json.dumps({k: s.get(k) for k in keep}))
 
 
 def _free_gb() -> float:
+    """Free physical memory and free commit (RAM + page file), whichever is lower:
+    a full commit is what made programs fail on this machine, with RAM to spare."""
+    phys, commit = _memory()
+    return min(phys, commit)
+
+
+def _memory() -> tuple[float, float]:
     try:
         import ctypes
 
@@ -50,9 +57,9 @@ def _free_gb() -> float:
         status = MemoryStatus()
         status.dwLength = ctypes.sizeof(MemoryStatus)
         ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
-        return status.ullAvailPhys / 2**30
+        return status.ullAvailPhys / 2**30, status.ullAvailPageFile / 2**30
     except Exception:  # noqa: BLE001
-        return 999.0
+        return 999.0, 999.0
 
 
 def _limited_run(cmd: list[str], limit_gb: float, timeout_s: float, cwd: Path) -> tuple[int, str, str]:
@@ -92,7 +99,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="stop after this many new protocols (0: all)")
     ap.add_argument("--only", choices=("library", "git"), default=None)
     ap.add_argument("--memory-gb", type=float, default=8.0, help="hard limit per protocol (all its processes)")
-    ap.add_argument("--min-free-gb", type=float, default=12.0, help="wait while free memory is below this")
+    ap.add_argument("--min-free-gb", type=float, default=10.0,
+                    help="wait while free memory (RAM or commit, the lower) is below this")
     ap.add_argument("--timeout", type=float, default=300.0)
     ap.add_argument("--rerun", default="",
                     help="comma-separated outcomes to run again: stages (gate, deck, convert, trace, crash) "
