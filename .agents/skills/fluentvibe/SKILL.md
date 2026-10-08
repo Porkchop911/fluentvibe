@@ -11,14 +11,19 @@ opens it in FluentControl. Run everything from the repo root.
 
 ## Before you start
 
-- `export FLUENTVIBE_PROFILE_DIR=build/workspaces/1080_Dev` (the deck profile;
-  `wt.add` and the deck rules need it). Read
-  `build/workspaces/1080_Dev/deck-1080_Dev.md` once: workspace name and GUID,
-  valid positions, which Python class each catalog needs.
+- The deck profile is the folder in `$FLUENTVIBE_PROFILE_DIR` (`wt.add` and
+  the deck rules need it). If it is not set, ask the user which deck; do not
+  pick one yourself.
+- Read the workspace context in that folder before writing: the `deck-*.md`
+  file (workspace name and GUID, valid positions, which Python class each
+  catalog needs), `site_rules.json` (what fits where) and `reach.json` (which
+  head reaches which site). Catalog names:
+  `python -m fluentvibe.cli catalog find <text>`.
 - The API is `python -m fluentvibe.cli api` (objects) and
   `python -m fluentvibe.cli api <object>` (e.g. `Worktable`, `wt.liha`,
   `wt.mca96`, `wt.gripper`, `blocks`, `Plate96`). It is generated from the
   code: if it is not listed there it does not exist, and if it is, it does.
+  Do not read the `fluentvibe/` source to find out how things work.
 - Examples of the API shape: `examples/ampure_resolver.py`,
   `examples/ont_rbk114_blocks.py`. Take deck positions from the deck file, not
   from examples.
@@ -60,6 +65,22 @@ opens it in FluentControl. Run everything from the repo root.
   (FluentControl rejects Free Single for mixing), `Empty Tip` for emptying
   tips.
 - Waste: a `300ml SBS` reservoir on a nest.
+- Hotels (`HotelMP_Pos` …) are storage: the FCA and MCA pipette only on
+  nests and troughs.
+- `Reagent(name, role=...)`: role is `plain` (default), `bead_carrier`,
+  `analyte` or `eluent`.
+
+## Specific wells (cherry-picks, patterns, per-well volumes)
+
+The FCA has 8 channels: one trip serves up to 8 wells, any plate (also
+`Plate384`). Pass `wells=`, `channels=` (0-7) and, if they differ,
+`volumes=`; set `channels` yourself when wells lie beyond row H. There is no
+`wt.mca384`.
+
+```python
+head.aspirate(trough, ul, liquid_class=LC, wells=["A1"] * n, volumes=[ul] * n, channels=list(range(n)))
+head.dispense(plate, ul, liquid_class=LC, wells=group, volumes=[ul] * n, channels=list(range(n)))
+```
 
 ## Volumes: let the simulator count
 
@@ -86,12 +107,14 @@ magnet, by the gripper), `pool_columns`, `pool_wells`, `transfer_volumes` /
 2. Write the protocol to `build/eval/pi-<short-name>.py` (an existing folder;
    do not create folders).
 3. `python -m fluentvibe.cli simulate build/eval/pi-<name>.py --strict` and
-   fix every error it reports. Repeat until it passes.
+   fix every error it reports. Repeat until it passes. To see what ended up
+   in a plate: `wt.simulate()`, then `wt.snapshots[-1].labware("<label>")`
+   and its wells' `volume_ul`.
 4. `python -m fluentvibe.cli check build/eval/pi-<name>.py` (deck and
    protocol rules).
 5. `python -m fluentvibe.cli compile build/eval/pi-<name>.py -o build/eval/pi-<name>.xscr`.
 6. If FluentControl is running and logged in:
-   `python -m fluentvibe.cli fc-open build/eval/pi-<name>.py --profile build/workspaces/1080_Dev --json`.
+   `python -m fluentvibe.cli fc-open build/eval/pi-<name>.py --profile "$FLUENTVIBE_PROFILE_DIR" --json`.
    Its InfoPad is the final word; fix what it reports.
 
 Say "simulates" or "FluentControl clean" only when that command passed, and

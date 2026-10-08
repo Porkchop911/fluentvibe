@@ -209,6 +209,22 @@ class Renderer:
                     "category": "other",
                     "functional_group": entry.get("functional_group"),
                 }
+        # Deck sections (plates, reservoirs, tube_racks, tip_boxes) carry the well
+        # counts the LiHa encoder needs (a 384 plate is indexed 16 wells per column,
+        # a 96 plate 8). They declare no category, so keep it unset instead of
+        # guessing: category "reservoir" would force single-well indexing.
+        for section in ("plates", "reservoirs", "tube_racks", "tip_boxes"):
+            for entry in data.get(section, {}).get("types", []):
+                name = entry.get("name")
+                if name:
+                    labware.setdefault(
+                        name,
+                        {
+                            "wells": entry.get("wells"),
+                            "category": None,
+                            "functional_group": entry.get("functional_group"),
+                        },
+                    )
         return labware
 
     def render(self, protocol: Protocol) -> str:
